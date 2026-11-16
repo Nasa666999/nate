@@ -125,11 +125,14 @@ public enum CompletionEngine {
                 guard name.hasPrefix(prefix), entry.name != context.prefix else {
                     continue
                 }
-                let detail =
-                    entry.overloads.first.map {
-                        entry.name + "(" + $0.parameters.joined(separator: ", ") + ") → " + $0.returnType
-                            + "\n" + $0.description
-                    } ?? (entry.isFunction ? "语言函数" : "语言关键字")
+                let detail: String
+                if let overload = entry.overloads.first {
+                    let parameters = overload.parameters.joined(separator: ", ")
+                    detail = "\(entry.name)(\(parameters)) → \(overload.returnType)\n\(overload.description)"
+                }
+                else {
+                    detail = entry.isFunction ? "语言函数" : "语言关键字"
+                }
                 values[entry.name] = CompletionCandidate(text: entry.name, detail: detail)
             }
             for word in keywords

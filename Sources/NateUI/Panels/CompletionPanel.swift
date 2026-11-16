@@ -200,10 +200,10 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
         if let signature, !signature.overloads.isEmpty {
             overload = min(overload, signature.overloads.count - 1)
             let item = signature.overloads[overload]
+            let parameters = item.parameters.joined(separator: ", ")
+            let heading = "\(overload + 1)/\(signature.overloads.count) · 参数 \(signature.argument + 1) · "
             detail.stringValue =
-                "\(overload + 1)/\(signature.overloads.count) · 参数 \(signature.argument + 1) · "
-                + signature.name + "(" + item.parameters.joined(separator: ", ") + ") → " + item.returnType
-                + "\n" + item.description
+                "\(heading)\(signature.name)(\(parameters)) → \(item.returnType)\n\(item.description)"
         }
         else if candidates.indices.contains(table.selectedRow) {
             detail.stringValue = candidates[table.selectedRow].detail
