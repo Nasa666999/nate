@@ -2,6 +2,7 @@ import AppKit
 import NateCore
 import NatePlatform
 import NateSearch
+import NateStorage
 import NateUI
 
 extension ApplicationController {
@@ -39,9 +40,20 @@ extension ApplicationController {
     /// - options: 当前完整搜索状态。
     /// - directory: 跨文件根路径。
     /// - filters: 兼容文件过滤语法。
+    /// - afterReplacement: 单次替换后自动导航时保留替换数量反馈。
     /// 返回：匹配、原子替换或明确错误，不允许旧结果更新新查询。
-    func search(_ action: String, options: SearchOptions, directory: String, filters: String) {
+    func search(
+        _ action: String,
+        options: SearchOptions,
+        directory: String,
+        filters: String,
+        afterReplacement: Bool = false
+    ) {
         searchTask?.cancel()
+        if action == "cancel" {
+            findWindow?.feedback.stringValue = "正在取消；已发布的文件修改会保留实际完成清单。"
+            return
+        }
         queryGeneration = UUID()
         let generation = queryGeneration
         if action == "cancel" {
@@ -76,10 +88,27 @@ extension ApplicationController {
             }
         }
         let targets = ["open", "replaceOpen"].contains(action) ? documents : [active]
-        let captured = targets.map {
-            document in
-            (document.buffer.snapshot, options.selectionOnly ? document.buffer.selections.first?.range : nil)
+        let captured: [(DocumentSnapshot, ResolvedSearchScope)]
+        do {
+            captured = try targets.map {
+                document in
+                let snapshot = document.buffer.snapshot
+                return (
+                    snapshot,
+                    try SearchScope.resolve(
+                        action: action,
+                        snapshot: snapshot,
+                        options: options,
+                        selections: document.buffer.selections
+                    )
+                )
+            }
         }
+        catch {
+            findWindow?.feedback.stringValue = error.localizedDescription
+            return
+        }
+        let actualScope = captured.count == 1 ? captured[0].1.description : "\(captured.count) 个文档全文 · 正向"
         let startingSelection = active.buffer.selections.first?.range ?? ByteRange(0, 0)
         let activeID = active.buffer.id
         searchTask = Task {
@@ -93,11 +122,18 @@ extension ApplicationController {
                         snapshot,
                         scope in
                         try Task.checkCancellation()
-                        let result = try SearchEngine.find(in: snapshot, options: options, scope: scope)
+                        let result = try SearchEngine.find(
+                            in: snapshot,
+                            options: scope.options,
+                            scope: scope.range
+                        )
                         let edits =
                             action.hasPrefix("replace")
                             ? try SearchEngine.replacementPlan(result, snapshot: snapshot) : []
-                        return (snapshot, result, edits)
+                        let prepared =
+                            ["replaceAll", "replaceOpen"].contains(action)
+                            ? try PreparedTransaction(snapshot: snapshot, edits: edits, name: "全部替换") : nil
+                        return (snapshot, result, edits, prepared)
                     }
                 }
                 let batches = try await withTaskCancellationHandler(
@@ -108,14 +144,14 @@ extension ApplicationController {
                         worker.cancel()
                     }
                 )
-                guard generation == self.queryGeneration else {
+                guard generation == self.queryGeneration, self.findWindow?.options == options else {
                     return
                 }
                 var count = 0
                 var skipped = 0
                 var output: [String] = []
                 var navigation: [ResultNavigation] = []
-                for (snapshot, result, edits) in batches {
+                for (snapshot, result, edits, prepared) in batches {
                     guard
                         let document = self.documents.first(where: {
                             $0.buffer.id == snapshot.id
@@ -129,7 +165,9 @@ extension ApplicationController {
                             skipped += 1
                             continue
                         }
-                        try document.buffer.commit(edits, expectedRevision: snapshot.revision, name: "全部替换")
+                        if let prepared {
+                            try document.buffer.commit(prepared)
+                        }
                         document.dirtyHint = !edits.isEmpty || document.dirtyHint
                         count += result.hits.count
                     }
@@ -152,9 +190,18 @@ extension ApplicationController {
                         )
                         document.dirtyHint = true
                         count = 1
+                        if self.findWindow?.stayAfterReplace == true {
+                            let range = ByteRange(
+                                edits[index].range.lower,
+                                edits[index].range.lower + edits[index].text.utf8.count
+                            )
+                            document.buffer.selections = [
+                                TextSelection(anchor: range.lower, head: range.upper)
+                            ]
+                        }
                     }
                     else if ["next", "previous"].contains(action) {
-                        let previous = action == "previous" || options.backwards
+                        let previous = action == "previous"
                         let candidates = result.hits.filter {
                             hit in
                             guard let range = hit.range else {
@@ -173,10 +220,12 @@ extension ApplicationController {
                                 TextSelection(anchor: range.lower, head: range.upper)
                             ]
                             self.mainWindow?.editor.refresh(reveal: true)
-                            self.findWindow?.feedback.stringValue = "共 \(result.hits.count) 个匹配，已定位当前匹配。"
+                            self.findWindow?.feedback.stringValue =
+                                (afterReplacement ? "已替换 1 处；" : "") + "共 \(result.hits.count) 个匹配，已定位当前匹配。"
                         }
                         else {
-                            self.findWindow?.feedback.stringValue = "已到达边界或没有匹配。"
+                            self.findWindow?.feedback.stringValue =
+                                (afterReplacement ? "已替换 1 处；" : "") + "已到达边界或没有匹配。"
                         }
                         self.refreshUI()
                         return
@@ -216,13 +265,23 @@ extension ApplicationController {
                     }
                 }
                 self.findWindow?.feedback.stringValue =
-                    "\(action.hasPrefix("replace") ? "替换" : "匹配") \(count) 处。\(skipped > 0 ? "跳过 \(skipped) 个只读文档。" : "")"
+                    actualScope + " · "
+                    + "\(action.hasPrefix("replace") ? "替换" : "匹配") \(count) 处。\(skipped > 0 ? "跳过 \(skipped) 个只读文档。" : "")"
                 if !output.isEmpty {
                     self.resultNavigation = navigation
-                    self.mainWindow?.showResults(output.joined(separator: "\n"))
+                    self.mainWindow?.showResults(output.joined(separator: "\n"), navigable: true)
                 }
-                self.mainWindow?.editor.refresh()
+                self.mainWindow?.refreshEditors()
                 self.refreshUI()
+                if action == "replaceOne" && self.findWindow?.stayAfterReplace == false {
+                    self.search(
+                        options.backwards ? "previous" : "next",
+                        options: options,
+                        directory: "",
+                        filters: "",
+                        afterReplacement: true
+                    )
+                }
             }
             catch is CancellationError {
                 if generation == self.queryGeneration {
@@ -243,4 +302,5 @@ struct ResultNavigation {
     var revision: UInt64?
     var url: URL?
     var range: ByteRange
+    var diskBaseline: NateStorage.DiskBaseline? = nil
 }

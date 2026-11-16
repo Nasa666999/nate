@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
+
 
 		<parser displayName="TypeScript" id="typescript_function" commentExpr="(?s:/\*.*?\*/)|(?m-s://.*?$)">
 			<function mainExpr="((^|\s+|[;\}\.])([A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*\s*[=:]|^|[\s;\}]+)\s*function(\s+[A-Za-z_$][\w$]*)?\s*\([^\)\(]*\)(\s*:\s*[^{()]+)?[\n\s]*\{">

@@ -41,13 +41,30 @@ final class LineLayout {
                 .font: font, .foregroundColor: NSColor.textColor, .paragraphStyle: paragraph,
             ]
         )
-        for token in tokens where token.range.lower >= range.lower && token.range.upper <= range.upper {
-            if let ns = snapshot.text.nsRange(token.range) {
+        for token in tokens where token.range.lower < range.upper && token.range.upper > range.lower {
+            let clipped = ByteRange(max(range.lower, token.range.lower), min(range.upper, token.range.upper))
+            if let ns = snapshot.text.nsRange(clipped) {
                 value.addAttribute(
                     .foregroundColor,
-                    value: ThemePalette.color(token.kind),
+                    value: token.foreground.flatMap(ThemePalette.hexColor) ?? ThemePalette.color(token.kind),
                     range: NSRange(location: ns.location - originUTF16, length: ns.length)
                 )
+                let tokenRange = NSRange(location: ns.location - originUTF16, length: ns.length)
+                var styledFont = font
+                if token.fontStyle & 1 != 0 {
+                    styledFont = NSFontManager.shared.convert(styledFont, toHaveTrait: .boldFontMask)
+                }
+                if token.fontStyle & 2 != 0 {
+                    styledFont = NSFontManager.shared.convert(styledFont, toHaveTrait: .italicFontMask)
+                }
+                value.addAttribute(.font, value: styledFont, range: tokenRange)
+                if token.fontStyle & 4 != 0 {
+                    value.addAttribute(
+                        .underlineStyle,
+                        value: NSUnderlineStyle.single.rawValue,
+                        range: tokenRange
+                    )
+                }
             }
         }
         content = EditorContentManager(snapshot: snapshot, projection: range, rendered: value)
@@ -107,6 +124,40 @@ final class LineLayout {
         }
         return NSRect(x: 0, y: 0, width: 1.5, height: height)
     }
+
+    /// 业务作用：让软换行与双向文字选区按原生字形片段绘制。
+    /// 参数说明:
+    /// - range: 本段落内的真实字节选区。
+    /// 返回：可能包含多个方向和视觉行的呈现矩形。
+    func selectionRects(_ range: ByteRange) -> [NSRect] {
+        guard let a = content.snapshot.text.utf16Offset(byte: range.lower),
+            let b = content.snapshot.text.utf16Offset(byte: range.upper),
+            let selected = NSTextRange(
+                location: EditorTextLocation(
+                    documentID: content.snapshot.id,
+                    revision: content.snapshot.revision,
+                    offset: a
+                ),
+                end: EditorTextLocation(
+                    documentID: content.snapshot.id,
+                    revision: content.snapshot.revision,
+                    offset: b
+                )
+            )
+        else {
+            return []
+        }
+        var result: [NSRect] = []
+        manager.enumerateTextSegments(in: selected, type: .selection, options: [.rangeNotRequired]) {
+            _,
+            rect,
+            _,
+            _ in
+            result.append(rect)
+            return true
+        }
+        return result
+    }
 }
 
 @MainActor
@@ -124,6 +175,24 @@ enum ThemePalette {
         case .heading: return .systemBlue
         case .tag: return .systemTeal
         case .punctuation: return .secondaryLabelColor
+        case .text: return .textColor
         }
+    }
+
+    /// 业务作用：资源颜色只作为呈现值使用，非法格式继承主题。
+    /// 参数说明:
+    /// - hex: 六位 RGB 资源色。
+    /// 返回：有效颜色或继承状态。
+    static func hexColor(_ hex: String) -> NSColor? {
+        let hex = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard hex.count == 6, let value = UInt32(hex, radix: 16) else {
+            return nil
+        }
+        return NSColor(
+            srgbRed: CGFloat((value >> 16) & 255) / 255,
+            green: CGFloat((value >> 8) & 255) / 255,
+            blue: CGFloat(value & 255) / 255,
+            alpha: 1
+        )
     }
 }

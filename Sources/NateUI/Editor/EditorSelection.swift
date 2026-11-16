@@ -8,9 +8,11 @@ extension EditorView {
     /// 返回：有效正文位置，超出行尾时停在行尾。
     func bytePosition(at point: NSPoint) -> Int {
         let tree = displayTree
-        let line = max(0, min(tree.lineCount - 1, Int(max(0, point.y - 8) / lineHeight)))
+        let line = projection.line(at: max(0, point.y - 8))
         let layout = layoutLine(line)
-        let local = layout.character(at: NSPoint(x: max(0, point.x - gutterWidth), y: 0))
+        let local = layout.character(
+            at: NSPoint(x: max(0, point.x - gutterWidth), y: point.y - projection.y(of: line) - 8)
+        )
         var units = min(tree.utf16Count, max(layout.originUTF16, layout.originUTF16 + local))
         while units > layout.originUTF16 && tree.byteOffset(utf16: units) == nil {
             units -= 1
@@ -41,7 +43,7 @@ extension EditorView {
         }
         if point.x - visibleRect.minX < gutterWidth || event.clickCount >= 3 {
             let range = document.text.lineRange(row)
-            document.selections = [TextSelection(anchor: range.lower, head: range.upper)]
+            viewSelections = [TextSelection(anchor: range.lower, head: range.upper)]
         }
         else if event.clickCount == 2 {
             let range = document.text.lineRange(row, includeEnding: false)
@@ -63,18 +65,18 @@ extension EditorView {
                 }
                 offset += count + 1
             }
-            document.selections = [TextSelection(anchor: lower, head: upper)]
+            viewSelections = [TextSelection(anchor: lower, head: upper)]
         }
         else if event.modifierFlags.contains(.command) {
-            document.selections.append(TextSelection(anchor: position, head: position))
+            viewSelections.append(TextSelection(anchor: position, head: position))
         }
-        else if event.modifierFlags.contains(.shift), let first = document.selections.first {
-            document.selections = [TextSelection(anchor: first.anchor, head: position)]
+        else if event.modifierFlags.contains(.shift), let first = viewSelections.first {
+            viewSelections = [TextSelection(anchor: first.anchor, head: position)]
         }
         else {
-            document.selections = [TextSelection(anchor: position, head: position)]
+            viewSelections = [TextSelection(anchor: position, head: position)]
         }
-        dragAnchor = document.selections.first?.anchor
+        dragAnchor = viewSelections.first?.anchor
         dragColumn = event.modifierFlags.contains(.option) ? point.x : nil
         needsDisplay = true
         onSelection?()
@@ -94,9 +96,9 @@ extension EditorView {
         if let startX = dragColumn {
             let a = document.text.lineNumber(at: anchor)
             let b = document.text.lineNumber(at: position)
-            document.selections = (min(a, b)...max(a, b)).map {
+            viewSelections = (min(a, b)...max(a, b)).map {
                 line in
-                let y = CGFloat(line) * lineHeight + 9
+                let y = projection.y(of: line) + 9
                 let lower = bytePosition(at: NSPoint(x: min(startX, point.x), y: y))
                 let upper = bytePosition(at: NSPoint(x: max(startX, point.x), y: y))
                 let layout = layoutLine(line)
@@ -106,7 +108,7 @@ extension EditorView {
             }
         }
         else {
-            document.selections = [TextSelection(anchor: anchor, head: position)]
+            viewSelections = [TextSelection(anchor: anchor, head: position)]
         }
         needsDisplay = true
         onSelection?()
@@ -126,7 +128,7 @@ extension EditorView {
     /// - sender: 菜单或键盘来源。
     /// 返回：仅更新选区。
     @objc public override func selectAll(_ sender: Any?) {
-        document.selections = [TextSelection(anchor: 0, head: document.text.byteCount)]
+        viewSelections = [TextSelection(anchor: 0, head: document.text.byteCount)]
         needsDisplay = true
         onSelection?()
     }

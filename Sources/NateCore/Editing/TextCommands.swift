@@ -64,7 +64,17 @@ extension DocumentBuffer {
             range in
             TextEdit(range, TextTransforms.apply(command, to: text.text(in: range), tabWidth: width))
         }
-        try commit(edits, name: command.rawValue)
+        var format = self.format
+        if command == .eolLF {
+            format.lineEnding = .lf
+        }
+        if command == .eolCRLF {
+            format.lineEnding = .crlf
+        }
+        if command == .eolCR {
+            format.lineEnding = .cr
+        }
+        try commit(edits, formatAfter: format, name: command.rawValue)
     }
 }
 

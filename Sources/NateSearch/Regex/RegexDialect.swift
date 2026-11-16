@@ -135,6 +135,43 @@ struct RegexParser {
                 else if take(62) {
                     atomic = true
                 }
+                else if take(40) {
+                    let id: Int
+                    if let found = number() {
+                        id = found
+                    }
+                    else {
+                        let name = try readUntil(41)
+                        guard
+                            let found = names[name.trimmingCharacters(in: CharacterSet(charactersIn: "<>'"))]
+                        else {
+                            throw diagnostic("条件表达式捕获名称无效")
+                        }
+                        id = found
+                        index -= 1
+                    }
+                    guard take(41) else {
+                        throw diagnostic("条件表达式未闭合")
+                    }
+                    let branches = try expression(depth: depth + 1)
+                    guard take(41) else {
+                        throw diagnostic("条件分组未闭合")
+                    }
+                    if case .alternate(let alternatives) = branches {
+                        guard alternatives.count == 2 else {
+                            throw diagnostic("条件表达式只能有两个分支")
+                        }
+                        return .conditional(id, alternatives[0], alternatives[1])
+                    }
+                    return .conditional(id, branches, .empty)
+                }
+                else if take(38) {
+                    let name = try readUntil(41)
+                    guard let id = names[name] else {
+                        throw diagnostic("未知命名子程序")
+                    }
+                    return .recurse(id)
+                }
                 else if take(60) {
                     if take(61) {
                         assertion = (true, true)

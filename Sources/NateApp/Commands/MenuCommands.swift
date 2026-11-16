@@ -31,6 +31,7 @@ extension ApplicationController: NSMenuItemValidation {
             add(file, title, id, key: key)
         }
         let recent = NSMenu(title: "最近文件")
+        add(file, "恢复已关闭临时内容…", "recoveryArchive")
         for path in recentFiles {
             add(recent, path, "recent:" + path)
         }
@@ -125,6 +126,13 @@ extension ApplicationController: NSMenuItemValidation {
         add(encoding, "转换换行为 CR", "edit:eolCR")
         attach(encoding, to: bar)
         let language = NSMenu(title: "语言")
+        add(language, "新建 UDL…", "newUDL")
+        add(language, "导入 UDL XML…", "importUDL")
+        add(language, "编辑 / 重命名当前 UDL…", "editUDL")
+        add(language, "复制当前 UDL…", "duplicateUDL")
+        add(language, "导出当前 UDL…", "exportUDL")
+        add(language, "删除当前自定义 UDL…", "deleteUDL")
+        language.addItem(.separator())
         add(language, "自动识别", "detectLanguage")
         for definition in registry?.languages ?? [] where definition.id != "searchResult" {
             add(language, definition.name, "language:" + definition.id)

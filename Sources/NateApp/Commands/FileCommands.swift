@@ -10,9 +10,14 @@ extension ApplicationController {
     /// - explicitEncoding: 用户选择的重新解释代码页。
     /// 返回：完整读取后发布标签，失败不创建空文档冒充内容。
     func openFile(_ url: URL, explicitEncoding: TextEncoding? = nil) async {
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            await showFolder(url)
+            return
+        }
+        let catalog = codecs
         do {
             let loaded = try await fileIO.run {
-                try FileStorage.load(url, encoding: explicitEncoding)
+                try FileStorage.load(url, encoding: explicitEncoding, catalog: catalog)
             }
             if let existing = documents.first(where: {
                 $0.baseline?.device == loaded.baseline.device && $0.baseline?.inode == loaded.baseline.inode
@@ -20,16 +25,22 @@ extension ApplicationController {
                 activate(existing.buffer.id)
                 return
             }
-            let document = WorkspaceDocument(name: url.lastPathComponent, text: loaded.text)
+            let document = WorkspaceDocument(
+                name: url.lastPathComponent,
+                text: loaded.text,
+                encoding: loaded.encoding,
+                lineEnding: loaded.lineEnding
+            )
             document.url = loaded.url
             document.baseline = loaded.baseline
-            document.encoding = loaded.encoding
             document.savedEncoding = loaded.encoding
             document.state = loaded.inferred ? "已载入 · 编码为推断，可重新解释" : "已载入"
             document.language =
                 registry?.detect(
                     filename: url.lastPathComponent,
-                    firstLine: loaded.text.components(separatedBy: .newlines).first ?? ""
+                    firstLine: String(loaded.text.prefix(4096)).split(whereSeparator: \.isNewline).first.map(
+                        String.init
+                    ) ?? ""
                 ) ?? "normal"
             documents.append(document)
             recentFiles =
@@ -41,7 +52,12 @@ extension ApplicationController {
             buildMenus()
         }
         catch {
-            SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
+            if explicitEncoding == nil, FileManager.default.isReadableFile(atPath: url.path) {
+                await offerDecode(url, reason: error.localizedDescription)
+            }
+            else {
+                SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
+            }
         }
     }
 
@@ -51,6 +67,15 @@ extension ApplicationController {
     /// - copy: 是否仅保存副本。
     /// 返回：成功后更新相应状态；失败保留旧关联。
     func saveAs(_ document: WorkspaceDocument, copy: Bool = false) async {
+        guard !document.bindingChange else {
+            return
+        }
+        // 目标切换先关闭旧通道入口，再等待已经开始的快照收束。
+        document.bindingChange = true
+        defer {
+            document.bindingChange = false
+        }
+        let catalog = codecs
         mainWindow?.editor.finishComposition()
         if let task = document.saveTask {
             _ = await task.value
@@ -76,7 +101,7 @@ extension ApplicationController {
                 let expected =
                     FileManager.default.fileExists(atPath: destination.path)
                     ? try FileStorage.baseline(destination) : nil
-                let data = try encoding.encode(snapshot.text.text())
+                let data = try encoding.encode(snapshot.text.text(), catalog: catalog)
                 return try FileStorage.save(data, to: destination, expected: expected)
             }
             if !copy {
@@ -118,9 +143,18 @@ extension ApplicationController {
     /// - encoding: 重新解释代码页，为空时按文件证据识别。
     /// 返回：旧正文仍可撤销；基线只取新读取内容。
     func reload(_ document: WorkspaceDocument, encoding: TextEncoding? = nil) async {
+        guard !document.bindingChange else {
+            return
+        }
+        document.bindingChange = true
+        defer {
+            document.bindingChange = false
+        }
+        let catalog = codecs
         guard let url = document.url else {
             return
         }
+        let revision = document.buffer.revision
         if let task = document.saveTask {
             _ = await task.value
         }
@@ -129,7 +163,7 @@ extension ApplicationController {
         }
         do {
             let loaded = try await fileIO.run {
-                try FileStorage.load(url, encoding: encoding)
+                try FileStorage.load(url, encoding: encoding, catalog: catalog)
             }
             let readOnly = document.buffer.isReadOnly
             document.buffer.isReadOnly = false
@@ -138,11 +172,16 @@ extension ApplicationController {
             }
             try document.buffer.commit(
                 [TextEdit(ByteRange(0, document.buffer.text.byteCount), loaded.text)],
+                expectedRevision: revision,
                 selectionsAfter: [TextSelection(anchor: 0, head: 0)],
+                formatAfter: DocumentFormat(
+                    codePage: loaded.encoding.codePage,
+                    bom: loaded.encoding.bom,
+                    lineEnding: loaded.lineEnding
+                ),
                 name: "重新载入"
             )
             document.baseline = loaded.baseline
-            document.encoding = loaded.encoding
             document.savedEncoding = loaded.encoding
             document.savedText = document.buffer.text
             document.dirtyHint = false
@@ -168,8 +207,37 @@ extension ApplicationController {
         else {
             return
         }
+        guard !document.closing else {
+            return
+        }
         if activeID == id {
             mainWindow?.editor.finishComposition()
+        }
+        document.closing = true
+        document.buffer.isEditingSuspended = true
+        defer {
+            document.closing = false
+            document.buffer.isEditingSuspended = false
+        }
+        var archiveNeeded = document.url == nil && document.buffer.text.byteCount > 0
+        if archiveNeeded {
+            let alert = NSAlert()
+            alert.messageText = "关闭临时文档 \(document.name)"
+            alert.informativeText = "可以保存到文件，或保留独立恢复副本后关闭。最近 100 份关闭内容可从文件菜单恢复。"
+            alert.addButton(withTitle: "另存为")
+            alert.addButton(withTitle: "保留恢复副本并关闭")
+            alert.addButton(withTitle: "取消")
+            let choice = alert.runModal()
+            if choice == .alertFirstButtonReturn {
+                await saveAs(document)
+                guard document.url != nil else {
+                    return
+                }
+                archiveNeeded = false
+            }
+            else if choice != .alertSecondButtonReturn {
+                return
+            }
         }
         let saved = await flush(document)
         if !saved {
@@ -187,29 +255,57 @@ extension ApplicationController {
             guard choice == .alertThirdButtonReturn, await flushRecovery() else {
                 return
             }
-            document.url = nil
-            document.name += "（恢复副本）"
-            activate(id)
-            return
+            archiveNeeded = true
+        }
+        if archiveNeeded {
+            guard await flushRecovery(), let reference = document.recoveryReference, let store = recovery
+            else {
+                return
+            }
+            do {
+                try await recoveryIO.run {
+                    try store.archive(reference)
+                }
+            }
+            catch {
+                SystemIntegration.alert("关闭未完成", error.localizedDescription)
+                return
+            }
         }
         let oldIndex =
             documents.firstIndex(where: {
                 $0 === document
             }) ?? 0
-        recentClosed.append(document)
-        if recentClosed.count > 20 {
-            recentClosed.removeFirst()
-        }
         documents.removeAll {
             $0 === document
+        }
+        if activeID == id {
+            activeID = documents.first?.buffer.id
+        }
+        guard await flushRecovery() else {
+            documents.insert(document, at: min(oldIndex, documents.count))
+            activate(id)
+            SystemIntegration.alert("关闭未完成", "打开文档索引未能可靠更新，内容保持打开。")
+            return
+        }
+        recentClosed.append(
+            ClosedTab(
+                url: archiveNeeded ? nil : document.url,
+                recovery: archiveNeeded ? document.recoveryReference : nil,
+                name: document.name
+            )
+        )
+        mainWindow?.retireDocument(id)
+        externalStamps.removeValue(forKey: id)
+        if recentClosed.count > 20 {
+            recentClosed.removeFirst()
         }
         if documents.isEmpty {
             _ = newDocument()
         }
-        if activeID == id {
-            activate(documents[min(oldIndex, documents.count - 1)].buffer.id)
+        else if let activeID {
+            activate(activeID)
         }
-        _ = await flushRecovery()
         refreshUI()
     }
 }

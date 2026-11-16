@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
-		
-		
+
+
+
 		<parser displayName="BaanC Sections" id="baanc_section">
 			<classRange mainExpr="(?x)                                              # free-spacing (see `RegEx - Pattern Modifiers`)       (?im)                                               # case-insensitive, ^ and $ match at line breaks       (?(DEFINE)                                          # definition of sub-routines        (?'SECTION'         ^\h*                                        # optional leading whitespace at start-of-line         (?:                                         # known section names          (?:after|before)\.(?:report\.\d+|\w+(?:\.\w+)*\.\d+)         | (?:field|zoom\.from)\.(?:all|other|\w+(?:\.\w+)*)         | (?:footer|group|header)\.\d+         | choice\.\w+(?:\.\w+)*         | detail\.\d+         | form\.(?:all|other|\d+)         | functions         | main\.table\.io         ):                                          # end-of-section-header indicator        )        (?'SECTION_EMPTY'         ^\h*                                        # optional leading whitespace at start-of-line         (?:                                         # known `empty` section names          after\.(?:form\.read|program|receive\.data|update\.db\.commit)         | before\.(?:(?:display|new)\.object|program)         | declaration         | on\.(?:display\.total\.line|error)         ):                                          # end-of-section-header indicator        )       )       (?&amp;SECTION)                                     # section header       (?s:.*?)                                            # whatever,       (?=                                                 # ...up till        \s*        (?:         (?&amp;SECTION)                             # ...next section header,        |   (?&amp;SECTION_EMPTY)                       # ...next `empty` section header        |   \Z                                          # ...or end-of-text        )       )      ">
 				<className>

@@ -187,6 +187,7 @@ extension ApplicationController {
     /// - index: 编码菜单中的明确代码页。
     /// 返回：验证失败时不改变当前编码和正文。
     func convertEncoding(_ index: Int) async {
+        let catalog = codecs
         guard TextEncoding.available.indices.contains(index), let active else {
             return
         }
@@ -194,12 +195,12 @@ extension ApplicationController {
         let encoding = TextEncoding.available[index]
         do {
             _ = try await fileIO.run {
-                try encoding.encode(snapshot.text.text())
+                try encoding.encode(snapshot.text.text(), catalog: catalog)
             }
             guard active.buffer.revision == snapshot.revision else {
                 throw NateError.staleRevision
             }
-            active.encoding = encoding
+            try active.setEncoding(encoding)
             active.dirtyHint = true
             refreshUI()
         }
@@ -209,20 +210,35 @@ extension ApplicationController {
     }
 
     /// 业务作用：外部变化以身份和内容复验判定，非活动标签同样受保护。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - force: 激活检查忽略轻量标记，周期观察只在元数据变化时读取摘要。
     /// 返回：冲突暂停原路径覆盖；监视模式只读更新，不把删除解释为空文件。
-    func inspectExternalChanges() async {
-        for document in documents where document.url != nil && document.saveTask == nil {
+    func inspectExternalChanges(force: Bool = true) async {
+        for document in documents
+        where document.url != nil && document.saveTask == nil && !document.bindingChange && !document.closing
+        {
             guard let url = document.url, let expected = document.baseline else {
                 continue
             }
             do {
+                let stamp = try await fileIO.run {
+                    try FileStorage.stamp(url)
+                }
+                if !force && externalStamps[document.buffer.id] == stamp {
+                    continue
+                }
                 let current = try await fileIO.run {
                     try FileStorage.baseline(url)
                 }
-                guard document.saveTask == nil, document.baseline == expected else {
+                guard document.saveTask == nil, !document.bindingChange, document.baseline == expected,
+                    document.url == url,
+                    documents.contains(where: {
+                        $0 === document
+                    })
+                else {
                     continue
                 }
+                externalStamps[document.buffer.id] = stamp
                 if current != expected {
                     document.evaluateDirty()
                     if document.monitoring && !document.isDirty {
@@ -259,6 +275,17 @@ extension ApplicationController {
         guard await flush(active) else {
             return
         }
+        // 先排除新保存请求，再收束挂起窗口内可能启动的最后一个写入者。
+        guard !active.bindingChange else {
+            return
+        }
+        active.bindingChange = true
+        defer {
+            active.bindingChange = false
+        }
+        if let task = active.saveTask {
+            _ = await task.value
+        }
         let destination = oldURL.deletingLastPathComponent().appendingPathComponent(name)
         let baseline = active.baseline
         do {
@@ -294,8 +321,23 @@ extension ApplicationController {
         guard alert.runModal() == .alertFirstButtonReturn else {
             return
         }
+        guard !active.bindingChange else {
+            return
+        }
+        // 移除目标期间禁止周期保存重建旧路径，完成后再解除绑定。
+        active.bindingChange = true
+        defer {
+            active.bindingChange = false
+        }
+        if let task = active.saveTask {
+            _ = await task.value
+        }
+        let expected = active.baseline
         do {
             try await fileIO.run {
+                guard try FileStorage.baseline(url) == expected else {
+                    throw NateError.message("移到废纸篓前原文件已经变化，请重新检查。")
+                }
                 try FileManager.default.trashItem(at: url, resultingItemURL: nil)
             }
             active.targetGeneration += 1

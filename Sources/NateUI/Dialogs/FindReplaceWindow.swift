@@ -17,6 +17,10 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
     let backwards = NSButton(checkboxWithTitle: "反向", target: nil, action: nil)
     let wrap = NSButton(checkboxWithTitle: "循环查找", target: nil, action: nil)
     let selection = NSButton(checkboxWithTitle: "选区内（批量操作）", target: nil, action: nil)
+    let recursive = NSButton(checkboxWithTitle: "递归子目录", target: nil, action: nil)
+    let includeHidden = NSButton(checkboxWithTitle: "包含隐藏项", target: nil, action: nil)
+    let diskBuffers = NSButton(checkboxWithTitle: "文件查找按磁盘内容搜索已打开文件", target: nil, action: nil)
+    var previousButton: NSButton?
     let stay = NSButton(checkboxWithTitle: "替换后停留", target: nil, action: nil)
     let confirmOpen = NSButton(checkboxWithTitle: "替换所有打开文档前确认", target: nil, action: nil)
     var queryHistory: [String] = []
@@ -38,6 +42,9 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
         result.backwards = backwards.state == .on
         result.wrap = wrap.state == .on
         result.selectionOnly = selection.state == .on
+        result.recursive = recursive.state == .on
+        result.includeHidden = includeHidden.state == .on
+        result.ignoreOpenBuffers = diskBuffers.state == .on
         return result
     }
 
@@ -46,7 +53,7 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
     /// 返回：不阻断正文编辑的独立窗口。
     public init() {
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 790, height: 440),
+            contentRect: NSRect(x: 0, y: 0, width: 790, height: 490),
             styleMask: [.titled, .closable, .resizable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -72,7 +79,7 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
             ])
         }
         let tabs = NSSegmentedControl(
-            labels: ["查找", "替换", "文件中查找", "项目中查找", "标记"],
+            labels: ["查找", "替换", "文件中查找", "标记"],
             trackingMode: .selectOne,
             target: nil,
             action: nil
@@ -99,11 +106,13 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
         mode.action = #selector(modeChanged)
         wrap.state = .on
         confirmOpen.state = .on
+        recursive.state = .on
         let options = NSStackView(views: [mode, caseSensitive, wholeWord, dot])
         options.spacing = 14
         root.addArrangedSubview(options)
         root.addArrangedSubview(NSStackView(views: [backwards, wrap, selection, stay]))
         root.addArrangedSubview(confirmOpen)
+        root.addArrangedSubview(NSStackView(views: [recursive, includeHidden, diskBuffers]))
         let row1 = NSStackView()
         let row2 = NSStackView()
         for (id, title) in [
@@ -159,6 +168,9 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
     /// 返回：实际可执行的操作按钮。
     func button(_ id: String, _ title: String) -> NSButton {
         let button = NSButton(title: title, target: self, action: #selector(performAction(_:)))
+        if id == "previous" {
+            previousButton = button
+        }
         button.identifier = NSUserInterfaceItemIdentifier(id)
         button.bezelStyle = .rounded
         button.controlSize = .small
@@ -172,6 +184,7 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
         let regex = mode.indexOfSelectedItem == 2
         wholeWord.isEnabled = !regex
         backwards.isEnabled = !regex
+        previousButton?.isEnabled = !regex
         dot.isEnabled = regex
         if regex {
             wholeWord.state = .off

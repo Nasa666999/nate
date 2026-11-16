@@ -23,6 +23,9 @@ public enum SearchEngine {
             throw NateError.invalidRange
         }
         let input = Array(snapshot.text.text().utf16)
+        if options.mode != .regex {
+            return try LiteralMatcher.find(snapshot: snapshot, input: input, range: range, options: options)
+        }
         let compiled: CompiledRegex
         if options.mode == .regex {
             compiled = try RegexParser.compile(options.query)

@@ -24,14 +24,14 @@ extension EditorView {
         if composition == nil {
             let range =
                 replacementRange.location == NSNotFound
-                ? document.selections.first?.range : document.text.byteRange(replacementRange)
+                ? viewSelections.first?.range : document.text.byteRange(replacementRange)
             guard let range else {
                 return
             }
             composition = CompositionSession(
                 revision: document.revision,
                 originalRange: range,
-                selections: document.selections,
+                selections: viewSelections,
                 text: value,
                 selected: selectedRange
             )
@@ -61,9 +61,9 @@ extension EditorView {
                 refresh()
                 return
             }
-            document.selections = session.selections
+            viewSelections = session.selections
             if session.selections.count == 1 {
-                document.selections = [
+                viewSelections = [
                     TextSelection(anchor: session.originalRange.lower, head: session.originalRange.upper)
                 ]
             }
@@ -72,10 +72,10 @@ extension EditorView {
             guard let range = document.text.byteRange(replacementRange) else {
                 return
             }
-            document.selections = [TextSelection(anchor: range.lower, head: range.upper)]
+            viewSelections = [TextSelection(anchor: range.lower, head: range.upper)]
         }
         else if overwrite && !value.contains("\n") {
-            document.selections = document.selections.map {
+            viewSelections = viewSelections.map {
                 if $0.range.isEmpty {
                     return TextSelection(
                         anchor: $0.head,
@@ -86,6 +86,7 @@ extension EditorView {
             }
         }
         do {
+            document.selections = viewSelections
             try document.insert(value)
             refresh(reveal: true)
             onChange?()
@@ -128,7 +129,7 @@ extension EditorView {
             let start = document.text.utf16Offset(byte: session.originalRange.lower) ?? 0
             return NSRange(location: start + session.selected.location, length: session.selected.length)
         }
-        return document.selections.first.flatMap {
+        return viewSelections.first.flatMap {
             document.text.nsRange($0.range)
         }
             ?? NSRange(location: 0, length: 0)
@@ -184,7 +185,7 @@ extension EditorView {
         let units = tree.utf16Offset(byte: offset) ?? 0
         var rect = layout.caret(at: units - layout.originUTF16)
         rect.origin.x += gutterWidth
-        rect.origin.y += CGFloat(line) * lineHeight + 8
+        rect.origin.y += projection.y(of: line) + 8
         actualRange?.pointee = NSRange(location: units, length: 0)
         return window?.convertToScreen(convert(rect, to: nil)) ?? rect
     }

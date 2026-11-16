@@ -1,0 +1,6 @@
+* text=auto
+*.bin binary
+*.png binary
+*.icns binary
+LICENSE text eol=lf
+*.txt text eol=lf

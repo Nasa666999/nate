@@ -1,10 +1,10 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
-		
 
-			
+
+
+
 
 			<parser displayName="Perl" id="perl_syntax" commentExpr="(?x)                                               # free-spacing (see `RegEx - Pattern Modifiers`)        (?m-s:\x23.*$)                                      # Single Line Comment       | (?s:__(?:END|DATA)__.*\Z)                           # Discard up till end-of-text      ">
 				<classRange mainExpr="(?x)                                          # free-spacing (see `RegEx - Pattern Modifiers`)        (?m)                                                # ^ and $ match at line-breaks        (?'PACKAGE_HEADER'         ^                                               # NO leading white-space at start-of-line         (?-i:(?:package|class)\b)        )        (?s:.*?)                                            # whatever,        (?=                                                 # ...up till         \s*                                             # ...optional leading white-space of         (?:          (?&amp;PACKAGE_HEADER)                      # ...next header         | \Z                                          # ...or end-of-text         )        )       ">

@@ -24,6 +24,18 @@ extension ApplicationController {
                 guard let self else {
                     break
                 }
+                if !self.closing && self.externalObservationTask == nil {
+                    self.externalObservationTask = Task {
+                        [weak self] in
+                        guard let self else {
+                            return
+                        }
+                        defer {
+                            self.externalObservationTask = nil
+                        }
+                        await self.inspectExternalChanges(force: false)
+                    }
+                }
                 if self.autosaveEnabled && !self.closing {
                     for document in self.documents
                     where !document.buffer.isReadOnly && document.url != nil && !document.conflict {
@@ -47,7 +59,8 @@ extension ApplicationController {
     /// - document: 具备有效目标的工作区文档。
     /// 返回：安排受身份、代次和磁盘基线约束的保存任务。
     func scheduleSave(_ document: WorkspaceDocument) {
-        guard document.saveTask == nil, let url = document.url, !document.buffer.isReadOnly,
+        guard !document.bindingChange, document.saveTask == nil, let url = document.url,
+            !document.buffer.isReadOnly,
             !document.conflict
         else {
             return
@@ -58,6 +71,9 @@ extension ApplicationController {
         let generation = document.targetGeneration
         document.state = "保存中"
         let executor = fileIO
+        let catalog = codecs
+        let permit = CancellationToken()
+        document.savePermit = permit
         document.saveTask = Task {
             [weak self, weak document] in
             guard let self, let document else {
@@ -65,12 +81,20 @@ extension ApplicationController {
             }
             defer {
                 document.saveTask = nil
+                document.savePermit = nil
                 self.refreshUI()
             }
             do {
                 let result = try await executor.run {
-                    let bytes = try encoding.encode(snapshot.text.text())
-                    return try FileStorage.save(bytes, to: url, expected: baseline)
+                    let bytes = try encoding.encode(snapshot.text.text(), catalog: catalog)
+                    return try FileStorage.save(
+                        bytes,
+                        to: url,
+                        expected: baseline,
+                        permit: {
+                            !permit.isCancelled
+                        }
+                    )
                 }
                 // 旧生命周期和旧路径代次不得清除新文档的修改或错误。
                 guard
@@ -91,6 +115,11 @@ extension ApplicationController {
                 // 保存 B 在途时撤销回 A，完成后仍需把 A 安排到后续周期。
                 document.evaluateDirty()
                 return true
+            }
+            catch is CancellationError {
+                document.state = "原文件保存已取消 · 正文保留"
+                document.evaluateDirty()
+                return false
             }
             catch {
                 guard document.targetGeneration == generation else {
@@ -114,6 +143,14 @@ extension ApplicationController {
     /// - document: 需要收束原路径通道的文档。
     /// 返回：当前正文与实际磁盘保存点相同时为真；失败保留文档。
     func flush(_ document: WorkspaceDocument) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while document.bindingChange {
+            guard ContinuousClock.now < deadline else {
+                document.failure = "文件目标操作仍在进行，文档保持打开。"
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
         if let task = document.saveTask {
             _ = await task.value
         }
@@ -149,7 +186,13 @@ extension ApplicationController {
         let captured = documents
         let changed = captured.filter {
             force || $0.recoveryReference == nil || $0.recoveryRevision != $0.buffer.revision
+                || $0.lastRecoveryMetadata != $0.recoveryMetadataKey
         }
+        let metadataKeys = Dictionary(
+            uniqueKeysWithValues: changed.map {
+                ($0.buffer.id, $0.recoveryMetadataKey)
+            }
+        )
         let oldReferences = captured.compactMap(\.recoveryReference)
         guard !changed.isEmpty || oldReferences.count != captured.count || force else {
             return
@@ -201,11 +244,24 @@ extension ApplicationController {
                     }
                     document.recoveryReference = references[metadata.id]
                     document.recoveryRevision = metadata.revision
+                    document.lastRecoveryMetadata = metadataKeys[metadata.id] ?? ""
                     document.recoveryError = nil
-                    if document.url == nil {
+                    if document.url == nil && document.buffer.revision == metadata.revision
+                        && document.lastRecoveryMetadata == document.recoveryMetadataKey
+                    {
                         document.state = "恢复内容已保存 · 尚未选择原文件"
                         document.dirtyHint = false
                     }
+                }
+                self.refreshUI()
+                // 两份有效索引及关闭保留清单之外的快照不再承担恢复责任。
+                do {
+                    try await executor.run {
+                        try store.collect(retention: 0)
+                    }
+                }
+                catch {
+                    self.mainWindow?.status.stringValue = "恢复已保存；旧快照清理未完成：" + error.localizedDescription
                 }
                 return true
             }

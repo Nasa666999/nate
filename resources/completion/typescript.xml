@@ -63,7 +63,7 @@
         <KeyWord name="type" />
         <KeyWord name="typeof" />
         <KeyWord name="undefined" />
-        <KeyWord name="var" /> 
+        <KeyWord name="var" />
         <KeyWord name="void" />
         <KeyWord name="while" />
         <KeyWord name="with" />

@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
-	
+
 	<AutoComplete language="COBOL">
 		<Environment ignoreCase="yes" startFunc="(" stopFunc=")" paramSeparator="," additionalWordChar="-" />
 		<KeyWord name="3-D" />
@@ -106,7 +106,7 @@
 		<KeyWord name="BYTE-LENGTH" func="yes">
 			<Overload retVal="Integer" descr="length (in bytes) of &lt;item&gt;">
 				<Param name="item" />
-				
+
 			</Overload>
 		</KeyWord>
 		<KeyWord name="C01" />
@@ -373,7 +373,7 @@
 		<KeyWord name="EXPANDS" />
 		<KeyWord name="EXTEND" />
 		<KeyWord name="EXTERNAL" />
-		
+
 		<KeyWord name="FACTORIAL" func="yes">
 			<Overload retVal="Integer" descr="factorial of &lt;number&gt;">
 				<Param name="number" />
@@ -553,7 +553,7 @@
 		<KeyWord name="LENGTH" func="yes">
 			<Overload retVal="Integer" descr="returns the length (in character positions) of the specified &lt;item&gt;">
 				<Param name="item" />
-				
+
 			</Overload>
 		</KeyWord>
 		<KeyWord name="LENGTH-AN" func="yes">
@@ -907,7 +907,7 @@
 		<KeyWord name="ROUNDING" />
 		<KeyWord name="ROWID" />
 		<KeyWord name="RUN" />
-		
+
 		<KeyWord name="SAME" />
 		<KeyWord name="SCREEN" />
 		<KeyWord name="SCROLL" />
@@ -1157,7 +1157,7 @@
 		<KeyWord name="TRUNCATION" />
 		<KeyWord name="TYPE" />
 		<KeyWord name="TYPEDEF" />
-		
+
 		<KeyWord name="UCS-4" />
 		<KeyWord name="UNBOUNDED" />
 		<KeyWord name="UNDERLINE" />
@@ -1188,7 +1188,7 @@
 		<KeyWord name="USING" />
 		<KeyWord name="UTF-16" />
 		<KeyWord name="UTF-8" />
-		
+
 		<KeyWord name="VAL-STATUS" />
 		<KeyWord name="VALID" />
 		<KeyWord name="VALIDATE" />
@@ -1218,7 +1218,7 @@
 		<KeyWord name="WORKING-STORAGE" />
 		<KeyWord name="WRAP" />
 		<KeyWord name="WRITE" />
-		
+
 		<KeyWord name="XML" />
 		<KeyWord name="XML-CODE" />
 		<KeyWord name="XML-EVENT" />
@@ -1229,7 +1229,7 @@
 		<KeyWord name="XML-NNAMESPACE-PREFIX" />
 		<KeyWord name="XML-NTEXT" />
 		<KeyWord name="XML-TEXT" />
-		
+
 		<KeyWord name="YEAR-TO-YYYY" func="yes">
 			<Overload retVal="Integer" descr="convert yy to yyyy with optional &lt;yy-cutoff&gt; to delineate centuries">
 				<Param name="yy" />

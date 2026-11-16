@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
+
 
 		<parser displayName="Inno Setup" id="innosetup_syntax">
 			<classRange mainExpr="(?x)                                          # Utilize inline comments (see `RegEx - Pattern Modifiers`)       (?ms)       (?'SECTION_HEADER'        ^                                               # header starts at beginning of a line        \[                                              # start of section header        (?-i:Code)                                      # `Code` section name        ]                                               # end of section header       )       .*?                                                 # whatever, up till...       (?=                                                 # ...next valid section header or...        ^                                               #    +-- header starts at beginning of a line        \[                                              #    +-- start-of-header indicator        (?-i:         Components|(?:Custom)?Messages        | Dirs        | Files        | I(?:cons|nstallDelete)        | Languages        | R(?:egistry|un)        | Setup        | T(?:asks|ypes)        | Uninstall(?:Delete|Run)        )                                               #    +-- valid section name        ]                                               #    \-- end-of-header indicator       | \Z                                              # ...end-of-file       )      ">
@@ -11,7 +11,7 @@
 				<function mainExpr="(?x)                                          # Utilize inline comments (see `RegEx - Pattern Modifiers`)        (?m-s)^\h*                                      # optional leading whitespace        (?i:FUNCTION\h+)        (?'VALID_ID'         [A-Za-z_]\w*        )        \s*\(                                           # start-of-parameter-list indicator        [^()]*                                          # parameter list        \s*\)                                           # end-of-parameter-list indicator        \s*:                                            # type indicator        \s*[A-Za-z_]\w*                                 # type identifier        \s*;                                            # end-of-statement indicator       ">
 					<functionName>
 						<funcNameExpr expr="(?i:FUNCTION\h+)\K[A-Za-z_]\w*\s*\([^()]*\)" />
-						
+
 						<funcNameExpr expr="[A-Za-z_]\w*" />
 					</functionName>
 				</function>

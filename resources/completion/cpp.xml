@@ -1,10 +1,10 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
-	
+
 	<AutoComplete language="C++">
-		
+
 		<Environment ignoreCase="no" startFunc="(" stopFunc=")" paramSeparator="," terminal=";" additionalWordChar="" />
-		
+
 		<KeyWord name="#define" />
 		<KeyWord name="#elif" />
 		<KeyWord name="#else" />

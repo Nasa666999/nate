@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
-		
+
+
 
 		<parser displayName="TOML Table" id="toml_table" commentExpr="(?x)        (?m-s:[#].*$)                                 # Single Line Comment       ">
 			<function mainExpr="^\h*[\[[\w\.&quot;\-']+\]">

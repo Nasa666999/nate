@@ -41,7 +41,15 @@ extension ApplicationController {
         }
         closing = true
         mainWindow?.editor.finishComposition()
+        let protectedDocuments = documents
+        for document in protectedDocuments {
+            document.buffer.isEditingSuspended = true
+        }
+        searchTask?.cancel()
         Task {
+            if let task = searchTask {
+                await task.value
+            }
             var failures: [String] = []
             for document in documents {
                 if !(await flush(document)) {
@@ -59,11 +67,15 @@ extension ApplicationController {
                 }
                 guard protected && alert.runModal() == .alertSecondButtonReturn else {
                     closing = false
+                    for document in protectedDocuments where !document.closing {
+                        document.buffer.isEditingSuspended = false
+                    }
                     sender.reply(toApplicationShouldTerminate: false)
                     return
                 }
             }
             autosaveTask?.cancel()
+            externalObservationTask?.cancel()
             searchTask?.cancel()
             sender.reply(toApplicationShouldTerminate: true)
         }

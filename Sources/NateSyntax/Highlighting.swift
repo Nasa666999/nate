@@ -2,12 +2,28 @@ import Foundation
 import NateCore
 
 public enum SyntaxKind: String, Sendable {
-    case keyword, string, comment, number, punctuation, heading, tag
+    case keyword, string, comment, number, punctuation, heading, tag, text
 }
 
 public struct SyntaxToken: Sendable {
     public let range: ByteRange
     public let kind: SyntaxKind
+    public let foreground: String?
+    public let fontStyle: Int
+
+    /// 业务作用：携带可配置语法呈现，样式不进入正文历史。
+    /// 参数说明:
+    /// - range: 所属快照字节范围。
+    /// - kind: 默认主题分类。
+    /// - foreground: 资源显式指定的前景色，为空时继承主题。
+    /// - fontStyle: UDL 粗体、斜体和下划线位集合。
+    /// 返回：独立呈现属性。
+    public init(range: ByteRange, kind: SyntaxKind, foreground: String? = nil, fontStyle: Int = 0) {
+        self.range = range
+        self.kind = kind
+        self.foreground = foreground
+        self.fontStyle = fontStyle
+    }
 }
 
 public struct SyntaxState: Sendable, Equatable {

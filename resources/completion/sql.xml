@@ -285,7 +285,7 @@
 			<Param name="SQLEXPR search" />
 			<Param name="SQLEXPR result (...)" />
 			<Param name="SQLEXPR default" />
-			</Overload>			
+			</Overload>
 		</KeyWord>
 		<KeyWord name="DEFAULT" />
 		<KeyWord name="DEFERRABLE" />
@@ -1257,7 +1257,7 @@
 			<Param name="column" />
 			<Param name="CHAR char" />
 			</Overload>
-		</KeyWord>		
+		</KeyWord>
 		<KeyWord name="SYS_CONTEXT" func="yes">
 			<Overload retVal="CHAR" descr="returns the value of parameter associated with the context namespace, max string length 256 bytes">
 			<Param name="CHAR namespace" />

@@ -1,12 +1,12 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
+
 
 		<parser displayName="JavaScript" id="javascript_function" commentExpr="(?s:/\*.*?\*/)|(?m-s://.*?$)">
 			<classRange mainExpr="\bclass\s+[A-Za-z_$][\w$]*[^{]*{" openSymbole="\{" closeSymbole="\}">
 				<className>
-					
+
 					<nameExpr expr="class\s+[A-Za-z_$][\w$]*" />
 					<nameExpr expr="\s+[A-Za-z_$][\w$]*" />
 					<nameExpr expr="[A-Za-z_$][\w$]*" />

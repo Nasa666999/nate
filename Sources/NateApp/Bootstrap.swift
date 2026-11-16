@@ -17,6 +17,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     }
     var mainWindow: EditorWindow?
     var registry: LanguageRegistry?
+    var codecs: LegacyCodecCatalog?
+    var userLanguages: [String: UDLDefinition] = [:]
+    var userLanguageSources: [String: URL] = [:]
+    var userLanguageBaselines: [String: DiskBaseline] = [:]
+    var publishingResources = false
     var findWindow: FindReplaceWindow?
     let fileIO = IOExecutor(name: "nate.files", concurrency: 2)
     let recoveryIO = IOExecutor(name: "nate.recovery", concurrency: 1)
@@ -25,11 +30,13 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var autosaveTask: Task<Void, Never>?
     var recoveryTask: Task<Bool, Never>?
     var searchTask: Task<Void, Never>?
+    var externalObservationTask: Task<Void, Never>?
+    var externalStamps: [UUID: FileStamp] = [:]
     var queryGeneration = UUID()
     var closing = false
     var initialized = false
     var pendingURLs: [URL] = []
-    var recentClosed: [WorkspaceDocument] = []
+    var recentClosed: [ClosedTab] = []
     var clipboardHistory: [String] = []
     var autosaveEnabled = true
     var macroRecording = false
@@ -86,15 +93,25 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 directory: support.appendingPathComponent("Recovery", isDirectory: true)
             )
             recovery = store
+            codecs = try LegacyCodecCatalog(
+                directory: SystemIntegration.resourceDirectory().appendingPathComponent("encodings")
+            )
             registry = try LanguageRegistry(
                 directory: SystemIntegration.resourceDirectory().appendingPathComponent("languages")
             )
             let restored = try await recoveryIO.run {
                 try store.restore()
             }
+            await loadUserLanguages()
+            let catalog = codecs
             for record in restored.documents {
-                let document = WorkspaceDocument(name: record.name, text: record.text, id: record.id)
-                document.encoding = record.encoding
+                let document = WorkspaceDocument(
+                    name: record.name,
+                    text: record.text,
+                    id: record.id,
+                    encoding: record.encoding,
+                    lineEnding: record.lineEnding ?? .lf
+                )
                 document.savedEncoding = record.encoding
                 document.language = record.language
                 document.buffer.selections = record.selections.filter {
@@ -114,7 +131,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                         document.url = url
                         document.baseline = baseline
                         let loaded = try? await fileIO.run {
-                            try FileStorage.load(url, encoding: record.encoding)
+                            try FileStorage.load(url, encoding: record.encoding, catalog: catalog)
                         }
                         document.savedText = PieceTree(loaded?.text ?? "")
                         document.evaluateDirty()
@@ -144,6 +161,15 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return
         }
         let window = EditorWindow(document: active.buffer)
+        let defaults = UserDefaults.standard
+        autosaveEnabled =
+            defaults.object(forKey: "autosaveEnabled") == nil || defaults.bool(forKey: "autosaveEnabled")
+        let size = defaults.double(forKey: "fontSize")
+        if (7...72).contains(size) {
+            window.editor.font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        }
+        window.editor.wrapLines = defaults.bool(forKey: "wrapLines")
+        window.editor.showSymbols = defaults.bool(forKey: "showSymbols")
         mainWindow = window
         connect(window)
         buildMenus()
@@ -187,6 +213,17 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         window.onWindowClose = {
             NSApp.terminate(nil)
+        }
+        window.onOpenURLs = {
+            [weak self] urls in
+            Task {
+                for url in urls {
+                    await self?.openFile(url)
+                }
+            }
+        }
+        window.onResult = {
+            [weak self] index in self?.navigateResult(index)
         }
     }
 
@@ -232,6 +269,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             recordTextChange(active)
         }
         previousTextForMacro = active.buffer.text
+        mainWindow?.refreshEditors()
         refreshUI()
     }
 
@@ -258,6 +296,14 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.window?.title = active.name + " — Nate"
         window.window?.representedURL = active.url
         window.editor.language = registry?.language(active.language)
+        if active.language == "markdown" {
+            let dark = window.editor.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            window.editor.userLanguage =
+                userLanguages[dark ? "udl:Markdown (preinstalled dark mode)" : "udl:Markdown (preinstalled)"]
+        }
+        else {
+            window.editor.userLanguage = userLanguages[active.language]
+        }
         let head = active.buffer.selections.first?.head ?? 0
         let line = active.buffer.text.lineNumber(at: head)
         let column =
@@ -265,10 +311,20 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         let selectionCount = active.buffer.selections.reduce(0) {
             $0 + $1.range.count
         }
-        let state =
-            active.failure.map {
-                "⚠ " + $0
-            } ?? (active.isDirty ? "待保存" : active.state)
+        let state: String
+        if let recoveryError = active.recoveryError {
+            state =
+                "⚠ 恢复保存失败：" + recoveryError
+                + (active.failure.map {
+                    "；原文件：" + $0
+                } ?? "")
+        }
+        else if let failure = active.failure {
+            state = (active.recoveryRevision == active.buffer.revision ? "恢复副本已保存；原文件：" : "⚠ 原文件：") + failure
+        }
+        else {
+            state = active.isDirty ? "待保存" : active.state
+        }
         window.status.stringValue =
             "  \(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(state)"
     }

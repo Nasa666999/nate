@@ -41,7 +41,9 @@ extension ApplicationController {
             macroPlaying = false
         }
         for _ in 0..<repetitions {
-            guard !Task.isCancelled, self.active?.buffer.id == id, !active.buffer.isReadOnly else {
+            guard !Task.isCancelled, !closing, self.active?.buffer.id == id, !active.buffer.isReadOnly,
+                !active.buffer.isEditingSuspended
+            else {
                 break
             }
             let revision = active.buffer.revision

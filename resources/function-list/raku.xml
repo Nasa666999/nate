@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
+
 
 		<parser displayName="Raku" id="raku_function" commentExpr="(?x)                                               # Utilize inline comments (see `RegEx - Pattern Modifiers`)        (?m-s:\x23.*$)                                  # Single Line Comment       ">
 			<function mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)       sub       \s+       [A-Za-z_]\w*       (\s*\([^()]*\))?                                    # prototype or signature       (\s*\:\s*[^{]+)?                                    # attributes       \s*\{                                               # start of class body      ">

@@ -13,6 +13,12 @@ extension ApplicationController {
     /// - replacing: 是否在确认后修改文件。
     /// 返回：逐文件真实结果，取消后已完成清单仍保留。
     func searchDirectory(_ directory: String, filters: String, options: SearchOptions, replacing: Bool) {
+        let requested = options
+        var normalized = options
+        normalized.selectionOnly = false
+        normalized.backwards = false
+        normalized.wrap = true
+        let options = normalized
         guard !directory.isEmpty else {
             findWindow?.feedback.stringValue = "请先填写明确的搜索目录。"
             return
@@ -28,19 +34,41 @@ extension ApplicationController {
             }
         )
         let executor = fileIO
+        let catalog = codecs
         searchTask = Task {
             [weak self] in
             guard let self else {
                 return
             }
             do {
-                let plans = try await executor.run {
+                let (plans, failures) = try await executor.runCancellable {
+                    token in
                     let matcher = FileFilters(filters)
-                    let all = try DirectoryTraversal.files(under: root, filter: filters, limit: 100_000)
+                    _ = try SearchEngine.find(
+                        in: DocumentSnapshot(id: UUID(), revision: 0, text: PieceTree()),
+                        options: options
+                    )
+                    let listing = try DirectoryTraversal.listing(
+                        under: root,
+                        limit: 100_000,
+                        recursive: options.recursive,
+                        includeHidden: options.includeHidden,
+                        fileFilter: {
+                            matcher.accepts($0)
+                        },
+                        directoryFilter: {
+                            matcher.acceptsDirectory($0, depth: $1)
+                        },
+                        permit: {
+                            !token.isCancelled
+                        }
+                    )
+                    let all = listing.files
+                    var failures = listing.failures
                     var plans: [DirectoryPlan] = []
                     var identities: Set<String> = []
                     for url in all where matcher.accepts(url.lastPathComponent) {
-                        try Task.checkCancellation()
+                        try token.check()
                         let relative = url.path.dropFirst(root.path.count).split(separator: "/").dropLast()
                         if relative.enumerated().contains(where: {
                             !matcher.acceptsDirectory(String($0.element), depth: $0.offset)
@@ -48,13 +76,14 @@ extension ApplicationController {
                             continue
                         }
                         do {
-                            let loaded = try FileStorage.load(url)
+                            let loaded = try FileStorage.load(url, catalog: catalog)
                             let identity = "\(loaded.baseline.device):\(loaded.baseline.inode)"
                             if !identities.insert(identity).inserted {
                                 continue
                             }
                             let snapshot =
-                                opened[loaded.baseline.resolvedPath]
+                                ((!options.ignoreOpenBuffers || replacing)
+                                    ? opened[loaded.baseline.resolvedPath] : nil)
                                 ?? DocumentSnapshot(id: UUID(), revision: 0, text: PieceTree(loaded.text))
                             let result = try SearchEngine.find(in: snapshot, options: options)
                             if !result.hits.isEmpty {
@@ -75,11 +104,19 @@ extension ApplicationController {
                             if error is CancellationError {
                                 throw error
                             }
+                            failures.append(url.path + "：" + error.localizedDescription)
+                            guard failures.count <= 10_000 else {
+                                throw NateError.message("未读取文件超过 10000 项，请缩小范围。")
+                            }
                         }
                     }
-                    return plans
+                    return (plans, failures)
                 }
                 guard generation == self.queryGeneration else {
+                    return
+                }
+                guard self.findWindow?.options == requested else {
+                    self.findWindow?.feedback.stringValue = "条件已改变，旧计划未发布。"
                     return
                 }
                 var output: [String] = []
@@ -115,12 +152,14 @@ extension ApplicationController {
                                 document.dirtyHint = true
                             }
                             else {
-                                try await executor.run {
+                                try await executor.runCancellable {
+                                    token in
                                     var tree = plan.snapshot.text
                                     for edit in plan.edits.reversed() {
                                         tree = try tree.replacing(edit.range, with: edit.text)
                                     }
-                                    let data = try plan.loaded.encoding.encode(tree.text())
+                                    let data = try plan.loaded.encoding.encode(tree.text(), catalog: catalog)
+                                    try token.check()
                                     let backup = plan.url.deletingLastPathComponent().appendingPathComponent(
                                         plan.url.lastPathComponent + "." + UUID().uuidString + ".nate-backup"
                                     )
@@ -132,7 +171,10 @@ extension ApplicationController {
                                     _ = try FileStorage.save(
                                         data,
                                         to: plan.url,
-                                        expected: plan.loaded.baseline
+                                        expected: plan.loaded.baseline,
+                                        permit: {
+                                            !token.isCancelled
+                                        }
                                     )
                                 }
                             }
@@ -153,19 +195,31 @@ extension ApplicationController {
                             )
                             navigation.append(
                                 ResultNavigation(
-                                    documentID: opened[plan.loaded.baseline.resolvedPath]?.id,
-                                    revision: opened[plan.loaded.baseline.resolvedPath]?.revision,
+                                    documentID: options.ignoreOpenBuffers
+                                        ? nil : opened[plan.loaded.baseline.resolvedPath]?.id,
+                                    revision: options.ignoreOpenBuffers
+                                        ? nil : opened[plan.loaded.baseline.resolvedPath]?.revision,
                                     url: plan.url,
-                                    range: range
+                                    range: range,
+                                    diskBaseline: options.ignoreOpenBuffers
+                                        || opened[plan.loaded.baseline.resolvedPath] == nil
+                                        ? plan.loaded.baseline : nil
                                 )
                             )
                         }
                     }
                 }
                 self.resultNavigation = navigation
-                self.mainWindow?.showResults(output.joined(separator: "\n"))
+                output.append(
+                    contentsOf: failures.map {
+                        "跳过 · " + $0
+                    }
+                )
+                self.mainWindow?.showResults(output.joined(separator: "\n"), navigable: !replacing)
                 self.findWindow?.feedback.stringValue =
-                    "完成 · \(plans.count) 个命中文件，\(plans.reduce(0) { $0 + $1.result.hits.count }) 处。"
+                    Task.isCancelled
+                    ? "已取消；以上为实际完成清单。"
+                    : "完成 · \(plans.count) 个命中文件，\(plans.reduce(0) { $0 + $1.result.hits.count }) 处。"
                 self.mainWindow?.editor.refresh()
                 self.refreshUI()
             }

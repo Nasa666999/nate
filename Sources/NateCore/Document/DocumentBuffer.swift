@@ -15,21 +15,29 @@ public struct TextEdit: Sendable {
     }
 }
 
+public struct PositionChange: Sendable {
+    public let range: ByteRange
+    public let insertedByteCount: Int
+}
+
 public struct DocumentSnapshot: Sendable {
     public let id: UUID
     public let revision: UInt64
     public let text: PieceTree
+    public let format: DocumentFormat
 
     /// 业务作用：将不可变正文绑定到后台任务与排版所需身份。
     /// 参数说明:
     /// - id: 所属文档生命周期。
     /// - revision: 单调正文修订。
     /// - text: 结构共享的正文。
+    /// - format: 同一修订的持久化参数。
     /// 返回：可跨执行域传递的快照。
-    public init(id: UUID, revision: UInt64, text: PieceTree) {
+    public init(id: UUID, revision: UInt64, text: PieceTree, format: DocumentFormat = .utf8) {
         self.id = id
         self.revision = revision
         self.text = text
+        self.format = format
     }
 }
 
@@ -38,6 +46,13 @@ struct HistoryEntry {
     var after: PieceTree
     var selectionsBefore: [TextSelection]
     var selectionsAfter: [TextSelection]
+    var formatBefore: DocumentFormat
+    var formatAfter: DocumentFormat
+    var bookmarksBefore: Set<Int>
+    var bookmarksAfter: Set<Int>
+    var forwardChanges: [PositionChange]
+    var backwardChanges: [PositionChange]
+    var retainedBytes: Int
     var name: String
 }
 
@@ -46,33 +61,48 @@ public final class DocumentBuffer {
     public let id: UUID
     public private(set) var revision: UInt64 = 0
     public private(set) var text: PieceTree
+    public private(set) var format: DocumentFormat
     public var selections = [TextSelection(anchor: 0, head: 0)]
     public var isReadOnly = false
+    public var isEditingSuspended = false
     public var bookmarks: Set<Int> = []
     public var modifiedLines: Set<Int> = []
     public var historyLimit = 1000
+    public var historyByteLimit = 256 * 1024 * 1024
+    public private(set) var discardedHistoryEntries = 0
+    public var historyRetainedBytes: Int {
+        undoEntries.reduce(0) {
+            $0 + $1.retainedBytes
+        }
+            + redoEntries.reduce(0) {
+                $0 + $1.retainedBytes
+            }
+    }
     public private(set) var lastEdits: [TextEdit] = []
+    public private(set) var lastChanges: [PositionChange] = []
     public private(set) var lastActionName = ""
     private var undoEntries: [HistoryEntry] = []
     private var redoEntries: [HistoryEntry] = []
     public var canUndo: Bool {
-        !undoEntries.isEmpty && !isReadOnly
+        !undoEntries.isEmpty && !isReadOnly && !isEditingSuspended
     }
     public var canRedo: Bool {
-        !redoEntries.isEmpty && !isReadOnly
+        !redoEntries.isEmpty && !isReadOnly && !isEditingSuspended
     }
     public var snapshot: DocumentSnapshot {
-        DocumentSnapshot(id: id, revision: revision, text: text)
+        DocumentSnapshot(id: id, revision: revision, text: text, format: format)
     }
 
     /// 业务作用：建立独立于路径和视图的文档生命周期。
     /// 参数说明:
     /// - text: 初始正文。
     /// - id: 恢复记录的稳定身份；新打开默认新建。
+    /// - format: 初始格式，不制造额外撤销项。
     /// 返回：串行事务控制的文档。
-    public init(text: String = "", id: UUID = UUID()) {
+    public init(text: String = "", id: UUID = UUID(), format: DocumentFormat = .utf8) {
         self.id = id
         self.text = PieceTree(text)
+        self.format = format
     }
 
     /// 业务作用：唯一正文提交入口，全部校验完成后一次发布历史、选区和单调修订。
@@ -80,6 +110,7 @@ public final class DocumentBuffer {
     /// - edits: 全部基于当前修改前快照的修改。
     /// - expectedRevision: 后台计划必须匹配的起始修订。
     /// - selectionsAfter: 可选的完整结果选区。
+    /// - formatAfter: 可选的一并发布格式。
     /// - name: 用户可理解的撤销动作名称。
     /// 返回：有实际字节变化时发布新修订；失败不留下部分修改。
     @discardableResult
@@ -87,49 +118,65 @@ public final class DocumentBuffer {
         _ edits: [TextEdit],
         expectedRevision: UInt64? = nil,
         selectionsAfter: [TextSelection]? = nil,
+        formatAfter: DocumentFormat? = nil,
         name: String = "编辑"
     ) throws -> Bool {
         // 只读和过期计划必须在准备任何正文发布之前拒绝。
         guard !isReadOnly else {
             throw NateError.readOnly
         }
+        // 关闭边界固定最终修订，持久化确认之前不再接受新的写入事务。
+        guard !isEditingSuspended else {
+            throw NateError.message("文档正在完成关闭或文件目标操作。")
+        }
         guard expectedRevision == nil || expectedRevision == revision else {
             throw NateError.staleRevision
         }
-        let ordered = edits.sorted {
-            $0.range.lower == $1.range.lower
-                ? $0.range.upper < $1.range.upper : $0.range.lower < $1.range.lower
+        return try commit(
+            PreparedTransaction(
+                snapshot: snapshot,
+                edits: edits,
+                selectionsAfter: selectionsAfter,
+                formatAfter: formatAfter,
+                name: name
+            )
+        )
+    }
+
+    /// 业务作用：后台事务在主执行域短时复验后发布，过期计划没有任何部分效果。
+    /// 参数说明:
+    /// - transaction: 完成全部正文构建和范围校验的不可变事务。
+    /// 返回：实际修改发布新修订与撤销项；只读、关闭或证据变化时拒绝。
+    @discardableResult
+    public func commit(_ transaction: PreparedTransaction) throws -> Bool {
+        // 后台准备期间可能失去编辑权限或改变正文，发布前必须重新检查。
+        guard !isReadOnly else {
+            throw NateError.readOnly
         }
-        var unique: [TextEdit] = []
-        for edit in ordered {
-            guard edit.range.lower <= edit.range.upper, text.isBoundary(edit.range.lower),
-                text.isBoundary(edit.range.upper)
-            else {
-                throw NateError.invalidRange
-            }
-            if let previous = unique.last {
-                if edit.range == previous.range && edit.text.utf8.elementsEqual(previous.text.utf8) {
-                    continue
-                }
-                guard previous.range.upper <= edit.range.lower,
-                    !(previous.range.isEmpty && previous.range == edit.range)
-                else {
-                    throw NateError.overlappingEdits
-                }
-            }
-            if !text.bytes(in: edit.range).elementsEqual(edit.text.utf8) {
-                unique.append(edit)
-            }
+        guard !isEditingSuspended else {
+            throw NateError.message("文档正在完成关闭或文件目标操作。")
         }
-        guard !unique.isEmpty else {
+        guard transaction.documentID == id, transaction.revision == revision,
+            transaction.before.byteEqual(to: text)
+        else {
+            throw NateError.staleRevision
+        }
+        let unique = transaction.edits
+        let formatAfter = transaction.format
+        let name = transaction.name
+        guard
+            !unique.isEmpty
+                || formatAfter.map({
+                    $0 != format
+                }) == true
+        else {
+            lastEdits = []
+            lastActionName = ""
             return false
         }
-        var prepared = text
-        for edit in unique.reversed() {
-            prepared = try prepared.replacing(edit.range, with: edit.text)
-        }
+        let prepared = transaction.after
         let after =
-            selectionsAfter
+            transaction.selections
             ?? normalizedSelections().map {
                 TextSelection(
                     anchor: Self.map($0.anchor, through: unique),
@@ -155,17 +202,41 @@ public final class DocumentBuffer {
             after: prepared,
             selectionsBefore: selections,
             selectionsAfter: after,
+            formatBefore: format,
+            formatAfter: formatAfter ?? format,
+            bookmarksBefore: bookmarks,
+            bookmarksAfter: Set(
+                mappedBookmarks.map {
+                    prepared.lineNumber(at: min($0, prepared.byteCount))
+                }
+            ),
+            forwardChanges: unique.map {
+                PositionChange(range: $0.range, insertedByteCount: $0.text.utf8.count)
+            },
+            backwardChanges: Self.inverseChanges(unique),
+            retainedBytes: unique.reduce(512) {
+                $0 + $1.range.count + $1.text.utf8.count + 4096
+            },
             name: name
         )
         // 正文和历史同一串行发布，保存调度无法观察准备中的中间状态。
         text = prepared
+        format = formatAfter ?? format
         lastEdits = unique
+        lastChanges = entry.forwardChanges
         lastActionName = name
         selections = after
         revision += 1
         undoEntries.append(entry)
-        if undoEntries.count > historyLimit {
-            undoEntries.removeFirst(undoEntries.count - historyLimit)
+        var retained = undoEntries.reduce(0) {
+            $0 + $1.retainedBytes
+        }
+        // 至少保留最后一个原子操作；更早正文按容量与数量双重预算释放。
+        while undoEntries.count > max(1, historyLimit)
+            || (undoEntries.count > 1 && retained > max(0, historyByteLimit))
+        {
+            retained -= undoEntries.removeFirst().retainedBytes
+            discardedHistoryEntries += 1
         }
         redoEntries.removeAll()
         bookmarks = Set(
@@ -232,10 +303,14 @@ public final class DocumentBuffer {
     /// 参数说明: 无。
     /// 返回：恢复旧正文但使用新修订号，防止旧后台回调重新生效。
     public func undo() {
-        guard !isReadOnly, let entry = undoEntries.popLast() else {
+        guard !isReadOnly, !isEditingSuspended, let entry = undoEntries.popLast() else {
             return
         }
         text = entry.before
+        format = entry.formatBefore
+        bookmarks = entry.bookmarksBefore
+        lastEdits = []
+        lastChanges = entry.backwardChanges
         selections = entry.selectionsBefore
         revision += 1
         redoEntries.append(entry)
@@ -245,10 +320,14 @@ public final class DocumentBuffer {
     /// 参数说明: 无。
     /// 返回：恢复事务结果和新修订号。
     public func redo() {
-        guard !isReadOnly, let entry = redoEntries.popLast() else {
+        guard !isReadOnly, !isEditingSuspended, let entry = redoEntries.popLast() else {
             return
         }
         text = entry.after
+        format = entry.formatAfter
+        bookmarks = entry.bookmarksAfter
+        lastEdits = []
+        lastChanges = entry.forwardChanges
         selections = entry.selectionsAfter
         revision += 1
         undoEntries.append(entry)
@@ -260,16 +339,48 @@ public final class DocumentBuffer {
     /// - edits: 已排序的修改列表。
     /// 返回：删除内位置收拢到新片段末端，边界插入归属于后侧。
     public static func map(_ position: Int, through edits: [TextEdit]) -> Int {
+        map(
+            position,
+            through: edits.map {
+                PositionChange(range: $0.range, insertedByteCount: $0.text.utf8.count)
+            }
+        )
+    }
+
+    /// 业务作用：按不携带正文的变换索引移动克隆光标与标记。
+    /// 参数说明:
+    /// - position: 修改前字节位置。
+    /// - changes: 同一快照上的有序范围变换。
+    /// 返回：被删除位置归于新片段末端，未涉及位置保持相对文本关系。
+    public static func map(_ position: Int, through changes: [PositionChange]) -> Int {
         var delta = 0
-        for edit in edits {
+        for edit in changes {
             if position < edit.range.lower {
                 break
             }
             if position <= edit.range.upper {
-                return edit.range.lower + delta + edit.text.utf8.count
+                return edit.range.lower + delta + edit.insertedByteCount
             }
-            delta += edit.text.utf8.count - edit.range.count
+            delta += edit.insertedByteCount - edit.range.count
         }
         return position + delta
+    }
+
+    /// 业务作用：为撤销建立反向位置映射，避免复制整段删除正文只为计算光标。
+    /// 参数说明:
+    /// - edits: 修改前快照上的有序编辑。
+    /// 返回：修改后快照上的反向范围变换。
+    private static func inverseChanges(_ edits: [TextEdit]) -> [PositionChange] {
+        var delta = 0
+        return edits.map {
+            edit in
+            let inserted = edit.text.utf8.count
+            let start = edit.range.lower + delta
+            delta += inserted - edit.range.count
+            return PositionChange(
+                range: ByteRange(start, start + inserted),
+                insertedByteCount: edit.range.count
+            )
+        }
     }
 }

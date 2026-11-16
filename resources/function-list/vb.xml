@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
   <functionList>
-    
 
-    
+
+
     <parser displayName="Visual Basic (.NET|Script|for Applications)" id="vb_function" commentExpr="(?m:((?&lt;=').*?$)|((?i:REM)([\t ].*?)?$))">
      <classRange mainExpr="(?s:(?&lt;SCOPE&gt;(?i:CLASS|TYPE)).*?(?i:END[\t ]\k&lt;SCOPE&gt;))" displayMode="node">
       <className>

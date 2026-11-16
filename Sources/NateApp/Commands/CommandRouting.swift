@@ -86,6 +86,10 @@ extension ApplicationController {
                 }
                 _ = await flushRecovery()
             }
+        case "resolveSaveState":
+            Task {
+                await resolveSaveState()
+            }
         case "reload":
             if let active {
                 Task {
@@ -100,9 +104,12 @@ extension ApplicationController {
             }
         case "closeAll", "closeOthers", "closeClean", "closeUnpinned": closeGroup(id)
         case "reopenClosed":
-            if let document = recentClosed.popLast() {
-                documents.append(document)
-                activate(document.buffer.id)
+            Task {
+                await reopenClosed()
+            }
+        case "recoveryArchive":
+            Task {
+                await showRecoveryArchive()
             }
         case "undo", "redo":
             if let input = NSApp.keyWindow?.firstResponder as? NSTextView {
@@ -126,11 +133,15 @@ extension ApplicationController {
             }
         case "find", "replace", "findFiles": presentFind(replacing: id == "replace")
         case "findNext", "findPrevious":
-            presentFind(replacing: false)
+            if findWindow == nil {
+                presentFind(replacing: false)
+            }
             if let options = findWindow?.options {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
-        case "selectionChanged": refreshUI()
+        case "selectionChanged":
+            activeID = mainWindow?.editor.document.id
+            refreshUI()
         case "wrap":
             mainWindow?.editor.wrapLines.toggle()
             mainWindow?.editor.refresh()
@@ -165,10 +176,21 @@ extension ApplicationController {
             active?.pinned.toggle()
             refreshUI()
         case "readOnly":
-            active?.buffer.isReadOnly.toggle()
-            refreshUI()
+            if let active {
+                setReadOnly(active, value: !active.buffer.isReadOnly)
+            }
         case "nextTab", "previousTab": cycleTab(forward: id == "nextTab")
         case "goto": gotoLine()
+        case "importUDL": importUDL()
+        case "exportUDL": exportUDL()
+        case "newUDL": editUDL(creating: true)
+        case "editUDL": editUDL(creating: false)
+        case "duplicateUDL": duplicateUDL()
+        case "deleteUDL":
+            Task {
+                await deleteUDL()
+            }
+        case "openSelection", "revealSelection", "openURL": openSelection(id)
         case "bookmark", "nextBookmark", "previousBookmark", "clearBookmarks", "invertBookmarks",
             "copyBookmarks", "deleteBookmarks", "deleteUnbookmarked":
             bookmarkCommand(id)
@@ -231,9 +253,9 @@ extension ApplicationController {
             buildMenus()
         case "folder": chooseFolder()
         case "monitor":
-            active?.monitoring.toggle()
-            active?.buffer.isReadOnly = active?.monitoring ?? false
-            refreshUI()
+            Task {
+                await toggleMonitoring()
+            }
         case "rename":
             Task {
                 await renameDocument()

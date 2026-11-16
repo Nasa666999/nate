@@ -33,4 +33,25 @@ final class IOExecutor: Sendable {
             }
         }
     }
+
+    /// 业务作用：将任务取消传给同步 I/O 边界，操作自行在安全阶段检查。
+    /// 参数说明:
+    /// - body: 接收明确取消令牌的后台操作。
+    /// 返回：实际结果或取消，不通过 Task.cancel 假装底层已停止。
+    func runCancellable<T: Sendable>(_ body: @escaping @Sendable (CancellationToken) throws -> T) async throws
+        -> T
+    {
+        let token = CancellationToken()
+        return try await withTaskCancellationHandler(
+            operation: {
+                try await run {
+                    try token.check()
+                    return try body(token)
+                }
+            },
+            onCancel: {
+                token.cancel()
+            }
+        )
+    }
 }

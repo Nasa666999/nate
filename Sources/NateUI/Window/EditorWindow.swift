@@ -1,7 +1,7 @@
 import AppKit
 import NateCore
 
-public struct TabPresentation {
+public struct TabPresentation: Equatable {
     public var id: UUID
     public var title: String
     public var path: String?
@@ -48,8 +48,9 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onEdit: (() -> Void)?
     public var onWindowClose: (() -> Void)?
     public internal(set) var editor: EditorView
-    public let status = NSTextField(labelWithString: "")
-    public let results = NSTextView()
+    public let status = SaveStatusField(labelWithString: "")
+    let results = ResultTextView()
+    public var onOpenURLs: (([URL]) -> Void)?
     public var onResult: ((Int) -> Void)?
     let tabs = TabStrip()
     let scroll = NSScrollView()
@@ -135,6 +136,12 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         editorSplit.addArrangedSubview(scroll)
         split.addArrangedSubview(editorSplit)
         results.isEditable = false
+        results.onActivate = {
+            [weak self] row in self?.onResult?(row)
+        }
+        editor.onOpenURLs = {
+            [weak self] urls in self?.onOpenURLs?(urls)
+        }
         results.isSelectable = true
         results.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         resultsScroll.hasVerticalScroller = true
@@ -143,6 +150,10 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         split.addArrangedSubview(resultsScroll)
         root.addSubview(split)
         status.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        status.toolTip = "单击处理保存状态、重试或外部冲突。"
+        status.onActivate = {
+            [weak self] in self?.onCommand?("resolveSaveState")
+        }
         status.lineBreakMode = .byTruncatingMiddle
         root.addSubview(status)
         status.heightAnchor.constraint(equalToConstant: 25).isActive = true
@@ -176,7 +187,20 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         editor.onCommand = {
             [weak self] id in self?.onCommand?(id)
         }
+        editor.onStatus = {
+            [weak self] message in self?.status.stringValue = message
+        }
+        let primary = editor
+        editor.onFocus = {
+            [weak self, weak primary] in
+            guard let self, let primary else {
+                return
+            }
+            self.editor = primary
+            self.onCommand?("selectionChanged")
+        }
         window.center()
+        editor.refresh()
     }
 
     /// 业务作用：窗口不使用归档创建，工作区拥有唯一文档集合。
@@ -193,11 +217,21 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// 返回：正文视图切换为共享缓冲区，原视口保存。
     public func showDocument(_ document: DocumentBuffer) {
         editor.finishComposition()
-        scrollPositions[editor.document.id] = scroll.contentView.bounds.origin
+        let container = editor.enclosingScrollView ?? scroll
+        scrollPositions[editor.document.id] = container.contentView.bounds.origin
         editor.document = document
         editor.refresh()
-        scroll.contentView.scroll(to: scrollPositions[document.id] ?? .zero)
+        container.contentView.scroll(to: scrollPositions[document.id] ?? .zero)
         window?.makeFirstResponder(editor)
+    }
+
+    /// 业务作用：共享正文的每个视图独立映射光标并重绘，后台视图不抢走焦点。
+    /// 参数说明: 无。
+    /// 返回：所有可见编辑视图反映各自文档的最新修订。
+    public func refreshEditors() {
+        for container in editorSplit.arrangedSubviews {
+            ((container as? NSScrollView)?.documentView as? EditorView)?.refresh()
+        }
     }
 
     /// 业务作用：更新标签呈现，标签上下文动作始终绑定被点击身份。
@@ -211,8 +245,10 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// 业务作用：显示可复制的搜索或工具结果，关闭面板不销毁文档。
     /// 参数说明:
     /// - text: 完整可读结果。
+    /// - navigable: 是否存在与每行对应的有效定位证据。
     /// 返回：底部结果面板可见。
-    public func showResults(_ text: String) {
+    public func showResults(_ text: String, navigable: Bool = false) {
+        results.navigationEnabled = navigable
         results.string = text
         resultsScroll.isHidden = false
         split.setPosition(max(200, split.bounds.height - 190), ofDividerAt: 0)
@@ -235,5 +271,15 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
         onWindowClose?()
         return false
+    }
+
+    /// 业务作用：窗口与分屏尺寸变化后，只重建各自的视口排版缓存。
+    /// 参数说明:
+    /// - notification: 系统窗口尺寸变化通知。
+    /// 返回：软换行跟随实际可用宽度，正文与光标不被改写。
+    public func windowDidResize(_ notification: Notification) {
+        for container in editorSplit.arrangedSubviews {
+            ((container as? NSScrollView)?.documentView as? EditorView)?.refresh()
+        }
     }
 }

@@ -8,6 +8,23 @@ public struct TextEncoding: Sendable, Codable, Equatable, Hashable {
     public var name: String
     public static let utf8 = TextEncoding(codePage: 65001, bom: false, name: "UTF-8")
 
+    /// 业务作用：编码身份由字节规则决定，显示别名不制造虚假的保存差异。
+    /// 参数说明:
+    /// - lhs: 第一组编码参数。
+    /// - rhs: 第二组编码参数。
+    /// 返回：代码页和 BOM 均相同时为真。
+    public static func == (lhs: TextEncoding, rhs: TextEncoding) -> Bool {
+        lhs.codePage == rhs.codePage && lhs.bom == rhs.bom
+    }
+
+    /// 业务作用：让代码页别名在编码集合中保持同一身份。
+    /// 参数说明: 无。
+    /// 返回：散列仅包含影响文件字节的参数。
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(codePage)
+        hasher.combine(bom)
+    }
+
     /// 业务作用：明确文件代码页和 BOM，避免含糊的系统默认 ANSI。
     /// 参数说明:
     /// - codePage: Windows 代码页编号。
@@ -71,8 +88,12 @@ public struct TextEncoding: Sendable, Codable, Equatable, Hashable {
     /// 业务作用：严格解码原字节，不以替代字符掩盖非法序列。
     /// 参数说明:
     /// - data: 不包含前导 BOM 的源字节。
+    /// - catalog: 随包的严格代码页映射。
     /// 返回：合法正文；无法无损解释时明确失败。
-    public func decode(_ data: Data) throws -> String {
+    public func decode(_ data: Data, catalog: LegacyCodecCatalog? = nil) throws -> String {
+        if let mapped = try catalog?.decode(data, page: codePage) {
+            return mapped
+        }
         if codePage == 65001 {
             guard let text = String(data: data, encoding: .utf8) else {
                 throw NateError.invalidText
@@ -81,6 +102,34 @@ public struct TextEncoding: Sendable, Codable, Equatable, Hashable {
         }
         guard cfEncoding != kCFStringEncodingInvalidId else {
             throw NateError.message("系统没有 \(name) 的严格转换器。")
+        }
+        if codePage == 1200 || codePage == 1201 {
+            guard data.count.isMultiple(of: 2) else {
+                throw NateError.message("UTF-16 含有截断的字符单元。")
+            }
+            let bytes = [UInt8](data)
+            var pending = false
+            for i in stride(from: 0, to: bytes.count, by: 2) {
+                let unit =
+                    codePage == 1200
+                    ? UInt16(bytes[i]) | UInt16(bytes[i + 1]) << 8
+                    : UInt16(bytes[i]) << 8 | UInt16(bytes[i + 1])
+                if pending {
+                    guard (0xDC00...0xDFFF).contains(unit) else {
+                        throw NateError.message("UTF-16 高代理项没有配对。")
+                    }
+                    pending = false
+                }
+                else if (0xD800...0xDBFF).contains(unit) {
+                    pending = true
+                }
+                else if (0xDC00...0xDFFF).contains(unit) {
+                    throw NateError.message("UTF-16 含孤立低代理项。")
+                }
+            }
+            guard !pending else {
+                throw NateError.message("UTF-16 末尾高代理项没有配对。")
+            }
         }
         let decoded: CFString? = data.withUnsafeBytes {
             bytes in
@@ -101,8 +150,15 @@ public struct TextEncoding: Sendable, Codable, Equatable, Hashable {
     /// 业务作用：在触碰目标文件之前完成严格编码，不能输出问号或近似字符。
     /// 参数说明:
     /// - text: 已提交的正文快照。
+    /// - catalog: 随包的严格代码页映射。
     /// 返回：包含所选 BOM 的完整文件字节；不可表示时失败。
-    public func encode(_ text: String) throws -> Data {
+    public func encode(_ text: String, catalog: LegacyCodecCatalog? = nil) throws -> Data {
+        if let mapped = try catalog?.encode(text, page: codePage) {
+            return mapped
+        }
+        guard cfEncoding != kCFStringEncodingInvalidId else {
+            throw NateError.message("缺少 \(name) 的严格编码资源。")
+        }
         let value = text as CFString
         let length = CFStringGetLength(value)
         var used = 0
@@ -153,10 +209,13 @@ public struct TextEncoding: Sendable, Codable, Equatable, Hashable {
     /// 参数说明:
     /// - data: 完整原文件字节。
     /// - explicit: 用户指定的代码页，优先于推断。
+    /// - catalog: 代码页映射资源。
     /// 返回：正文、实际编码和是否为推断的标记。
-    public static func detect(_ data: Data, explicit: TextEncoding? = nil) throws -> (
-        String, TextEncoding, Bool
-    ) {
+    public static func detect(_ data: Data, explicit: TextEncoding? = nil, catalog: LegacyCodecCatalog? = nil)
+        throws -> (
+            String, TextEncoding, Bool
+        )
+    {
         var encoding = explicit ?? .utf8
         var skip = 0
         if data.starts(with: [0xEF, 0xBB, 0xBF]) && (explicit == nil || explicit?.codePage == 65001) {
@@ -172,6 +231,6 @@ public struct TextEncoding: Sendable, Codable, Equatable, Hashable {
             skip = 2
         }
         let content = Data(data.dropFirst(skip))
-        return (try encoding.decode(content), encoding, explicit == nil && skip == 0)
+        return (try encoding.decode(content, catalog: catalog), encoding, explicit == nil && skip == 0)
     }
 }

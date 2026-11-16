@@ -37,6 +37,9 @@ final class TabStrip: NSScrollView {
     /// - tabs: 有序标签呈现。
     /// 返回：按相同顺序显示并绑定正确的文档。
     func update(_ tabs: [TabPresentation]) {
+        guard current != tabs else {
+            return
+        }
         current = tabs
         for view in stack.arrangedSubviews {
             stack.removeArrangedSubview(view)

@@ -1416,7 +1416,7 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="_OvrInitEms" />
-		<KeyWord name="_OvrInitExt" />		
+		<KeyWord name="_OvrInitExt" />
 		<KeyWord name="__asm" />
 		<KeyWord name="__based1" />
 		<KeyWord name="__cdecl" />

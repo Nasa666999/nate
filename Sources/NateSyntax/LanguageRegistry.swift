@@ -14,6 +14,41 @@ public struct LanguageDefinition: Codable, Sendable, Identifiable {
 public struct LanguageRegistry: Sendable {
     public let languages: [LanguageDefinition]
 
+    /// 业务作用：将完整校验后的自定义语言作为一个资源代次加入注册表。
+    /// 参数说明:
+    /// - definitions: 已完成解析且名称不冲突的 UDL 集合。
+    /// 返回：新的完整注册表，旧快照仍有效。
+    public func adding(_ definitions: [UDLDefinition]) -> LanguageRegistry {
+        var result = languages
+        for definition in definitions {
+            result.removeAll {
+                $0.id == definition.id
+            }
+            result.append(definition.languageDefinition())
+        }
+        return LanguageRegistry(languages: result)
+    }
+
+    /// 业务作用：构造一次性发布的不可变注册表。
+    /// 参数说明:
+    /// - languages: 完整有序语言资源。
+    /// 返回：新的注册表。
+    private init(languages: [LanguageDefinition]) {
+        self.languages = languages
+    }
+
+    /// 业务作用：删除已明确移除的自定义资源身份，不触碰内置语言。
+    /// 参数说明:
+    /// - ids: 待移除的 UDL 标识。
+    /// 返回：剩余语言的完整注册表。
+    public func removing(_ ids: Set<String>) -> LanguageRegistry {
+        LanguageRegistry(
+            languages: languages.filter {
+                !ids.contains($0.id)
+            }
+        )
+    }
+
     /// 业务作用：从随包语言清单载入所有官方模式和预装补充语言。
     /// 参数说明:
     /// - directory: 注入的语言资源目录。
@@ -46,6 +81,12 @@ public struct LanguageRegistry: Sendable {
         let ext = (name as NSString).pathExtension
         if let id = associations[name] ?? associations[ext] {
             return id
+        }
+        if let definition = languages.first(where: {
+            $0.id.hasPrefix("udl:") && !$0.id.hasPrefix("udl:Markdown (preinstalled")
+                && $0.extensions.contains(ext)
+        }) {
+            return definition.id
         }
         if let definition = languages.first(where: {
             $0.id != "searchResult"

@@ -34,7 +34,7 @@ extension EditorView {
         switch command {
         case "insertNewline:":
             var indent = ""
-            if let head = document.selections.first?.head {
+            if let head = viewSelections.first?.head {
                 let row = document.text.lineNumber(at: head)
                 indent = String(
                     document.text.text(in: document.text.lineRange(row, includeEnding: false)).prefix {
@@ -71,8 +71,8 @@ extension EditorView {
                 inputContext?.discardMarkedText()
                 refresh()
             }
-            else if let first = document.selections.first {
-                document.selections = [first]
+            else if let first = viewSelections.first {
+                viewSelections = [first]
                 needsDisplay = true
             }
         default: NSSound.beep()
@@ -85,7 +85,7 @@ extension EditorView {
     /// 返回：一个可撤销事务；虚拟空白删除不写入空格。
     func delete(forward: Bool) {
         finishComposition()
-        document.selections = document.normalizedSelections().map {
+        viewSelections = document.normalizedSelections().map {
             selection in
             guard selection.range.isEmpty, selection.virtualColumn == 0 else {
                 return selection
@@ -105,7 +105,7 @@ extension EditorView {
     /// 返回：仅更新视图选区，不产生修改修订。
     func move(horizontal: Int = 0, vertical: Int = 0, edge: Int = 0, extend: Bool = false) {
         finishComposition()
-        document.selections = document.selections.map {
+        viewSelections = viewSelections.map {
             selection in
             var head = selection.head
             let row = document.text.lineNumber(at: head)
@@ -121,7 +121,7 @@ extension EditorView {
                 let units = document.text.utf16Offset(byte: head) ?? 0
                 let layout = layoutLine(row)
                 let p = layout.caret(at: units - layout.originUTF16)
-                head = bytePosition(at: NSPoint(x: gutterWidth + p.minX, y: CGFloat(target) * lineHeight + 9))
+                head = bytePosition(at: NSPoint(x: gutterWidth + p.minX, y: projection.y(of: target) + 9))
             }
             return TextSelection(anchor: extend ? selection.anchor : head, head: head)
         }
@@ -135,7 +135,7 @@ extension EditorView {
     /// - forward: 跳转方向。
     /// 返回：光标移动，正文保持不变。
     func moveWord(forward: Bool) {
-        guard let selection = document.selections.first else {
+        guard let selection = viewSelections.first else {
             return
         }
         let tree = document.text
@@ -168,7 +168,7 @@ extension EditorView {
         guard document.text.isBoundary(position) else {
             return
         }
-        document.selections = [TextSelection(anchor: position, head: position)]
+        viewSelections = [TextSelection(anchor: position, head: position)]
         needsDisplay = true
         revealSelection()
         onSelection?()

@@ -261,6 +261,9 @@ extension ApplicationController {
                 range: range
             )
         }
-        mainWindow?.showResults(output.isEmpty ? "没有找到适用结构。" : output.joined(separator: "\n"))
+        mainWindow?.showResults(
+            output.isEmpty ? "没有找到适用结构。" : output.joined(separator: "\n"),
+            navigable: !output.isEmpty
+        )
     }
 }

@@ -12,9 +12,14 @@ struct ResourceManifest: Decodable {
     var files: [ResourceEntry]
 }
 
-let bundle = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "dist/Nate.app")
+let bundle = URL(
+    fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "dist/Nate.app"
+)
 let resources = bundle.appendingPathComponent("Contents/Resources")
-let manifest = try JSONDecoder().decode(ResourceManifest.self, from: Data(contentsOf: resources.appendingPathComponent("manifest.json")))
+let manifest = try JSONDecoder().decode(
+    ResourceManifest.self,
+    from: Data(contentsOf: resources.appendingPathComponent("manifest.json"))
+)
 guard manifest.format == 1 && manifest.product == "Nate" else {
     throw NSError(domain: "Nate.Bundle", code: 1)
 }
@@ -23,12 +28,21 @@ for file in manifest.files {
         throw NSError(domain: "Nate.Bundle", code: 2)
     }
     let data = try Data(contentsOf: resources.appendingPathComponent(file.path))
-    let checksum = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    let checksum = SHA256.hash(data: data).map {
+        String(format: "%02x", $0)
+    }.joined()
     guard checksum == file.sha256 else {
-        throw NSError(domain: "Nate.Bundle", code: 3, userInfo: [NSLocalizedDescriptionKey: "资源校验失败：" + file.path])
+        throw NSError(
+            domain: "Nate.Bundle",
+            code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "资源校验失败：" + file.path]
+        )
     }
 }
-for name in ["languages", "udl", "completion", "function-list", "themes", "keymaps", "defaults", "licenses"] {
+for name in [
+    "languages", "udl", "completion", "function-list", "themes", "keymaps", "defaults", "encodings",
+    "licenses",
+] {
     guard FileManager.default.fileExists(atPath: resources.appendingPathComponent(name).path) else {
         throw NSError(domain: "Nate.Bundle", code: 4, userInfo: [NSLocalizedDescriptionKey: "资源目录缺失：" + name])
     }
@@ -36,7 +50,9 @@ for name in ["languages", "udl", "completion", "function-list", "themes", "keyma
 guard let info = NSDictionary(contentsOf: bundle.appendingPathComponent("Contents/Info.plist")),
     let executable = info["CFBundleExecutable"] as? String,
     info["LSMinimumSystemVersion"] as? String == "13.0",
-    FileManager.default.isExecutableFile(atPath: bundle.appendingPathComponent("Contents/MacOS/" + executable).path),
+    FileManager.default.isExecutableFile(
+        atPath: bundle.appendingPathComponent("Contents/MacOS/" + executable).path
+    ),
     FileManager.default.fileExists(atPath: resources.appendingPathComponent("Nate.icns").path)
 else {
     throw NSError(domain: "Nate.Bundle", code: 5)

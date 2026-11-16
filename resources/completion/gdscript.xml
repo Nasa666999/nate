@@ -2,7 +2,7 @@
 <NotepadPlus>
 	<AutoComplete>
 		<Environment ignoreCase="no" startFunc="(" stopFunc=")" paramSeparator="," additionalWordChar="." />
-		
+
 		<KeyWord name="if" />
 		<KeyWord name="elif" />
 		<KeyWord name="else" />
@@ -43,7 +43,7 @@
 		<KeyWord name="TAU" />
 		<KeyWord name="INF" />
 		<KeyWord name="NAN" />
-		
+
 		<KeyWord name="Color8" func="yes">
 			<Overload retVal="" descr="Color8 ( int r8, int g8, int b8, int a8=255 )&#10;added_in:3.0 &#10;Returns a color constructed from integer red, green, blue, and alpha channels. Each channel should have 8 bits of information ranging from 0 to 255.&#10;r8 red channel&#10;g8 green channel&#10;b8 blue channel&#10;a8 alpha channel&#10;red = Color8(255, 0, 0)&#10;">
 			</Overload>
@@ -420,7 +420,7 @@
 			<Overload retVal="" descr="deep_equal ( Variant a, Variant b )&#10;added_in:3.5 &#10;Compares two values by checking their actual contents, recursing into any Array or Dictionary up to its deepest level.&#10;This compares to == in a number of ways:&#10;For null, int, float, String, Object and RID both deep_equal and == work the same.&#10;For Dictionary, == considers equality if, and only if, both variables point to the very same Dictionary, with no recursion or awareness of the contents at all.&#10;For Array, == considers equality if, and only if, each item in the first Array is equal to its counterpart in the second Array, as told by == itself. That implies that == recurses into Array, but not into Dictionary.&#10;In short, whenever a Dictionary is potentially involved, if you want a true content-aware comparison, you have to use deep_equal.&#10;">
 			</Overload>
 		</KeyWord>
-		
+
 		<KeyWord name="AABB" />
 		<KeyWord name="AcceptDialog" />
 		<KeyWord name="AESContext" />

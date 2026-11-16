@@ -4,17 +4,52 @@ import NateSyntax
 
 @MainActor
 public final class EditorView: NSView, @preconcurrency NSTextInputClient {
-    public var document: DocumentBuffer
+    public var document: DocumentBuffer {
+        didSet {
+            viewSelections = document.selections
+            observedRevision = document.revision
+            projection.measured.removeAll()
+        }
+    }
+    public var viewSelections = [TextSelection(anchor: 0, head: 0)] {
+        didSet {
+            if window?.firstResponder === self {
+                document.selections = viewSelections
+            }
+        }
+    }
+    public var onFocus: (() -> Void)?
+    var observedRevision: UInt64 = 0
+    var projection = VisualLineMap()
+    var lastLayoutWidth: CGFloat = 0
     public var language: LanguageDefinition?
+    public var userLanguage: UDLDefinition? {
+        didSet {
+            if oldValue?.originalXML != userLanguage?.originalXML {
+                invalidateSyntax()
+            }
+        }
+    }
+    public var onStatus: ((String) -> Void)?
+    var syntaxTask: Task<Void, Never>?
+    var syntaxGeneration = UUID()
+    var syntaxDocument: UUID?
+    var syntaxLanguage = ""
+    var syntaxRevision: UInt64 = 0
+    var syntaxCache: [Int: [SyntaxToken]] = [:]
+    var syntaxCheckpoints: [Int: LexicalState] = [:]
     public var onChange: (() -> Void)?
     public var onSelection: (() -> Void)?
     public var onCommand: ((String) -> Void)?
+    public var onOpenURLs: (([URL]) -> Void)?
     public var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
     public var showSymbols = false
     public var wrapLines = false
     public var rtl = false
     public var overwrite = false
-    public var newline = "\n"
+    public var newline: String {
+        document.format.lineEnding.text
+    }
     public var gutterWidth: CGFloat = 62
     var layouts: [Int: LineLayout] = [:]
     var composition: CompositionSession?
@@ -50,6 +85,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public init(document: DocumentBuffer) {
         self.document = document
         super.init(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        viewSelections = document.selections
+        observedRevision = document.revision
         setAccessibilityElement(true)
         setAccessibilityRole(.textArea)
         setAccessibilityLabel("Nate 文本编辑区")
@@ -69,15 +106,40 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// - reveal: 是否显示当前光标；后台更新不抢视口。
     /// 返回：刷新呈现，不制造编辑或保存状态。
     public func refresh(reveal: Bool = false) {
+        if window?.firstResponder === self || reveal {
+            viewSelections = document.selections
+        }
+        else if observedRevision != document.revision {
+            viewSelections = viewSelections.map {
+                selection in
+                let anchor = DocumentBuffer.map(selection.anchor, through: document.lastChanges)
+                let head = DocumentBuffer.map(selection.head, through: document.lastChanges)
+                return TextSelection(
+                    anchor: min(anchor, document.text.byteCount),
+                    head: min(head, document.text.byteCount)
+                )
+            }
+        }
+        if observedRevision != document.revision {
+            projection.measured.removeAll()
+        }
+        observedRevision = document.revision
         if composition?.revision != document.revision {
             composition = nil
         }
         layouts.removeAll()
+        projection.count = displayTree.lineCount
+        projection.defaultHeight = lineHeight
+        projection.hidden = hiddenLines
         let viewport = enclosingScrollView?.contentSize ?? NSSize(width: 900, height: 600)
+        if !wrapLines || abs(lastLayoutWidth - viewport.width) > 0.5 {
+            projection.measured.removeAll()
+        }
+        lastLayoutWidth = viewport.width
         setFrameSize(
             NSSize(
-                width: max(viewport.width, frame.width),
-                height: max(viewport.height, CGFloat(displayTree.lineCount) * lineHeight + 60)
+                width: wrapLines ? viewport.width : max(viewport.width, frame.width),
+                height: max(viewport.height, projection.y(of: displayTree.lineCount) + 60)
             )
         )
         needsDisplay = true
@@ -97,11 +159,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         }
         let tree = displayTree
         let range = tree.lineRange(line, includeEnding: false)
-        var state = SyntaxState()
-        let tokens =
-            language.map {
-                SyntaxEngine.highlight(tree.text(in: range), base: range.lower, language: $0, state: &state)
-            } ?? []
+        let tokens = syntaxTokens(for: line)
         let snapshot = DocumentSnapshot(id: document.id, revision: document.revision, text: tree)
         let layout = LineLayout(
             snapshot: snapshot,
@@ -116,6 +174,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             layouts.removeAll()
         }
         layouts[line] = layout
+        if wrapLines {
+            projection.measure(line, height: layout.height + 5)
+        }
         return layout
     }
 
@@ -127,32 +188,27 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         NSColor.textBackgroundColor.setFill()
         dirtyRect.fill()
         let tree = displayTree
-        let first = max(0, Int(dirtyRect.minY / lineHeight))
-        let last = min(tree.lineCount - 1, Int(dirtyRect.maxY / lineHeight) + 1)
+        let first = projection.line(at: max(0, dirtyRect.minY - 8))
+        let last = min(tree.lineCount - 1, projection.line(at: dirtyRect.maxY) + 1)
         guard first <= last, let context = NSGraphicsContext.current?.cgContext else {
             return
         }
-        let active = tree.lineNumber(at: min(document.selections.first?.head ?? 0, tree.byteCount))
-        for line in first...last {
-            let y = CGFloat(line) * lineHeight + 8
+        let active = tree.lineNumber(at: min(viewSelections.first?.head ?? 0, tree.byteCount))
+        for line in first...last where !hiddenLines.contains(line) {
             let layout = layoutLine(line)
+            let y = projection.y(of: line) + 8
             if line == active {
                 NSColor.controlAccentColor.withAlphaComponent(0.05).setFill()
                 NSRect(x: gutterWidth, y: y, width: bounds.width - gutterWidth, height: lineHeight).fill()
             }
-            for selection in document.selections where !selection.range.isEmpty && composition == nil {
+            for selection in viewSelections where !selection.range.isEmpty && composition == nil {
                 let a = max(selection.range.lower, layout.range.lower)
                 let b = min(selection.range.upper, layout.range.upper)
-                if a <= b, let ua = tree.utf16Offset(byte: a), let ub = tree.utf16Offset(byte: b) {
-                    let start = layout.caret(at: ua - layout.originUTF16)
-                    let end = layout.caret(at: ub - layout.originUTF16)
+                if a <= b {
                     NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6).setFill()
-                    NSRect(
-                        x: gutterWidth + min(start.minX, end.minX),
-                        y: y,
-                        width: max(3, abs(end.minX - start.minX)),
-                        height: lineHeight
-                    ).fill()
+                    for rect in layout.selectionRects(ByteRange(a, b)) {
+                        rect.offsetBy(dx: gutterWidth, dy: y).fill()
+                    }
                 }
             }
             for fragment in layout.fragments {
@@ -168,12 +224,12 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 drawSymbols(line: line, layout: layout, y: y)
             }
             if composition == nil && caretVisible && window?.firstResponder === self {
-                for selection in document.selections where tree.lineNumber(at: selection.head) == line {
+                for selection in viewSelections where tree.lineNumber(at: selection.head) == line {
                     if let offset = tree.utf16Offset(byte: selection.head) {
                         var rect = layout.caret(at: offset - layout.originUTF16)
                         rect.origin.x += gutterWidth
                         rect.origin.y += y
-                        rect.size.height = lineHeight
+                        rect.size.height = max(rect.height, lineHeight)
                         NSColor.controlAccentColor.setFill()
                         rect.fill()
                     }
@@ -194,7 +250,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         NSColor.windowBackgroundColor.setFill()
         NSRect(x: visibleRect.minX, y: dirtyRect.minY, width: gutterWidth - 8, height: dirtyRect.height)
             .fill()
-        for line in first...last {
+        for line in first...last where !hiddenLines.contains(line) {
             let number = NSAttributedString(
                 string: "\(line + 1)",
                 attributes: [
@@ -208,7 +264,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             number.draw(
                 at: NSPoint(
                     x: visibleRect.minX + gutterWidth - 16 - number.size().width,
-                    y: CGFloat(line) * lineHeight + 9
+                    y: projection.y(of: line) + 9
                 )
             )
             if document.bookmarks.contains(line) {
@@ -216,7 +272,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 NSBezierPath(
                     ovalIn: NSRect(
                         x: visibleRect.minX + 4,
-                        y: CGFloat(line) * lineHeight + 12,
+                        y: projection.y(of: line) + 12,
                         width: 7,
                         height: 7
                     )
@@ -226,11 +282,20 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 NSColor.systemGreen.setFill()
                 NSRect(
                     x: visibleRect.minX + gutterWidth - 10,
-                    y: CGFloat(line) * lineHeight + 8,
+                    y: projection.y(of: line) + 8,
                     width: 2,
                     height: lineHeight
                 ).fill()
             }
+        }
+        let viewport = enclosingScrollView?.contentSize ?? bounds.size
+        let height = max(viewport.height, projection.y(of: tree.lineCount) + 60)
+        let contentWidth = layouts.values.reduce(viewport.width) {
+            max($0, $1.width + gutterWidth + 20)
+        }
+        let width = wrapLines ? viewport.width : contentWidth
+        if abs(frame.height - height) > 0.5 || abs(frame.width - width) > 0.5 {
+            setFrameSize(NSSize(width: width, height: height))
         }
     }
 
@@ -267,7 +332,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 参数说明: 无。
     /// 返回：只滚动视口，不移动正文光标。
     public func revealSelection() {
-        guard let selection = document.selections.first else {
+        guard let selection = viewSelections.first else {
             return
         }
         let line = document.text.lineNumber(at: selection.head)
@@ -275,8 +340,18 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let units = document.text.utf16Offset(byte: selection.head) ?? layout.originUTF16
         var rect = layout.caret(at: units - layout.originUTF16)
         rect.origin.x += gutterWidth
-        rect.origin.y += CGFloat(line) * lineHeight + 8
+        rect.origin.y += projection.y(of: line) + 8
         rect.size.height = lineHeight
         scrollToVisible(rect.insetBy(dx: -20, dy: -20))
+    }
+
+    /// 业务作用：焦点切换只发布该视图的选区，克隆视图保持自己的光标。
+    /// 参数说明: 无。
+    /// 返回：成为系统文本输入目标并通知窗口。
+    public override func becomeFirstResponder() -> Bool {
+        document.selections = viewSelections
+        onFocus?()
+        needsDisplay = true
+        return true
     }
 }

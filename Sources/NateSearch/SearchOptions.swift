@@ -17,6 +17,9 @@ public struct SearchOptions: Sendable, Codable, Equatable {
     public var wrap = true
     public var backwards = false
     public var selectionOnly = false
+    public var recursive = true
+    public var includeHidden = false
+    public var ignoreOpenBuffers = false
     public var maxMatches = 100_000
     public var stepLimit = 5_000_000
 

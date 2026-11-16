@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
 
-		
+
+
 		<parser displayName="C#" id="csharp_class" commentExpr="(?s:/\*.*?\*/)|(?m-s://.*?$)">
 			<classRange mainExpr="^[\t\x20]*((public|protected|private|internal)\s+)?(\w+\s*)?(class|struct|interface)[\t\x20]+[^\{]+\{" openSymbole="\{" closeSymbole="\}">
 				<className>

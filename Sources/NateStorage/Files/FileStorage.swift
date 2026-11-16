@@ -17,6 +17,7 @@ public struct LoadedFile: Sendable {
     public let baseline: DiskBaseline
     public let originalBytes: Data
     public let inferred: Bool
+    public let lineEnding: LineEnding
 }
 
 public enum FileStorage {
@@ -45,22 +46,26 @@ public enum FileStorage {
     /// 参数说明:
     /// - url: 待打开文件。
     /// - encoding: 可选的用户指定解释方式。
+    /// - catalog: 注入的严格代码页映射。
     /// 返回：正文、原始字节与可靠基线；读取中变化时失败。
-    public static func load(_ url: URL, encoding: TextEncoding? = nil) throws -> LoadedFile {
+    public static func load(_ url: URL, encoding: TextEncoding? = nil, catalog: LegacyCodecCatalog? = nil)
+        throws -> LoadedFile
+    {
         let first = try baseline(url)
         let data = try Data(contentsOf: URL(fileURLWithPath: first.resolvedPath))
         let second = try baseline(url)
         guard first == second, digest(data) == first.digest else {
             throw NateError.message("读取期间文件发生变化，请重试。")
         }
-        let decoded = try TextEncoding.detect(data, explicit: encoding)
+        let decoded = try TextEncoding.detect(data, explicit: encoding, catalog: catalog)
         return LoadedFile(
             url: url.standardizedFileURL,
             text: decoded.0,
             encoding: decoded.1,
             baseline: second,
             originalBytes: data,
-            inferred: decoded.2
+            inferred: decoded.2,
+            lineEnding: LineEnding.detect(decoded.0)
         )
     }
 
@@ -69,8 +74,19 @@ public enum FileStorage {
     /// - data: 已完成严格编码的文件字节。
     /// - url: 用户确认的目标。
     /// - expected: 已有文件必须匹配的基线；新建目标必须不存在。
+    /// - permit: 发布前仍必须有效的请求权限。
     /// 返回：写入、同步与替换完成后的真实基线。
-    public static func save(_ data: Data, to url: URL, expected: DiskBaseline?) throws -> DiskBaseline {
+    public static func save(
+        _ data: Data,
+        to url: URL,
+        expected: DiskBaseline?,
+        permit: @Sendable () -> Bool = {
+            true
+        }
+    ) throws -> DiskBaseline {
+        guard permit() else {
+            throw CancellationError()
+        }
         let target =
             expected.map {
                 URL(fileURLWithPath: $0.resolvedPath)
@@ -147,6 +163,10 @@ public enum FileStorage {
             }
         }
         let flags: UInt32 = expected == nil ? UInt32(RENAME_EXCL) : 0
+        // 取消只在发布前停止；替换已经发生后必须继续确认实际持久化阶段。
+        guard permit() else {
+            throw CancellationError()
+        }
         guard renamex_np(temporary.path, target.path, flags) == 0 else {
             throw posix("无法发布文件替换")
         }

@@ -86,8 +86,10 @@ struct CancellableMatcher {
                     matches
                     || ranges.contains {
                         range in
-                        equal(range.lowerBound, unit, sensitive: false)
-                            || equal(range.upperBound, unit, sensitive: false)
+                        let lower = LiteralMatcher.fold(range.lowerBound, sensitive: false)
+                        let upper = LiteralMatcher.fold(range.upperBound, sensitive: false)
+                        let value = LiteralMatcher.fold(unit, sensitive: false)
+                        return lower <= value && value <= upper
                     }
             }
             for kind in kinds {
@@ -178,7 +180,7 @@ struct CancellableMatcher {
             return [next]
         case .repeatNode(let child, let minimum, let maximum, let greedy, let possessive):
             var levels = [[state]]
-            let cap = min(maximum, input.count + 1)
+            let cap = max(minimum, min(maximum, input.count + 1))
             if cap > 0 {
                 for _ in 0..<cap {
                     var level: [MatchState] = []

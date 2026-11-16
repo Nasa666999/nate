@@ -133,12 +133,12 @@ extension ApplicationController {
     func showFolder(_ url: URL) async {
         do {
             let files = try await fileIO.run {
-                try DirectoryTraversal.files(under: url, filter: "*.*", limit: 20_000)
+                try DirectoryTraversal.files(under: url, limit: 20_000)
             }
             resultNavigation = files.map {
                 ResultNavigation(documentID: nil, revision: nil, url: $0, range: ByteRange(0, 0))
             }
-            mainWindow?.showResults(files.map(\.path).joined(separator: "\n"))
+            mainWindow?.showResults(files.map(\.path).joined(separator: "\n"), navigable: true)
         }
         catch {
             SystemIntegration.alert("目录工作区", error.localizedDescription)

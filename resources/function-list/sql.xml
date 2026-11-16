@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
    <functionList>
-      
+
       <parser id="oracle_function" displayName="Oracle SQL" commentExpr="((?s)(\/\*.*?\*\/)|(?-s)(--.*?$))">
          <classRange mainExpr="(?isx)^\h*CREATE(\s+OR\s+REPLACE)?\s+                   # Declaration beginning                      ((NON)?EDITIONABLE\s+)?                                  # Optional editionable clause                      (PROCEDURE|FUNCTION|PACKAGE([\s]+BODY)?)                 # Object type                      ((((\s*\x22[^\x22]*?\x22)|(\s+[A-Z]\w*))\.)|\s*)         # Object owner (not mandatory)                      (?'PACKAGE_NAME'(([A-Z]\w*)|(\x22[^\x22]*?\x22)))(?!\.)  # Object name                      .*?\s+(IS|AS)\s                                          # It ends CREATE declaration                      .*?[\s\x22]((PROCEDURE)|(FUNCTION))[\s\x22]              # At least one containing procedure or function                      (?s:.*?)                                                 # source code                      [^\w]END (?(?=\x22)|\s+)(?:\k'PACKAGE_NAME')\s*;         # Named END (best practice)                      " displayMode="$className-&gt;$functionName">
             <className>

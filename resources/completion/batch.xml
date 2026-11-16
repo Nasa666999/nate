@@ -47,7 +47,7 @@
 		<KeyWord name="echo" />
 		<KeyWord name="else" />
 		<KeyWord name="endlocal" />
-		<KeyWord name="equ" />    
+		<KeyWord name="equ" />
 		<KeyWord name="erase" />
 		<KeyWord name="errorlevel" />
 		<KeyWord name="exist" />
@@ -61,7 +61,7 @@
 		<KeyWord name="format" />
 		<KeyWord name="fsutil" />
 		<KeyWord name="ftype" />
-		<KeyWord name="geq" />		
+		<KeyWord name="geq" />
 		<KeyWord name="goto" />
 		<KeyWord name="gpresult" />
 		<KeyWord name="graftabl" />

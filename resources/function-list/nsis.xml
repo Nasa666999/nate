@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		
-		
+
+
 
 		<parser displayName="NSIS" id="nsis_syntax">
 			<classRange mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)       \b(?-i:SectionGroup)\b                              # open indicator       (?s:.*?)       \b(?-i:SectionGroupEnd)\b                           # close indicator      ">

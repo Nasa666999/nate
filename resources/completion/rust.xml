@@ -3,7 +3,7 @@
     <AutoComplete language="Rust">
         <Environment ignoreCase="no" startFunc="(" stopFunc=")" paramSeparator="," terminal=";" />
 
-        
+
         <KeyWord name="as" />
         <KeyWord name="async" />
         <KeyWord name="await" />
@@ -43,7 +43,7 @@
         <KeyWord name="where" />
         <KeyWord name="while" />
 
-        
+
         <KeyWord name="abstract" />
         <KeyWord name="become" />
         <KeyWord name="box" />
@@ -59,14 +59,14 @@
         <KeyWord name="gen" />
         <KeyWord name="try" />
 
-        
+
         <KeyWord name="'static" />
         <KeyWord name="macro_rules" />
         <KeyWord name="raw" />
         <KeyWord name="safe" />
         <KeyWord name="union" />
 
-        
+
         <KeyWord name="bool" />
         <KeyWord name="char" />
         <KeyWord name="f32" />
@@ -85,7 +85,7 @@
         <KeyWord name="u8" />
         <KeyWord name="usize" />
 
-        
+
         <KeyWord name="eprintln!" func="yes">
             <Overload retVal="()" descr="Prints to standard error with newline">
                 <Param name="format string (...)" />
@@ -107,7 +107,7 @@
             </Overload>
         </KeyWord>
 
-        
+
         <KeyWord name="macro_rules!" func="yes" />
         <KeyWord name="dbg!" func="yes" />
         <KeyWord name="assert!" func="yes" />
@@ -138,7 +138,7 @@
         <KeyWord name="cfg!" func="yes" />
         <KeyWord name="compile_error!" func="yes" />
 
-        
+
         <KeyWord name="Option::unwrap" func="yes">
             <Overload retVal="T" descr="Returns the contained `Some` value, panics if `None`" />
         </KeyWord>
