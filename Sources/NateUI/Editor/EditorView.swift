@@ -57,6 +57,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var dragColumn: CGFloat?
     var blinkTimer: Timer?
     var caretVisible = true
+    var completionPanel: CompletionPanel?
     var hiddenLines: Set<Int> = []
     var lineHeight: CGFloat {
         ceil(font.ascender - font.descender + font.leading + 5)
@@ -124,8 +125,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             projection.measured.removeAll()
         }
         observedRevision = document.revision
-        if composition?.revision != document.revision {
-            composition = nil
+        if let composition, composition.revision != document.revision {
+            // 先通知输入上下文撤销旧组合；同步解除回调仍可看到失效修订并拒绝提交。
+            inputContext?.discardMarkedText()
+            self.composition = nil
         }
         layouts.removeAll()
         projection.count = displayTree.lineCount
@@ -168,7 +171,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             width: wrapLines
                 ? max(80, (enclosingScrollView?.contentSize.width ?? 900) - gutterWidth - 16) : 1_000_000,
             tokens: tokens,
-            rtl: rtl
+            rtl: rtl,
+            appearance: effectiveAppearance
         )
         if layouts.count > 512 {
             layouts.removeAll()
@@ -212,6 +216,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 }
             }
             for fragment in layout.fragments {
+                context.saveGState()
                 fragment.draw(
                     at: NSPoint(
                         x: gutterWidth + fragment.layoutFragmentFrame.minX,
@@ -219,6 +224,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                     ),
                     in: context
                 )
+                context.restoreGState()
             }
             if showSymbols {
                 drawSymbols(line: line, layout: layout, y: y)
@@ -353,5 +359,34 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         onFocus?()
         needsDisplay = true
         return true
+    }
+
+    /// 业务作用：焦点离开前收束有效输入法组合，候选窗口不能继续修改后台视图。
+    /// 参数说明: 无。
+    /// 返回：遵循原生焦点交接，已确认内容只进入一次事务。
+    public override func resignFirstResponder() -> Bool {
+        finishComposition()
+        dismissCompletion()
+        return super.resignFirstResponder()
+    }
+
+    /// 业务作用：最后视图移出窗口时主动收回布局解析与浮层资源。
+    /// 参数说明: 无。
+    /// 返回：不再有解析任务或候选面板持有已关闭视图。
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            syntaxTask?.cancel()
+            syntaxTask = nil
+            dismissCompletion()
+        }
+    }
+
+    /// 业务作用：深浅外观变化后舍弃已解析颜色的段落缓存，各克隆视图分别响应。
+    /// 参数说明: 无。
+    /// 返回：重绘使用当前窗口外观，正文与选区保持原状态。
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refresh()
     }
 }

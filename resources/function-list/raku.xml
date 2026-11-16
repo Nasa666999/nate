@@ -3,8 +3,8 @@
 	<functionList>
 
 
-		<parser displayName="Raku" id="raku_function" commentExpr="(?x)                                               # Utilize inline comments (see `RegEx - Pattern Modifiers`)        (?m-s:\x23.*$)                                  # Single Line Comment       ">
-			<function mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)       sub       \s+       [A-Za-z_]\w*       (\s*\([^()]*\))?                                    # prototype or signature       (\s*\:\s*[^{]+)?                                    # attributes       \s*\{                                               # start of class body      ">
+		<parser displayName="Raku" id="raku_function" commentExpr="(?x)                                               # Utilize inline comments (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;(?m-s:\x23.*$)                                  # Single Line Comment&#10;&#09;&#09;&#09;&#09;&#09;&#09;">
+			<function mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;sub&#10;&#09;&#09;&#09;&#09;&#09;&#09;\s+&#10;&#09;&#09;&#09;&#09;&#09;&#09;[A-Za-z_]\w*&#10;&#09;&#09;&#09;&#09;&#09;&#09;(\s*\([^()]*\))?                                    # prototype or signature&#10;&#09;&#09;&#09;&#09;&#09;&#09;(\s*\:\s*[^{]+)?                                    # attributes&#10;&#09;&#09;&#09;&#09;&#09;&#09;\s*\{                                               # start of class body&#10;&#09;&#09;&#09;&#09;&#09;">
 				<functionName>
 					<nameExpr expr="(?:sub\s+)?\K[A-Za-z_]\w*" />
 				</functionName>

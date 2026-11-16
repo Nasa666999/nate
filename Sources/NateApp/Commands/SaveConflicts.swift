@@ -12,6 +12,10 @@ extension ApplicationController {
             return
         }
         mainWindow?.editor.finishComposition()
+        if document.url == nil && document.pendingOriginalPath != nil {
+            verifyRecoveryBinding(document)
+            return
+        }
         guard let url = document.url else {
             await saveAs(document)
             return

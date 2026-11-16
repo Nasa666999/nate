@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<functionList>
-		<parser displayName="LaTeX Syntax" id="latex_function" commentExpr="(?x)        (%.*?$)                                 # Comment       ">
-			<function mainExpr="(?x)                 # free-spacing (see `RegEx - Pattern Modifiers`)         (?im-s)              # ignore case, ^ and $ match start/end of line, dot doesn't match newline         \\(begin|            part\*?|         chapter\*?|         section\*?|         subsection\*?|         subsubsection\*?|         paragraph\*?|         subparagraph\*?)         {.*}">
+		<parser displayName="LaTeX Syntax" id="latex_function" commentExpr="(?x)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;(%.*?$)                                 # Comment&#10;&#09;&#09;&#09;&#09;&#09;&#09;">
+			<function mainExpr="(?x)                 # free-spacing (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;  (?im-s)              # ignore case, ^ and $ match start/end of line, dot doesn't match newline&#10;&#09;&#09;&#09;&#09;&#09;&#09;  \\(begin|&#10;&#09;&#09;&#09;&#09;&#09;&#09;     part\*?|&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; chapter\*?|&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; section\*?|&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; subsection\*?|&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; subsubsection\*?|&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; paragraph\*?|&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; subparagraph\*?)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; {.*}">
 			</function>
 		</parser>
 	</functionList>

@@ -5,14 +5,14 @@
 
 		<parser displayName="NppExec" id="nppexec_syntax">
 
-			<classRange mainExpr="(?x)                     # free-spacing (see `RegEx - Pattern Modifiers`)         (?ims)                   # ignore case, ^ and $ match start/end of line, dot matches newline         ^\h*         ::         .*?         (?=::|\Z)        ">
+			<classRange mainExpr="(?x)                     # free-spacing (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;  (?ims)                   # ignore case, ^ and $ match start/end of line, dot matches newline&#10;&#09;&#09;&#09;&#09;&#09;&#09;  ^\h*&#10;&#09;&#09;&#09;&#09;&#09;&#09;  ::&#10;&#09;&#09;&#09;&#09;&#09;&#09;  .*?&#10;&#09;&#09;&#09;&#09;&#09;&#09;  (?=::|\Z)&#10;&#09;&#09;&#09;&#09;&#09;&#09; ">
 				<className>
 
 					<nameExpr expr="(?im-s)^\h*::\K(?:(.+?)(?=\h*\/{2}|$))" />
 				</className>
 
 
-				<function mainExpr="(?x)                 # free-spacing (see `RegEx - Pattern Modifiers`)          (?im-s)              # ignore case, ^ and $ match start/end of line, dot doesn't match newline          ^\h*          :{1,2}.+?          \h*(?=\/{2}|$|\Z)         ">
+				<function mainExpr="(?x)                 # free-spacing (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;  (?im-s)              # ignore case, ^ and $ match start/end of line, dot doesn't match newline&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;  ^\h*&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;  :{1,2}.+?&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;  \h*(?=\/{2}|$|\Z)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09; ">
 					 <functionName>
 
 						<funcNameExpr expr="(?im-s)\h*(?(?=::)(.+)|(?::\K(.+)))" />

@@ -34,12 +34,14 @@ extension ApplicationController {
             return
         }
         do {
-            let record = try await recoveryIO.run {
-                try store.loadArchived(reference)
+            let (record, tree) = try await recoveryIO.run {
+                let record = try store.loadArchived(reference)
+                return (record, PieceTree(record.text))
             }
             let document = WorkspaceDocument(
                 name: record.name,
                 text: record.text,
+                textTree: tree,
                 encoding: record.encoding,
                 lineEnding: record.lineEnding ?? .lf
             )

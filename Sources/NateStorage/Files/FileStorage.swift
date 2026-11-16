@@ -13,11 +13,19 @@ public struct DiskBaseline: Sendable, Codable, Equatable {
 public struct LoadedFile: Sendable {
     public let url: URL
     public let text: String
+    public let tree: PieceTree
     public let encoding: TextEncoding
     public let baseline: DiskBaseline
     public let originalBytes: Data
     public let inferred: Bool
     public let lineEnding: LineEnding
+}
+
+public struct FileDecodingFailure: Error, LocalizedError, Sendable {
+    let reason: String
+    public var errorDescription: String? {
+        reason
+    }
 }
 
 public enum FileStorage {
@@ -27,15 +35,56 @@ public enum FileStorage {
     /// 返回：真实目标、文件身份和内容摘要。
     public static func baseline(_ url: URL) throws -> DiskBaseline {
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
-        let attributes = try FileManager.default.attributesOfItem(atPath: resolved.path)
-        guard attributes[.type] as? FileAttributeType == .typeRegular else {
+        let descriptor = Darwin.open(resolved.path, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW)
+        guard descriptor >= 0 else {
+            throw posix("无法读取原文件身份")
+        }
+        defer {
+            Darwin.close(descriptor)
+        }
+        var metadata = stat()
+        guard fstat(descriptor, &metadata) == 0 else {
+            throw posix("无法读取原文件身份")
+        }
+        guard metadata.st_mode & S_IFMT == S_IFREG else {
             throw NateError.message("只能将普通文件作为编辑和保存目标。")
         }
-        let data = try Data(contentsOf: resolved, options: .mappedIfSafe)
+        var hasher = SHA256()
+        var remaining = metadata.st_size
+        var block = [UInt8](repeating: 0, count: 262_144)
+        while remaining > 0 {
+            let read = try block.withUnsafeMutableBytes {
+                bytes -> Int in
+                let amount = Darwin.read(
+                    descriptor,
+                    bytes.baseAddress,
+                    min(bytes.count, Int(min(remaining, Int64(bytes.count))))
+                )
+                if amount < 0 && errno == EINTR {
+                    return -1
+                }
+                guard amount > 0 else {
+                    throw posix("原文件读取未完成")
+                }
+                hasher.update(bufferPointer: UnsafeRawBufferPointer(rebasing: bytes[..<amount]))
+                return amount
+            }
+            if read > 0 {
+                remaining -= Int64(read)
+            }
+        }
+        var after = stat()
+        var path = stat()
+        // 摘要只证明这个描述符的固定内容，路径换文件或读取中改写都必须拒绝。
+        guard fstat(descriptor, &after) == 0, stat(resolved.path, &path) == 0,
+            sameObservation(metadata, after), sameObservation(after, path)
+        else {
+            throw NateError.message("获取磁盘证据期间文件发生变化。")
+        }
         return DiskBaseline(
-            device: (attributes[.systemNumber] as? NSNumber)?.uint64Value ?? 0,
-            inode: (attributes[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0,
-            digest: SHA256.hash(data: data).map {
+            device: UInt64(UInt32(bitPattern: metadata.st_dev)),
+            inode: metadata.st_ino,
+            digest: hasher.finalize().map {
                 String(format: "%02x", $0)
             }.joined(),
             resolvedPath: resolved.path
@@ -57,10 +106,17 @@ public enum FileStorage {
         guard first == second, digest(data) == first.digest else {
             throw NateError.message("读取期间文件发生变化，请重试。")
         }
-        let decoded = try TextEncoding.detect(data, explicit: encoding, catalog: catalog)
+        let decoded: (String, TextEncoding, Bool)
+        do {
+            decoded = try TextEncoding.detect(data, explicit: encoding, catalog: catalog)
+        }
+        catch {
+            throw FileDecodingFailure(reason: error.localizedDescription)
+        }
         return LoadedFile(
             url: url.standardizedFileURL,
             text: decoded.0,
+            tree: PieceTree(decoded.0),
             encoding: decoded.1,
             baseline: second,
             originalBytes: data,
@@ -96,8 +152,11 @@ public enum FileStorage {
             guard try baseline(url) == expected else {
                 throw NateError.message("外部冲突：磁盘身份或内容已经改变，自动保存已暂停。")
             }
-            let attributes = try FileManager.default.attributesOfItem(atPath: target.path)
-            guard (attributes[.referenceCount] as? NSNumber)?.intValue ?? 1 <= 1 else {
+            var metadata = stat()
+            guard stat(target.path, &metadata) == 0 else {
+                throw posix("无法复验原文件身份")
+            }
+            guard metadata.st_nlink <= 1 else {
                 throw NateError.message("文件具有硬链接，安全替换会改变共享语义，请另存为。")
             }
             guard FileManager.default.isWritableFile(atPath: target.path) else {
@@ -139,11 +198,12 @@ public enum FileStorage {
             }
         }
         if expected != nil {
-            let attributes = try FileManager.default.attributesOfItem(atPath: target.path)
-            if let mode = attributes[.posixPermissions] as? NSNumber {
-                guard fchmod(fd, mode_t(mode.uint32Value)) == 0 else {
-                    throw posix("无法保留文件权限")
-                }
+            var metadata = stat()
+            guard stat(target.path, &metadata) == 0 else {
+                throw posix("无法读取原文件权限")
+            }
+            guard fchmod(fd, metadata.st_mode & 0o7777) == 0 else {
+                throw posix("无法保留文件权限")
             }
             // 元数据与 ACL 在发布前复制，原文件尚未被替换。
             guard copyfile(target.path, temporary.path, nil, copyfile_flags_t(COPYFILE_METADATA)) == 0 else {

@@ -7,7 +7,7 @@
 
 
 
-			<function mainExpr="(?x)                                                  # Utilize inline comments (see `RegEx - Pattern Modifiers`)      [\s\.](?!exit\s)[\w_-]+\s+section(\s*|(\s+[\w_-]+)?)(?=\.)  # all names that come before `section` but not `exit section`      ">
+			<function mainExpr="(?x)                                                  # Utilize inline comments (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;[\s\.](?!exit\s)[\w_-]+\s+section(\s*|(\s+[\w_-]+)?)(?=\.)  # all names that come before `section` but not `exit section`&#10;&#09;&#09;&#09;&#09;&#09;">
 				<functionName>
 					<nameExpr expr="[\w_-]+\s*section" />
 			   </functionName>

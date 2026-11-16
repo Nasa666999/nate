@@ -4,7 +4,7 @@
 
 
 
-		<parser displayName="TOML Table" id="toml_table" commentExpr="(?x)        (?m-s:[#].*$)                                 # Single Line Comment       ">
+		<parser displayName="TOML Table" id="toml_table" commentExpr="(?x)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;(?m-s:[#].*$)                                 # Single Line Comment&#10;&#09;&#09;&#09;&#09;&#09;&#09;">
 			<function mainExpr="^\h*[\[[\w\.&quot;\-']+\]">
 				<functionName>
 					<nameExpr expr="[\w\.&quot;\-']+" />

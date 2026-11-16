@@ -105,6 +105,18 @@ public final class DocumentBuffer {
         self.format = format
     }
 
+    /// 业务作用：后台加载或恢复已经构建好的分块正文在主执行域直接接管，不再展开全文。
+    /// 参数说明:
+    /// - text: 已验证的不可变分块正文。
+    /// - id: 文档生命周期。
+    /// - format: 原始编码和换行规则。
+    /// 返回：正文结构共享的新文档，不制造撤销项。
+    public init(text: PieceTree, id: UUID = UUID(), format: DocumentFormat = .utf8) {
+        self.id = id
+        self.text = text
+        self.format = format
+    }
+
     /// 业务作用：唯一正文提交入口，全部校验完成后一次发布历史、选区和单调修订。
     /// 参数说明:
     /// - edits: 全部基于当前修改前快照的修改。
@@ -162,10 +174,11 @@ public final class DocumentBuffer {
             throw NateError.staleRevision
         }
         let unique = transaction.edits
+        let changes = transaction.changes
         let formatAfter = transaction.format
         let name = transaction.name
         guard
-            !unique.isEmpty
+            !changes.isEmpty
                 || formatAfter.map({
                     $0 != format
                 }) == true
@@ -179,8 +192,9 @@ public final class DocumentBuffer {
             transaction.selections
             ?? normalizedSelections().map {
                 TextSelection(
-                    anchor: Self.map($0.anchor, through: unique),
-                    head: Self.map($0.head, through: unique)
+                    anchor: Self.map($0.anchor, through: changes),
+                    head: Self.map($0.head, through: changes),
+                    virtualColumn: $0.virtualColumn
                 )
             }
         guard
@@ -194,7 +208,7 @@ public final class DocumentBuffer {
             bookmarks.map {
                 text.lineStart($0)
             }.map {
-                Self.map($0, through: unique)
+                Self.map($0, through: changes)
             }
         )
         let entry = HistoryEntry(
@@ -210,12 +224,10 @@ public final class DocumentBuffer {
                     prepared.lineNumber(at: min($0, prepared.byteCount))
                 }
             ),
-            forwardChanges: unique.map {
-                PositionChange(range: $0.range, insertedByteCount: $0.text.utf8.count)
-            },
-            backwardChanges: Self.inverseChanges(unique),
-            retainedBytes: unique.reduce(512) {
-                $0 + $1.range.count + $1.text.utf8.count + 4096
+            forwardChanges: changes,
+            backwardChanges: Self.inverseChanges(changes),
+            retainedBytes: changes.reduce(512) {
+                $0 + $1.range.count + $1.insertedByteCount + 4096
             },
             name: name
         )
@@ -245,7 +257,7 @@ public final class DocumentBuffer {
             }
         )
         modifiedLines.formUnion(
-            unique.map {
+            changes.map {
                 text.lineNumber(at: min($0.range.lower, text.byteCount))
             }
         )
@@ -368,13 +380,13 @@ public final class DocumentBuffer {
 
     /// 业务作用：为撤销建立反向位置映射，避免复制整段删除正文只为计算光标。
     /// 参数说明:
-    /// - edits: 修改前快照上的有序编辑。
+    /// - edits: 修改前快照上的有序位置变换。
     /// 返回：修改后快照上的反向范围变换。
-    private static func inverseChanges(_ edits: [TextEdit]) -> [PositionChange] {
+    private static func inverseChanges(_ edits: [PositionChange]) -> [PositionChange] {
         var delta = 0
         return edits.map {
             edit in
-            let inserted = edit.text.utf8.count
+            let inserted = edit.insertedByteCount
             let start = edit.range.lower + delta
             delta += inserted - edit.range.count
             return PositionChange(

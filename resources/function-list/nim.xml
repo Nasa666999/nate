@@ -4,7 +4,7 @@
 
 
 		<parser displayName="Nim" id="nim_syntax" commentExpr="(?m-s:#.*?$)">
-			<function mainExpr="(?x)                           # Use free-space mode       ^ \h*                            # leading white space       (?: proc|func|method|iterator|macro|template|converter ) # 'routine' keywords       \s+ \K                           # skip spaces and then start capturing function name       (?: `.*?` )?                     # (optional) name in backticks       [^={(]*                          # scan until parameter list, pragma or function body starts       ( \( (?: [^()]++ | (?1) )* \) )? # (optional) parameter list       [^={]*                           # scan until pragma or function body starts">
+			<function mainExpr="(?x)                           # Use free-space mode&#10;&#09;&#09;&#09;&#09;&#09;&#09;^ \h*                            # leading white space&#10;&#09;&#09;&#09;&#09;&#09;&#09;(?: proc|func|method|iterator|macro|template|converter ) # 'routine' keywords&#10;&#09;&#09;&#09;&#09;&#09;&#09;\s+ \K                           # skip spaces and then start capturing function name&#10;&#09;&#09;&#09;&#09;&#09;&#09;(?: `.*?` )?                     # (optional) name in backticks&#10;&#09;&#09;&#09;&#09;&#09;&#09;[^={(]*                          # scan until parameter list, pragma or function body starts&#10;&#09;&#09;&#09;&#09;&#09;&#09;( \( (?: [^()]++ | (?1) )* \) )? # (optional) parameter list&#10;&#09;&#09;&#09;&#09;&#09;&#09;[^={]*                           # scan until pragma or function body starts">
 				<functionName>
 
 					<nameExpr expr="(?-m).*?\S(?=\s*$)" />

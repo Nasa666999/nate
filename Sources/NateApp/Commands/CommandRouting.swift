@@ -90,6 +90,10 @@ extension ApplicationController {
             Task {
                 await resolveSaveState()
             }
+        case "pausedWorkspaces":
+            Task {
+                await showPausedWorkspaces()
+            }
         case "reload":
             if let active {
                 Task {
@@ -140,8 +144,14 @@ extension ApplicationController {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
         case "selectionChanged":
+            cancelCompletion()
             activeID = mainWindow?.editor.document.id
             refreshUI()
+        case "complete", "completeWords", "completeLanguage", "signature": requestCompletion(id)
+        case "typingAssistance": requestCompletion(automatic: true)
+        case "completePath": requestPathCompletion()
+        case "cancelReads": readIO.cancelReads()
+        case "assistancePreferences": showAssistancePreferences()
         case "wrap":
             mainWindow?.editor.wrapLines.toggle()
             mainWindow?.editor.refresh()

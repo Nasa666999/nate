@@ -1,7 +1,9 @@
 import Foundation
+import os
 
 final class IOExecutor: Sendable {
     let queue: OperationQueue
+    let readCancellations = OSAllocatedUnfairLock(initialState: [UUID: @Sendable () -> Void]())
 
     /// 业务作用：阻塞磁盘访问使用有界专用线程，不占满 Swift 协作执行线程。
     /// 参数说明:

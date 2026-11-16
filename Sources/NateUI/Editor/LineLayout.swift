@@ -20,6 +20,7 @@ final class LineLayout {
     /// - width: 排版宽度。
     /// - tokens: 当前快照语法呈现。
     /// - rtl: 段落基础方向。
+    /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
     /// 返回：只读 TextKit 2 布局缓存。
     init(
         snapshot: DocumentSnapshot,
@@ -27,7 +28,8 @@ final class LineLayout {
         font: NSFont,
         width: CGFloat,
         tokens: [SyntaxToken],
-        rtl: Bool
+        rtl: Bool,
+        appearance: NSAppearance
     ) {
         self.range = range
         originUTF16 = snapshot.text.utf16Offset(byte: range.lower) ?? 0
@@ -38,7 +40,8 @@ final class LineLayout {
         let value = NSMutableAttributedString(
             string: snapshot.text.text(in: range),
             attributes: [
-                .font: font, .foregroundColor: NSColor.textColor, .paragraphStyle: paragraph,
+                .font: font, .foregroundColor: ThemePalette.resolved(.textColor, appearance: appearance),
+                .paragraphStyle: paragraph,
             ]
         )
         for token in tokens where token.range.lower < range.upper && token.range.upper > range.lower {
@@ -46,7 +49,10 @@ final class LineLayout {
             if let ns = snapshot.text.nsRange(clipped) {
                 value.addAttribute(
                     .foregroundColor,
-                    value: token.foreground.flatMap(ThemePalette.hexColor) ?? ThemePalette.color(token.kind),
+                    value: ThemePalette.resolved(
+                        token.foreground.flatMap(ThemePalette.hexColor) ?? ThemePalette.color(token.kind),
+                        appearance: appearance
+                    ),
                     range: NSRange(location: ns.location - originUTF16, length: ns.length)
                 )
                 let tokenRange = NSRange(location: ns.location - originUTF16, length: ns.length)
@@ -73,14 +79,19 @@ final class LineLayout {
         let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         manager.textContainer = container
-        manager.ensureLayout(for: content.documentRange)
-        manager.enumerateTextLayoutFragments(from: content.documentRange.location, options: [.ensuresLayout])
-        {
-            fragment in
-            self.fragments.append(fragment)
-            self.height = max(self.height, fragment.layoutFragmentFrame.maxY)
-            self.width = max(self.width, fragment.layoutFragmentFrame.maxX)
-            return false
+        // 光标导航也会提前建立布局，不能依赖 drawRect 才自动设置的线程绘制外观。
+        appearance.performAsCurrentDrawingAppearance {
+            manager.ensureLayout(for: content.documentRange)
+            manager.enumerateTextLayoutFragments(
+                from: content.documentRange.location,
+                options: [.ensuresLayout]
+            ) {
+                fragment in
+                self.fragments.append(fragment)
+                self.height = max(self.height, fragment.layoutFragmentFrame.maxY)
+                self.width = max(self.width, fragment.layoutFragmentFrame.maxX)
+                return false
+            }
         }
     }
 
@@ -162,6 +173,19 @@ final class LineLayout {
 
 @MainActor
 enum ThemePalette {
+    /// 业务作用：提前排版时按真实视图外观解析动态颜色，缓存不携带其他窗口的深浅状态。
+    /// 参数说明:
+    /// - color: 系统或资源颜色。
+    /// - appearance: 所属编辑视图的外观。
+    /// 返回：已经在目标外观中解析的 RGB 颜色。
+    static func resolved(_ color: NSColor, appearance: NSAppearance) -> NSColor {
+        var result = color
+        appearance.performAsCurrentDrawingAppearance {
+            result = color.usingColorSpace(.sRGB) ?? color
+        }
+        return result
+    }
+
     /// 业务作用：语法样式跟随系统深浅主题，与正文状态独立。
     /// 参数说明:
     /// - kind: 语法分类。

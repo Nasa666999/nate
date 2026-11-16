@@ -10,7 +10,7 @@
     },
     {
       "path" : "completion\/autoit.xml",
-      "sha256" : "41154fcb654a627149a3f4c109745d3dd9815347c2a0e0ad6bb198e3cb6fcc0d"
+      "sha256" : "9c2db3e75c3b2a74b246daa9e682ec44b8f46173bc8983cae4b2554a6760ea71"
     },
     {
       "path" : "completion\/batch.xml",
@@ -74,7 +74,7 @@
     },
     {
       "path" : "completion\/lua.xml",
-      "sha256" : "750d7402e0695d4ea24e52a413185ecb0f4aa2270d8acd8e52c97664e510dad2"
+      "sha256" : "416fe3ea910de79521deaac2ed97ef62e5b194ea64e81d60c3c47690daa9a95e"
     },
     {
       "path" : "completion\/nsis.xml",
@@ -330,43 +330,43 @@
     },
     {
       "path" : "function-list\/ada.xml",
-      "sha256" : "e6cf70e74fd5d849fc67ef65143c7d146a434dd1de3c0640bea281cdbb47b96f"
+      "sha256" : "39e8542bd470494fb705a76cf0d040ea9a1e1c9b21a4bb31076e4392720f788d"
     },
     {
       "path" : "function-list\/asm.xml",
-      "sha256" : "5e9d701da442f9845e1e276610506103c242283dfe331f0fe66d55d7a7b8f4a0"
+      "sha256" : "291f67d66b04813c067c1a76c9d2d0901732f79ad7fd3df0bb5d42752cfc5636"
     },
     {
       "path" : "function-list\/autoit.xml",
-      "sha256" : "64c8adcc169e87e9f629119b36a0ac80f1851f7fb6c334e0227c35de4f27fe33"
+      "sha256" : "f938f60ce524173101231d22fdab20d789bdb0ab856c5555da6ef1de4378b4c4"
     },
     {
       "path" : "function-list\/baanc.xml",
-      "sha256" : "2e149c84da0b7d5da219af7c7dfe28fcf1083aafe0d66632a8d1c1435cdfdea0"
+      "sha256" : "40a1d4ecfccda227797c319d2a23b7d7b42f784a1a0362c9ccc79835cb494a86"
     },
     {
       "path" : "function-list\/bash.xml",
-      "sha256" : "4e6c78cf3e259a870c1fbfa408c9f40a35c8c9756a3461b26964d594bd954c98"
+      "sha256" : "c44da7277ab4b1266e5638423be45374748b5ac0cd41d3cf7db6cc7b7dfb8971"
     },
     {
       "path" : "function-list\/batch.xml",
-      "sha256" : "930b23e3b3ddc462a0b53a4db2a69e1494745a7e4402a5a466c6ecb16e43f9e0"
+      "sha256" : "7c1bf58019f2b8007608b9de1a3f3cbc04e3c3f8eb67ad98c1b89370f37e1d8a"
     },
     {
       "path" : "function-list\/c.xml",
-      "sha256" : "8ddeb2bf8c349e3cb27f577dc202312062975b31e40945dcc529968486208994"
+      "sha256" : "24e860a044c44b90a1b551bec425e2a2586e30b783037e672aee944a9e76cef2"
     },
     {
       "path" : "function-list\/cobol-free.xml",
-      "sha256" : "24de5847a04e6c7fb70e00bc291b200cbf26c352b380c35746f28b9c54560a44"
+      "sha256" : "a594b6d564e86b192d9703f3d1759d7ed3f9e7074265d60e2daba23cdc45aff5"
     },
     {
       "path" : "function-list\/cobol.xml",
-      "sha256" : "788f527c733814483568ff99fe054bc64a5746a33a4c2c36da897e48cc14e39b"
+      "sha256" : "c25ec19f058bbf4b65b48c8b5ec98479f1f36ab4f34d04694bd3e9d6d6985908"
     },
     {
       "path" : "function-list\/cpp.xml",
-      "sha256" : "31911f79d6db3d55f4978b24cc1180a0b5c55a8fdf5f4ed6ba4cea774b95714e"
+      "sha256" : "d9b39796eeb4be5d05b6011c6fd1345d527755d1528bd0c93224a0f55b78df54"
     },
     {
       "path" : "function-list\/cs.xml",
@@ -378,15 +378,15 @@
     },
     {
       "path" : "function-list\/d.xml",
-      "sha256" : "b1392f1fb372ec4b19b6e5fe102a81f90b5fa0cce56819b1b13f31044888dc63"
+      "sha256" : "31e732676bd9f471a556df11c338978ca8936781319c545f6bf1286dc23e4e2d"
     },
     {
       "path" : "function-list\/fortran.xml",
-      "sha256" : "c4b8a723aed68880b5f1cd0bac0506f38b99fe5ca0abd8d67b8da475822465a3"
+      "sha256" : "bb32d315e921e38c80933103fb304f769574f9418341c82dbb30f08aaa4fd5a5"
     },
     {
       "path" : "function-list\/fortran77.xml",
-      "sha256" : "9942d7d8f9d7894c638c503804b340e2efdfc5a8cbb7158810f6affb54f4f553"
+      "sha256" : "f4d8a82a10041b94db4e95716b5c8e865178cefef1497bbfdf72282aa52c4f87"
     },
     {
       "path" : "function-list\/gdscript.xml",
@@ -394,7 +394,7 @@
     },
     {
       "path" : "function-list\/haskell.xml",
-      "sha256" : "0ac6234bee7cd76a12a07a5f2d24803ad2d8719cbbe4afba8d9b1fd0b97e59a5"
+      "sha256" : "8af17c176c9f3730388f3f0e3ccbae8e717af39b9a0eb031e914f2d0d89d20ef"
     },
     {
       "path" : "function-list\/hollywood.xml",
@@ -402,15 +402,15 @@
     },
     {
       "path" : "function-list\/ini.xml",
-      "sha256" : "09a175e09859302fdeb3da8eb900cdb04df291f57d5af2e92b520a57d071df58"
+      "sha256" : "44e86d5e802d260148df061919dee5dfa4b01295565ff34d168494fbab0ffa68"
     },
     {
       "path" : "function-list\/inno.xml",
-      "sha256" : "738d0730534ea62d51316e6e78b7b9cb6cf3fe3f80dca764214c791d15c771d4"
+      "sha256" : "d04f22baa462084add29c5c5eb6706fd841d4af3acbf88e25e2900ba47526e75"
     },
     {
       "path" : "function-list\/java.xml",
-      "sha256" : "3360914c442385ae7d056dc536e12e5c548033ef69c7de40c56caa55ffdd286c"
+      "sha256" : "1cbd38a09b7ef5898dd93d4b46b7c8c04aa3e3fb3162220d4783ce56eb86b487"
     },
     {
       "path" : "function-list\/javascript.js.xml",
@@ -418,15 +418,15 @@
     },
     {
       "path" : "function-list\/krl.xml",
-      "sha256" : "7be6ef04770184d4f2a4578a2ace00dadcdb859ec5ec68789112ca23643f1431"
+      "sha256" : "2955d9c574483a7d3e8003756c708eed40573b53cf46ef08a189de401cad2436"
     },
     {
       "path" : "function-list\/latex.xml",
-      "sha256" : "ad6dfd8e37566c955408f21039b41f7b40cb96c348705f0334536bf11363b700"
+      "sha256" : "4a9482ea954ff4e7860b6cdc1e12c327229ed49623574d5eef6f61ce396aedfe"
     },
     {
       "path" : "function-list\/lua.xml",
-      "sha256" : "3581fdf68d84afbb7212f6149149a32aae10e67f5b26e880db0e2beb9046318f"
+      "sha256" : "004e0f3e69e122ace807d631a2558a6687bdb47bd77217272da1f6654f881b6b"
     },
     {
       "path" : "function-list\/makefile.xml",
@@ -434,15 +434,15 @@
     },
     {
       "path" : "function-list\/nim.xml",
-      "sha256" : "1037bcc4901bfc8b3297a0727498b56bb6eadc52047e6528dc419b230dd6749a"
+      "sha256" : "6d0ed0414da6d05cdadb538cb2291eaede91ccbc488b2eda7462417bb922daed"
     },
     {
       "path" : "function-list\/nppexec.xml",
-      "sha256" : "df51ccf8136b6b71be6cc38838a4c6cd742ea6f60c083b3f6b5c7dcaf8c99113"
+      "sha256" : "aaf0751f0d9b8774e8fb03f755276f0b8a3a891c97788efc032be47246b8fd63"
     },
     {
       "path" : "function-list\/nsis.xml",
-      "sha256" : "5bb90f0cfa7ea57aa017776b8c5568852ae4fbadd900a623026800d880d73cb8"
+      "sha256" : "f178429811e896362e684d3e06578e4f0cf55dc21db9cd0de2a26ede099b5db0"
     },
     {
       "path" : "function-list\/overrideMap.xml",
@@ -450,19 +450,19 @@
     },
     {
       "path" : "function-list\/pascal.xml",
-      "sha256" : "51fd239a1aba74727c5e75001482a9c8f5bb34bbb2ee0f689ab160219b9302eb"
+      "sha256" : "ace7cd0f877b0232b7a2696f1abd6c6fa2680f64302c3342699b0f987f12931c"
     },
     {
       "path" : "function-list\/perl.xml",
-      "sha256" : "ba86e9f304b9155e5a0cca0e4af4f57248599f8743feeb769537cd1fccd51d9e"
+      "sha256" : "625772c5907ead356a6215781ed2b363995ef3d7b4c6813044198ee567faddfe"
     },
     {
       "path" : "function-list\/php.xml",
-      "sha256" : "c98a002f1d7c683e67f9e705b60d602f9aed9ad61130cf99b3d9f80fb1ba2a12"
+      "sha256" : "7e21528907a192fa9aa82863da9b7b937220ebfdc9e81e883b6eae2d2f91139d"
     },
     {
       "path" : "function-list\/powershell.xml",
-      "sha256" : "6692aa8a359f98c9262e37c897168ac83c5f32d35c222ac2fd89d26e7fe28651"
+      "sha256" : "9f9dda5242f165caaafe345584c66aab9a0a3ac0c4f252c8253d898a99dc7f05"
     },
     {
       "path" : "function-list\/python.xml",
@@ -470,7 +470,7 @@
     },
     {
       "path" : "function-list\/raku.xml",
-      "sha256" : "613895c5aae049fe7ed19dc3a29cd1d2a162dd8649b95987acdf5c9dc4256c3a"
+      "sha256" : "a60c71f60be100cbb72e72e71038b7d0f590d8f9de15be414726bcdaaf0e8fab"
     },
     {
       "path" : "function-list\/ruby.xml",
@@ -478,11 +478,11 @@
     },
     {
       "path" : "function-list\/rust.xml",
-      "sha256" : "240756b29023ab710cbae3f3a08ecbac547ca9bb5c8184dff3eb31d38e3f06cb"
+      "sha256" : "ceaad736d87ece91a344e11247a3fa9da77aa4a8b1d27433c49d90df8067d7d9"
     },
     {
       "path" : "function-list\/sas.xml",
-      "sha256" : "b6fb805fd60d22e9f2ea0bc411c69327b147a6365a7288aba6e573208a110cdc"
+      "sha256" : "64a6fe90ed801c504977e80e579b05fa662ecf49089f9cbe84bab9d0340cc3a6"
     },
     {
       "path" : "function-list\/sinumerik.xml",
@@ -490,15 +490,15 @@
     },
     {
       "path" : "function-list\/sql.xml",
-      "sha256" : "a3c8eb33cf1732bd492e57ed3040061dcd665e0d8d368112a45c9df920ca6666"
+      "sha256" : "e9ef87709abf7f19644563695eeff3b1675c0d393682ef721278391354fddb20"
     },
     {
       "path" : "function-list\/tex.xml",
-      "sha256" : "28e2827b4110adb8acf3d3c9258bf1c2d97b92f13bbb10320bd0c361855a0b4e"
+      "sha256" : "009af17e0556e2c9851f275cdfa2cb0a92c3c799d76c1cf11d7dbf7b5d7f3ff8"
     },
     {
       "path" : "function-list\/toml.xml",
-      "sha256" : "3407d42a3ed555758869e34a256e568c872c59c16b5ab6ca65fe448595e7e154"
+      "sha256" : "9829ffb9a815c681181875d9a2c60b2638b72a796e4a60a236adbb7b8c7a8ffc"
     },
     {
       "path" : "function-list\/typescript.xml",
@@ -506,7 +506,7 @@
     },
     {
       "path" : "function-list\/universe_basic.xml",
-      "sha256" : "39db82a711efd31b36df89af7dd5f5d88b13d48d357a147b04ebe474027f0104"
+      "sha256" : "28438de75147a6c635cb5650260f21c1318256e167ba250ee72ccecedc80845e"
     },
     {
       "path" : "function-list\/vb.xml",
@@ -514,11 +514,11 @@
     },
     {
       "path" : "function-list\/vhdl.xml",
-      "sha256" : "0c556aaae55d5746ad0b94464ec2cd9c6c022b4c4c0e2779d8bc580bb592cd76"
+      "sha256" : "603d4155fbab46cbe4041cb0293712ad8fa3755894a94c048ed12b7fcf38825d"
     },
     {
       "path" : "function-list\/xml.xml",
-      "sha256" : "7c9c1c39a2cd96e0bdadac7e567005a4a5fa342399e6e8fd85f523dec203ce98"
+      "sha256" : "3ab65cd4ebd5eb854724c45ccf4805e610d8aa0b0433df160bf0b840eb817934"
     },
     {
       "path" : "keymaps\/default.json",

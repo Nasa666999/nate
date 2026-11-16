@@ -221,13 +221,13 @@ extension ApplicationController {
                 continue
             }
             do {
-                let stamp = try await fileIO.run {
+                let stamp = try await readIO.read {
                     try FileStorage.stamp(url)
                 }
                 if !force && externalStamps[document.buffer.id] == stamp {
                     continue
                 }
-                let current = try await fileIO.run {
+                let current = try await readIO.read {
                     try FileStorage.baseline(url)
                 }
                 guard document.saveTask == nil, !document.bindingChange, document.baseline == expected,
@@ -342,6 +342,8 @@ extension ApplicationController {
             }
             active.targetGeneration += 1
             active.url = nil
+            active.pendingOriginalPath = nil
+            active.pendingOriginalBaseline = nil
             active.baseline = nil
             active.state = "原文件已移到废纸篓 · 正文保留为临时文档"
             refreshUI()

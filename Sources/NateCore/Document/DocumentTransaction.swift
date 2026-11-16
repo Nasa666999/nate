@@ -6,6 +6,7 @@ public struct PreparedTransaction: Sendable {
     let before: PieceTree
     let after: PieceTree
     let edits: [TextEdit]
+    let changes: [PositionChange]
     let selections: [TextSelection]?
     let format: DocumentFormat?
     let name: String
@@ -74,8 +75,54 @@ public struct PreparedTransaction: Sendable {
         before = snapshot.text
         after = prepared
         self.edits = unique
+        changes = unique.map {
+            PositionChange(range: $0.range, insertedByteCount: $0.text.utf8.count)
+        }
         selections = selectionsAfter
         format = formatAfter
         self.name = name
+    }
+
+    /// 业务作用：完整载入的正文直接共享后台构建的树，不为重新载入再复制一次全文。
+    /// 参数说明:
+    /// - snapshot: 替换前的固定文档。
+    /// - text: 后台已经完成校验和构建的正文。
+    /// - selectionsAfter: 明确的结果选区。
+    /// - formatAfter: 新正文的编码与换行规则。
+    /// - name: 用户可理解的撤销动作。
+    /// 返回：一个完整替换事务，正文不同时保留正反位置映射。
+    public init(
+        replacing snapshot: DocumentSnapshot,
+        with text: PieceTree,
+        selectionsAfter: [TextSelection],
+        formatAfter: DocumentFormat,
+        name: String
+    ) throws {
+        try Task.checkCancellation()
+        guard
+            selectionsAfter.allSatisfy({
+                text.isBoundary($0.anchor) && text.isBoundary($0.head)
+            })
+        else {
+            throw NateError.invalidRange
+        }
+        documentID = snapshot.id
+        revision = snapshot.revision
+        before = snapshot.text
+        after = text
+        edits = []
+        changes =
+            snapshot.text.byteEqual(to: text)
+            ? []
+            : [
+                PositionChange(
+                    range: ByteRange(0, snapshot.text.byteCount),
+                    insertedByteCount: text.byteCount
+                )
+            ]
+        selections = selectionsAfter
+        format = formatAfter
+        self.name = name
+        try Task.checkCancellation()
     }
 }

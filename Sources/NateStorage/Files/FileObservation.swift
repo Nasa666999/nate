@@ -14,6 +14,19 @@ public struct FileStamp: Sendable, Equatable {
 }
 
 extension FileStorage {
+    /// 业务作用：确认摘要读取前后仍是同一文件状态，不以相同长度替代内容时序证据。
+    /// 参数说明:
+    /// - first: 读取前身份与时间。
+    /// - second: 读取后身份与时间。
+    /// 返回：身份、长度及纳秒状态时间均相同才允许使用摘要。
+    static func sameObservation(_ first: stat, _ second: stat) -> Bool {
+        first.st_dev == second.st_dev && first.st_ino == second.st_ino && first.st_size == second.st_size
+            && first.st_mtimespec.tv_sec == second.st_mtimespec.tv_sec
+            && first.st_mtimespec.tv_nsec == second.st_mtimespec.tv_nsec
+            && first.st_ctimespec.tv_sec == second.st_ctimespec.tv_sec
+            && first.st_ctimespec.tv_nsec == second.st_ctimespec.tv_nsec
+    }
+
     /// 业务作用：持续观察只检查轻量元数据，发生变化后再读取完整内容证据。
     /// 参数说明:
     /// - url: 当前绑定的原始路径，符号链接每次重新解析。

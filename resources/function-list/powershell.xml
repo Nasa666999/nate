@@ -3,8 +3,8 @@
 	<functionList>
 
 
-		<parser displayName="PowerShell" id="powershell_function" commentExpr="(?x)                                               # Utilize inline comments (see `RegEx - Pattern Modifiers`)        (?s:\x3C\x23(?:[^\x23]|\x23[^\x3E])*\x23\x3E)   # Multi Line Comment       | (?m-s:\x23.*$)                                  # Single Line Comment       ">
-			<function mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)       \b       (?:function|filter)       \s+       (?:        [A-Za-z_]\w*        :       )?       [A-Za-z_][\w\-\+]*       \s*       [({]      ">
+		<parser displayName="PowerShell" id="powershell_function" commentExpr="(?x)                                               # Utilize inline comments (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;(?s:\x3C\x23(?:[^\x23]|\x23[^\x3E])*\x23\x3E)   # Multi Line Comment&#10;&#09;&#09;&#09;&#09;&#09;&#09;|&#09;(?m-s:\x23.*$)                                  # Single Line Comment&#10;&#09;&#09;&#09;&#09;&#09;&#09;">
+			<function mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;\b&#10;&#09;&#09;&#09;&#09;&#09;&#09;(?:function|filter)&#10;&#09;&#09;&#09;&#09;&#09;&#09;\s+&#10;&#09;&#09;&#09;&#09;&#09;&#09;(?:&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;[A-Za-z_]\w*&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;:&#10;&#09;&#09;&#09;&#09;&#09;&#09;)?&#10;&#09;&#09;&#09;&#09;&#09;&#09;[A-Za-z_][\w\-\+]*&#10;&#09;&#09;&#09;&#09;&#09;&#09;\s*&#10;&#09;&#09;&#09;&#09;&#09;&#09;[({]&#10;&#09;&#09;&#09;&#09;&#09;">
 				<functionName>
 					<nameExpr expr="[A-Za-z_][\w\-\+]*(?=\s*[({])" />
 				</functionName>

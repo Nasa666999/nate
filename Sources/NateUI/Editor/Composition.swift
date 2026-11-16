@@ -17,10 +17,19 @@ extension EditorView {
     /// - replacementRange: 系统展示坐标中的替换范围。
     /// 返回：仅更新预编辑，不产生历史或修订。
     public func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        guard !document.isReadOnly else {
+        completionPanel?.hide()
+        guard !document.isReadOnly, !document.isEditingSuspended else {
             return
         }
         let value = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+        let units = value.utf16.count
+        guard value.utf8.count <= 1_048_576, selectedRange.location != NSNotFound,
+            selectedRange.location >= 0, selectedRange.location <= units,
+            selectedRange.length >= 0, selectedRange.length <= units - selectedRange.location
+        else {
+            onStatus?("输入法候选范围无效或超过 1 MB，已保留原正文与当前组合。")
+            return
+        }
         if composition == nil {
             let range =
                 replacementRange.location == NSNotFound
@@ -90,6 +99,9 @@ extension EditorView {
             try document.insert(value)
             refresh(reveal: true)
             onChange?()
+            if value.utf16.count <= 2 {
+                onCommand?("typingAssistance")
+            }
         }
         catch {
             NSSound.beep()
@@ -177,8 +189,9 @@ extension EditorView {
     /// 返回：屏幕坐标中的原生字形光标矩形。
     public func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
         let tree = displayTree
+        let requested = range.location == NSNotFound ? selectedRange().location : range.location
         let offset =
-            tree.byteOffset(utf16: min(range.location == NSNotFound ? 0 : range.location, tree.utf16Count))
+            tree.byteOffset(utf16: min(requested == NSNotFound ? 0 : requested, tree.utf16Count))
             ?? 0
         let line = tree.lineNumber(at: offset)
         let layout = layoutLine(line)

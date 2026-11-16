@@ -2,7 +2,7 @@ import Foundation
 import NateCore
 import NatePlatform
 
-struct CLIArguments {
+struct CLIArguments: Codable, Sendable {
     var files: [URL] = []
     var language: String?
     var line = 1
@@ -47,6 +47,28 @@ struct CLIArguments {
                 literal = true
                 continue
             }
+            if value.hasPrefix("-n"), value != "-nosession", value.count > 2,
+                let number = Int(value.dropFirst(2)), number > 0
+            {
+                line = number
+                continue
+            }
+            if value.hasPrefix("-c"), value.count > 2,
+                let number = Int(value.dropFirst(2)), number > 0
+            {
+                column = number
+                continue
+            }
+            if value.hasPrefix("-p"), value.count > 2,
+                let number = Int(value.dropFirst(2)), number >= 0
+            {
+                position = number
+                continue
+            }
+            if value.hasPrefix("-l"), value.count > 2 {
+                language = String(value.dropFirst(2))
+                continue
+            }
             switch value {
             case "-ro", "--read-only": readOnly = true
             case "--monitor":
@@ -61,9 +83,19 @@ struct CLIArguments {
                 i += 1
                 switch value {
                 case "-l", "-udl": language = parameter
-                case "-n": line = max(1, Int(parameter) ?? 1)
-                case "-c": column = max(1, Int(parameter) ?? 1)
-                case "-p": position = Int(parameter)
+                case "-n", "-c", "-p":
+                    guard let number = Int(parameter), number >= (value == "-p" ? 0 : 1) else {
+                        throw NateError.message("\(value) 的位置参数无效：\(parameter)")
+                    }
+                    if value == "-n" {
+                        line = number
+                    }
+                    else if value == "-c" {
+                        column = number
+                    }
+                    else {
+                        position = number
+                    }
                 default: session = URL(fileURLWithPath: parameter)
                 }
             case "-openFoldersAsWorkspace":
@@ -86,31 +118,20 @@ struct CLIArguments {
 
 extension ApplicationController {
     /// 业务作用：把命令行打开与定位请求合并到现有工作区。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - request: 通过命令行或主实例入口取得的已规范化请求。
     /// 返回：真实文件按身份去重，位置使用明确的 UTF-8 和字形单位。
-    func handleCLI() async {
+    func handleCLI(_ request: CLIArguments? = nil) async {
         do {
-            let arguments = try CLIArguments(Array(CommandLine.arguments.dropFirst()))
+            let arguments = try request ?? CLIArguments(Array(CommandLine.arguments.dropFirst()))
             for url in arguments.files {
-                await openFile(url)
-                guard let active else {
+                guard let document = await openFile(url) else {
                     continue
                 }
-                if let language = arguments.language {
-                    guard registry?.language(language) != nil else {
-                        throw NateError.message("未知语言：\(language)")
-                    }
-                    active.language = language
-                    active.languageExplicit = true
-                }
-                active.buffer.isReadOnly = arguments.readOnly
-                active.monitoring = arguments.monitor
-                let range = active.buffer.text.lineRange(
-                    min(arguments.line - 1, active.buffer.text.lineCount - 1),
-                    includeEnding: false
-                )
-                let prefix = active.buffer.text.text(in: range).prefix(arguments.column - 1)
-                mainWindow?.editor.setCaret(arguments.position ?? range.lower + prefix.utf8.count)
+                try await applyCLISelection(arguments, to: document)
+            }
+            if arguments.files.isEmpty, arguments.language != nil, let active {
+                try await applyCLISelection(arguments, to: active)
             }
             if let session = arguments.session {
                 await loadSession(session)
@@ -123,5 +144,41 @@ extension ApplicationController {
         catch {
             SystemIntegration.alert("启动参数", error.localizedDescription)
         }
+    }
+
+    /// 业务作用：启动参数只作用于实际成功打开的文档，显式只读与监视沿用保存权限门禁。
+    /// 参数说明:
+    /// - arguments: 已验证的启动请求。
+    /// - document: 本次成功打开或明确选择的文档。
+    /// 返回：语言和位置明确生效；非法字节边界拒绝，打开失败不会误改其他标签。
+    func applyCLISelection(_ arguments: CLIArguments, to document: WorkspaceDocument) async throws {
+        if let language = arguments.language {
+            let id =
+                registry?.language(language)?.id
+                ?? registry?.languages.first(where: {
+                    $0.name.caseInsensitiveCompare(language) == .orderedSame
+                })?.id
+            guard let id else {
+                throw NateError.message("未知语言：\(language)")
+            }
+            document.language = id
+            document.languageExplicit = true
+        }
+        if arguments.monitor && !document.monitoring {
+            await toggleMonitoring()
+        }
+        else if arguments.readOnly {
+            setReadOnly(document, value: true)
+        }
+        let range = document.buffer.text.lineRange(
+            min(arguments.line - 1, document.buffer.text.lineCount - 1),
+            includeEnding: false
+        )
+        let prefix = document.buffer.text.text(in: range).prefix(arguments.column - 1)
+        let position = arguments.position ?? range.lower + prefix.utf8.count
+        guard document.buffer.text.isBoundary(position) else {
+            throw NateError.message("启动位置不在文件范围内，或位于 UTF-8 标量内部。")
+        }
+        mainWindow?.editor.setCaret(position)
     }
 }

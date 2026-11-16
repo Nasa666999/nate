@@ -11,6 +11,8 @@ final class PieceNode: Sendable {
     let height: Int
     let first: UInt8?
     let last: UInt8?
+    let contentFingerprint: UInt64
+    let fingerprintPower: UInt64
 
     /// 业务作用：缓存叶片的坐标与行索引，限制每次局部扫描的规模。
     /// 参数说明:
@@ -26,6 +28,14 @@ final class PieceNode: Sendable {
         height = 1
         first = bytes.first
         last = bytes.last
+        var fingerprint: UInt64 = 0
+        var power: UInt64 = 1
+        for byte in bytes {
+            fingerprint = fingerprint &* 1_099_511_628_211 &+ UInt64(byte) &+ 1
+            power = power &* 1_099_511_628_211
+        }
+        contentFingerprint = fingerprint
+        fingerprintPower = power
     }
 
     /// 业务作用：聚合子树索引，跨节点 CRLF 只计一行。
@@ -43,6 +53,8 @@ final class PieceNode: Sendable {
         height = max(left.height, right.height) + 1
         first = left.first ?? right.first
         last = right.last ?? left.last
+        contentFingerprint = left.contentFingerprint &* right.fingerprintPower &+ right.contentFingerprint
+        fingerprintPower = left.fingerprintPower &* right.fingerprintPower
     }
 
     /// 业务作用：以文件真实换行统计逻辑行，CRLF 不重复计算。
@@ -195,7 +207,8 @@ public struct PieceTree: Sendable {
         if root === other.root {
             return true
         }
-        guard byteCount == other.byteCount else {
+        // 不同指纹可立即证明有变化；相同指纹仍逐字节复验，碰撞不能清除待保存状态。
+        guard byteCount == other.byteCount, root.contentFingerprint == other.root.contentFingerprint else {
             return false
         }
         for start in stride(from: 0, to: byteCount, by: 8192) {

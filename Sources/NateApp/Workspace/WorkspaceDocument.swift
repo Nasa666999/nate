@@ -19,6 +19,10 @@ final class WorkspaceDocument {
     }
     var savedEncoding = TextEncoding.utf8
     var baseline: DiskBaseline?
+    var pendingOriginalPath: String?
+    var pendingOriginalBaseline: DiskBaseline?
+    var originalBindingTask: Task<Void, Never>?
+    var originalBindingRequest = UUID()
     var savedText: PieceTree
     var language = "normal"
     var languageExplicit = false
@@ -45,13 +49,19 @@ final class WorkspaceDocument {
         dirtyHint || encoding != savedEncoding
     }
     var recoveryMetadataKey: String {
-        "\(url?.path ?? "")|\(name)|\(encoding.codePage)|\(encoding.bom)|\(buffer.format.lineEnding.rawValue)|\(language)|\(buffer.isReadOnly)|\(baseline?.digest ?? "")"
+        let positions = buffer.selections.map {
+            "\($0.anchor):\($0.head):\($0.virtualColumn)"
+        }.joined(separator: ",")
+        let bookmarks = buffer.bookmarks.sorted().map(String.init).joined(separator: ",")
+        return
+            "\(url?.path ?? pendingOriginalPath ?? "")|\(name)|\(encoding.codePage)|\(encoding.bom)|\(buffer.format.lineEnding.rawValue)|\(language)|\(buffer.isReadOnly)|\(baseline?.digest ?? pendingOriginalBaseline?.digest ?? "")|\(positions)|\(bookmarks)"
     }
 
     /// 业务作用：建立标签元数据，正文身份不随路径改变。
     /// 参数说明:
     /// - name: 显示名称。
     /// - text: 初始正文。
+    /// - textTree: 后台已准备的正文，为空时由初始字符串构建。
     /// - id: 恢复文档稳定身份。
     /// - encoding: 初始字节编码。
     /// - lineEnding: 新插入换行的规则。
@@ -59,13 +69,14 @@ final class WorkspaceDocument {
     init(
         name: String,
         text: String = "",
+        textTree: PieceTree? = nil,
         id: UUID = UUID(),
         encoding: TextEncoding = .utf8,
         lineEnding: LineEnding = .lf
     ) {
         self.name = name
         buffer = DocumentBuffer(
-            text: text,
+            text: textTree ?? PieceTree(text),
             id: id,
             format: DocumentFormat(codePage: encoding.codePage, bom: encoding.bom, lineEnding: lineEnding)
         )
@@ -100,9 +111,9 @@ final class WorkspaceDocument {
             revision: buffer.revision,
             name: name,
             text: "",
-            path: url?.path,
+            path: url?.path ?? pendingOriginalPath,
             encoding: encoding,
-            baseline: baseline,
+            baseline: baseline ?? pendingOriginalBaseline,
             language: language,
             selections: buffer.selections,
             bookmarks: buffer.bookmarks,

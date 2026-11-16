@@ -40,6 +40,8 @@ extension ApplicationController {
             return .terminateCancel
         }
         closing = true
+        readIO.cancelReads()
+        cancelCompletion()
         mainWindow?.editor.finishComposition()
         let protectedDocuments = documents
         for document in protectedDocuments {
@@ -47,11 +49,14 @@ extension ApplicationController {
         }
         searchTask?.cancel()
         Task {
+            // 尚未发布的打开请求不拥有写入副作用，退出时保留请求文件而不等待系统读取。
+            instanceRequestTask?.cancel()
             if let task = searchTask {
                 await task.value
             }
             var failures: [String] = []
-            for document in documents {
+            // 临时文档由最后一次统一恢复发布保护，避免逐标签重复写入整份工作区正文。
+            for document in documents where document.url != nil {
                 if !(await flush(document)) {
                     failures.append(document.name)
                 }
@@ -75,7 +80,9 @@ extension ApplicationController {
                 }
             }
             autosaveTask?.cancel()
+            DistributedNotificationCenter.default().removeObserver(self)
             externalObservationTask?.cancel()
+            instanceRequestTask?.cancel()
             searchTask?.cancel()
             sender.reply(toApplicationShouldTerminate: true)
         }

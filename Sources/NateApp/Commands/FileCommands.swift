@@ -8,26 +8,42 @@ extension ApplicationController {
     /// 参数说明:
     /// - url: Finder、对话框或 CLI 提供的路径。
     /// - explicitEncoding: 用户选择的重新解释代码页。
-    /// 返回：完整读取后发布标签，失败不创建空文档冒充内容。
-    func openFile(_ url: URL, explicitEncoding: TextEncoding? = nil) async {
+    /// 返回：实际打开的文档；失败返回空，不误用先前的活动标签。
+    @discardableResult
+    func openFile(_ url: URL, explicitEncoding: TextEncoding? = nil) async -> WorkspaceDocument? {
+        guard !closing else {
+            return nil
+        }
         if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
             await showFolder(url)
-            return
+            return nil
         }
         let catalog = codecs
+        mainWindow?.status.stringValue = "正在读取 · " + url.lastPathComponent + " · 可在工具菜单取消读取"
         do {
-            let loaded = try await fileIO.run {
+            let loaded = try await readIO.read {
                 try FileStorage.load(url, encoding: explicitEncoding, catalog: catalog)
             }
+            // 退出开始后不再发布迟到的新标签，原文件并未被打开动作修改。
+            guard !closing else {
+                return nil
+            }
             if let existing = documents.first(where: {
-                $0.baseline?.device == loaded.baseline.device && $0.baseline?.inode == loaded.baseline.inode
+                ($0.baseline?.device == loaded.baseline.device && $0.baseline?.inode == loaded.baseline.inode)
+                    || $0.baseline?.resolvedPath == loaded.baseline.resolvedPath
+                    || $0.url?.standardizedFileURL == loaded.url.standardizedFileURL
             }) {
                 activate(existing.buffer.id)
-                return
+                return existing
+            }
+            // 保存或批量替换还未发布绑定时，不能从旧磁盘快照建立另一个写入者。
+            guard targetReservations[loaded.baseline.resolvedPath] == nil else {
+                throw NateError.message("该目标正在完成文件操作，请稍后重新打开。")
             }
             let document = WorkspaceDocument(
                 name: url.lastPathComponent,
                 text: loaded.text,
+                textTree: loaded.tree,
                 encoding: loaded.encoding,
                 lineEnding: loaded.lineEnding
             )
@@ -50,15 +66,26 @@ extension ApplicationController {
                 }
             activate(document.buffer.id)
             buildMenus()
+            return document
         }
-        catch {
-            if explicitEncoding == nil, FileManager.default.isReadableFile(atPath: url.path) {
+        catch is CancellationError {
+            return nil
+        }
+        catch is ReadDeadlineExceeded {
+            mainWindow?.showResults("读取未完成：" + url.path + "\n" + ReadDeadlineExceeded().localizedDescription)
+        }
+        catch let error as FileDecodingFailure {
+            if explicitEncoding == nil {
                 await offerDecode(url, reason: error.localizedDescription)
             }
             else {
                 SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
             }
         }
+        catch {
+            SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
+        }
+        return nil
     }
 
     /// 业务作用：另存为先完成新目标持久化，再发布路径和保存点；副本保留原绑定。
@@ -96,6 +123,20 @@ extension ApplicationController {
             SystemIntegration.alert("副本目标无效", "副本不能与原文件指向同一目标。")
             return
         }
+        if document.buffer.isReadOnly
+            && document.url?.resolvingSymlinksInPath().standardizedFileURL == resolved
+        {
+            SystemIntegration.alert("原目标为编辑器只读", "请选择不同的另存为目标，或先明确解除编辑器只读。")
+            return
+        }
+        let owner = UUID()
+        guard reserveTarget(resolved.path, owner: owner) else {
+            SystemIntegration.alert("目标正在使用", "另一个文件动作尚未完成，请稍后重试。")
+            return
+        }
+        defer {
+            releaseTarget(resolved.path, owner: owner)
+        }
         do {
             let result = try await fileIO.run {
                 let expected =
@@ -107,6 +148,10 @@ extension ApplicationController {
             if !copy {
                 document.targetGeneration += 1
                 document.url = destination
+                document.originalBindingTask?.cancel()
+                document.originalBindingRequest = UUID()
+                document.pendingOriginalPath = nil
+                document.pendingOriginalBaseline = nil
                 document.name = destination.lastPathComponent
                 document.baseline = result
                 document.savedText = snapshot.text
@@ -154,7 +199,9 @@ extension ApplicationController {
         guard let url = document.url else {
             return
         }
-        let revision = document.buffer.revision
+        let snapshot = document.buffer.snapshot
+        let positions = document.buffer.selections
+        let monitoring = document.monitoring
         if let task = document.saveTask {
             _ = await task.value
         }
@@ -162,25 +209,41 @@ extension ApplicationController {
             return
         }
         do {
-            let loaded = try await fileIO.run {
-                try FileStorage.load(url, encoding: encoding, catalog: catalog)
+            let (loaded, prepared) = try await readIO.read {
+                let loaded = try FileStorage.load(url, encoding: encoding, catalog: catalog)
+                let selections =
+                    monitoring
+                    ? positions.map {
+                        selection -> TextSelection in
+                        var head = min(selection.head, loaded.tree.byteCount)
+                        if selection.head == snapshot.text.byteCount {
+                            head = loaded.tree.byteCount
+                        }
+                        while !loaded.tree.isBoundary(head) {
+                            head -= 1
+                        }
+                        return TextSelection(anchor: head, head: head)
+                    } : [TextSelection(anchor: 0, head: 0)]
+                let prepared = try PreparedTransaction(
+                    replacing: snapshot,
+                    with: loaded.tree,
+                    selectionsAfter: selections,
+                    formatAfter: DocumentFormat(
+                        codePage: loaded.encoding.codePage,
+                        bom: loaded.encoding.bom,
+                        lineEnding: loaded.lineEnding
+                    ),
+                    name: "重新载入"
+                )
+                return (loaded, prepared)
             }
             let readOnly = document.buffer.isReadOnly
             document.buffer.isReadOnly = false
             defer {
                 document.buffer.isReadOnly = readOnly
             }
-            try document.buffer.commit(
-                [TextEdit(ByteRange(0, document.buffer.text.byteCount), loaded.text)],
-                expectedRevision: revision,
-                selectionsAfter: [TextSelection(anchor: 0, head: 0)],
-                formatAfter: DocumentFormat(
-                    codePage: loaded.encoding.codePage,
-                    bom: loaded.encoding.bom,
-                    lineEnding: loaded.lineEnding
-                ),
-                name: "重新载入"
-            )
+            try document.buffer.commit(prepared)
+            document.buffer.isReadOnly = readOnly
             document.baseline = loaded.baseline
             document.savedEncoding = loaded.encoding
             document.savedText = document.buffer.text
@@ -188,7 +251,13 @@ extension ApplicationController {
             document.conflict = false
             document.failure = nil
             mainWindow?.editor.refresh()
+            if monitoring && positions.first?.head == snapshot.text.byteCount {
+                mainWindow?.editor.revealSelection()
+            }
             refreshUI()
+        }
+        catch is CancellationError {
+            return
         }
         catch {
             SystemIntegration.alert("无法重新载入", error.localizedDescription)
@@ -214,6 +283,7 @@ extension ApplicationController {
             mainWindow?.editor.finishComposition()
         }
         document.closing = true
+        document.originalBindingTask?.cancel()
         document.buffer.isEditingSuspended = true
         defer {
             document.closing = false

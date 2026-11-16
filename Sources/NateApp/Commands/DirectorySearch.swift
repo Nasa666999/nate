@@ -34,6 +34,7 @@ extension ApplicationController {
             }
         )
         let executor = fileIO
+        let reader = readIO
         let catalog = codecs
         searchTask = Task {
             [weak self] in
@@ -41,7 +42,7 @@ extension ApplicationController {
                 return
             }
             do {
-                let (plans, failures) = try await executor.runCancellable {
+                let (plans, failures) = try await reader.readCancellable {
                     token in
                     let matcher = FileFilters(filters)
                     _ = try SearchEngine.find(
@@ -84,18 +85,24 @@ extension ApplicationController {
                             let snapshot =
                                 ((!options.ignoreOpenBuffers || replacing)
                                     ? opened[loaded.baseline.resolvedPath] : nil)
-                                ?? DocumentSnapshot(id: UUID(), revision: 0, text: PieceTree(loaded.text))
+                                ?? DocumentSnapshot(id: UUID(), revision: 0, text: loaded.tree)
                             let result = try SearchEngine.find(in: snapshot, options: options)
                             if !result.hits.isEmpty {
+                                let edits =
+                                    replacing
+                                    ? try SearchEngine.replacementPlan(result, snapshot: snapshot) : []
+                                let prepared =
+                                    replacing && opened[loaded.baseline.resolvedPath] != nil
+                                    ? try PreparedTransaction(snapshot: snapshot, edits: edits, name: "文件中替换")
+                                    : nil
                                 plans.append(
                                     DirectoryPlan(
                                         url: url,
                                         loaded: loaded,
                                         snapshot: snapshot,
                                         result: result,
-                                        edits: replacing
-                                            ? try SearchEngine.replacementPlan(result, snapshot: snapshot)
-                                            : []
+                                        edits: edits,
+                                        prepared: prepared
                                     )
                                 )
                             }
@@ -144,14 +151,28 @@ extension ApplicationController {
                                 $0.buffer.id == plan.snapshot.id
                             }
                             ) {
-                                try document.buffer.commit(
-                                    plan.edits,
-                                    expectedRevision: plan.snapshot.revision,
-                                    name: "文件中替换"
-                                )
+                                if let prepared = plan.prepared {
+                                    try document.buffer.commit(prepared)
+                                }
                                 document.dirtyHint = true
                             }
                             else {
+                                // 计划后新打开的文件不能沿用旧的关闭文件写入通道。
+                                guard
+                                    !self.documents.contains(where: {
+                                        $0.baseline?.resolvedPath == plan.loaded.baseline.resolvedPath
+                                    })
+                                else {
+                                    throw NateError.message("该文件在计划后已打开，请重新执行以修改当前缓冲区。")
+                                }
+                                let owner = UUID()
+                                guard self.reserveTarget(plan.loaded.baseline.resolvedPath, owner: owner)
+                                else {
+                                    throw NateError.message("目标正在执行其他文件动作。")
+                                }
+                                defer {
+                                    self.releaseTarget(plan.loaded.baseline.resolvedPath, owner: owner)
+                                }
                                 try await executor.runCancellable {
                                     token in
                                     var tree = plan.snapshot.text
@@ -236,4 +257,5 @@ struct DirectoryPlan: Sendable {
     var snapshot: DocumentSnapshot
     var result: SearchResult
     var edits: [TextEdit]
+    var prepared: PreparedTransaction?
 }

@@ -7,6 +7,9 @@ extension EditorView {
     /// - event: 当前键盘事件。
     /// 返回：系统文本解释或统一命令分发，不重复插入键盘文字。
     public override func keyDown(with event: NSEvent) {
+        if composition == nil, completionPanel?.handle(event) == true {
+            return
+        }
         if composition == nil && event.modifierFlags.contains(.control),
             let key = event.charactersIgnoringModifiers?.lowercased()
         {
@@ -32,6 +35,7 @@ extension EditorView {
     public override func doCommand(by selector: Selector) {
         let command = NSStringFromSelector(selector)
         switch command {
+        case "complete:": onCommand?("complete")
         case "insertNewline:":
             var indent = ""
             if let head = viewSelections.first?.head {
@@ -85,15 +89,66 @@ extension EditorView {
     /// 返回：一个可撤销事务；虚拟空白删除不写入空格。
     func delete(forward: Bool) {
         finishComposition()
-        viewSelections = document.normalizedSelections().map {
-            selection in
-            guard selection.range.isEmpty, selection.virtualColumn == 0 else {
-                return selection
+        var ranges: [ByteRange] = []
+        var after: [TextSelection] = []
+        for selection in document.normalizedSelections() {
+            if selection.range.isEmpty && selection.virtualColumn > 0 {
+                after.append(
+                    TextSelection(
+                        anchor: selection.head,
+                        head: selection.head,
+                        virtualColumn: max(0, selection.virtualColumn - (forward ? 0 : 1))
+                    )
+                )
+                continue
             }
-            let other = document.text.graphemeBoundary(from: selection.head, forward: forward)
-            return TextSelection(anchor: selection.head, head: other)
+            let range =
+                selection.range.isEmpty
+                ? TextSelection(
+                    anchor: selection.head,
+                    head: document.text.graphemeBoundary(from: selection.head, forward: forward)
+                ).range : selection.range
+            if !range.isEmpty {
+                ranges.append(range)
+            }
+            after.append(TextSelection(anchor: range.lower, head: range.lower))
         }
-        insertText("", replacementRange: NSRange(location: NSNotFound, length: 0))
+        var merged: [ByteRange] = []
+        for range in ranges.sorted(by: {
+            $0.lower < $1.lower
+        }) {
+            if let last = merged.last, range.lower <= last.upper {
+                merged[merged.count - 1] = ByteRange(last.lower, max(last.upper, range.upper))
+            }
+            else {
+                merged.append(range)
+            }
+        }
+        let edits = merged.map {
+            TextEdit($0, "")
+        }
+        after = after.map {
+            selection in
+            TextSelection(
+                anchor: DocumentBuffer.map(selection.anchor, through: edits),
+                head: DocumentBuffer.map(selection.head, through: edits),
+                virtualColumn: selection.virtualColumn
+            )
+        }
+        do {
+            let changed = try document.commit(edits, selectionsAfter: after, name: forward ? "向后删除" : "退格")
+            viewSelections = after
+            refresh(reveal: true)
+            if changed {
+                onChange?()
+            }
+            else {
+                onSelection?()
+            }
+        }
+        catch {
+            onStatus?(error.localizedDescription)
+        }
     }
 
     /// 业务作用：保持原生字形坐标的行列移动和带方向选区。
@@ -110,7 +165,12 @@ extension EditorView {
             var head = selection.head
             let row = document.text.lineNumber(at: head)
             if horizontal != 0 {
-                head = document.text.graphemeBoundary(from: head, forward: horizontal > 0)
+                if !extend && !selection.range.isEmpty {
+                    head = horizontal < 0 ? selection.range.lower : selection.range.upper
+                }
+                else {
+                    head = document.text.graphemeBoundary(from: head, forward: horizontal > 0)
+                }
             }
             else if edge != 0 {
                 let range = document.text.lineRange(row, includeEnding: false)

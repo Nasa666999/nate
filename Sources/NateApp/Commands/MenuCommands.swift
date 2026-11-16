@@ -12,6 +12,7 @@ extension ApplicationController: NSMenuItemValidation {
         let application = NSMenu(title: "Nate")
         add(application, "关于 Nate", "about")
         add(application, "设置…", "preferences", key: ",")
+        add(application, "补全与参数提示…", "assistancePreferences")
         application.addItem(.separator())
         let hide = NSMenuItem(title: "隐藏 Nate", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hide.target = NSApp
@@ -32,6 +33,7 @@ extension ApplicationController: NSMenuItemValidation {
         }
         let recent = NSMenu(title: "最近文件")
         add(file, "恢复已关闭临时内容…", "recoveryArchive")
+        add(file, "恢复先前保留工作区…", "pausedWorkspaces")
         for path in recentFiles {
             add(recent, path, "recent:" + path)
         }
@@ -85,6 +87,11 @@ extension ApplicationController: NSMenuItemValidation {
         add(edit, "切换行注释", "comment", key: "/")
         add(edit, "块注释", "blockComment")
         add(edit, "列编辑器…", "columnEditor")
+        add(edit, "补全文档与语言", "complete")
+        add(edit, "补全文档单词", "completeWords")
+        add(edit, "补全语言关键字与函数", "completeLanguage")
+        add(edit, "函数参数提示", "signature")
+        add(edit, "手动补全路径", "completePath")
         add(edit, "选择全部匹配", "selectMatches")
         add(edit, "追加下一个匹配", "addMatch", key: "d")
         add(edit, "插入日期时间", "dateTime")
@@ -139,6 +146,7 @@ extension ApplicationController: NSMenuItemValidation {
         }
         attach(language, to: bar)
         let tools = NSMenu(title: "工具")
+        add(tools, "取消文件读取", "cancelReads")
         for (title, id) in [
             ("JSON 格式化", "tool:json"), ("XML 格式化", "tool:xml"), ("Base64 编码", "tool:base64Encode"),
             ("Base64 解码", "tool:base64Decode"), ("URL 编码", "tool:urlEncode"), ("URL 解码", "tool:urlDecode"),

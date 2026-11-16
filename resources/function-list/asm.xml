@@ -3,8 +3,8 @@
 	<functionList>
 
 
-		<parser displayName="Assembly" id="assembly_subroutine" commentExpr="(?x)                                               # Utilize inline comments (see `RegEx - Pattern Modifiers`)        (?m-s:;.*$)                                     # Single Line Comment       ">
-			<function mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)       (?m)^\h*                                            # optional leading whitespace       \K                                                  # keep the text matched so far, out of the overall match       [A-Za-z_$][\w$]*                                    # valid character combination for labels       (?=:)                                               # up till the colon      " />
+		<parser displayName="Assembly" id="assembly_subroutine" commentExpr="(?x)                                               # Utilize inline comments (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;&#09;(?m-s:;.*$)                                     # Single Line Comment&#10;&#09;&#09;&#09;&#09;&#09;&#09;">
+			<function mainExpr="(?x)                                              # Utilize inline comments (see `RegEx - Pattern Modifiers`)&#10;&#09;&#09;&#09;&#09;&#09;&#09;(?m)^\h*                                            # optional leading whitespace&#10;&#09;&#09;&#09;&#09;&#09;&#09;\K                                                  # keep the text matched so far, out of the overall match&#10;&#09;&#09;&#09;&#09;&#09;&#09;[A-Za-z_$][\w$]*                                    # valid character combination for labels&#10;&#09;&#09;&#09;&#09;&#09;&#09;(?=:)                                               # up till the colon&#10;&#09;&#09;&#09;&#09;&#09;" />
 		</parser>
 	</functionList>
 </NotepadPlus>

@@ -17,6 +17,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     }
     var mainWindow: EditorWindow?
     var registry: LanguageRegistry?
+    var completionCatalog: CompletionCatalog?
+    var completionTask: Task<Void, Never>?
+    var completionGeneration = UUID()
     var codecs: LegacyCodecCatalog?
     var userLanguages: [String: UDLDefinition] = [:]
     var userLanguageSources: [String: URL] = [:]
@@ -24,14 +27,22 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var publishingResources = false
     var findWindow: FindReplaceWindow?
     let fileIO = IOExecutor(name: "nate.files", concurrency: 2)
+    let readIO = IOExecutor(name: "nate.reads", concurrency: 2)
     let recoveryIO = IOExecutor(name: "nate.recovery", concurrency: 1)
     var recovery: RecoveryStore?
+    var recoveryReady = false
     var instanceLease: InstanceLease?
+    var instanceInbox: InstanceInbox?
+    var processingInstanceRequests = false
+    var instanceRequestTask: Task<Void, Never>?
+    var startupArguments: CLIArguments?
+    var applicationSupport: URL?
     var autosaveTask: Task<Void, Never>?
     var recoveryTask: Task<Bool, Never>?
     var searchTask: Task<Void, Never>?
     var externalObservationTask: Task<Void, Never>?
     var externalStamps: [UUID: FileStamp] = [:]
+    var targetReservations: [String: UUID] = [:]
     var queryGeneration = UUID()
     var closing = false
     var initialized = false
@@ -59,6 +70,12 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// - notification: 系统启动完成通知。
     /// 返回：异步装配，主事件循环保持可响应。
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(receiveInstanceRequest(_:)),
+            name: InstanceInbox.notification,
+            object: nil
+        )
         Task {
             await bootstrap()
         }
@@ -76,8 +93,25 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 create: true
             ).appendingPathComponent("Nate", isDirectory: true)
             try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+            applicationSupport = support
+            let arguments = try CLIArguments(Array(CommandLine.arguments.dropFirst()))
+            startupArguments = arguments
+            let inbox = try await fileIO.run {
+                try InstanceInbox(directory: support.appendingPathComponent("Requests", isDirectory: true))
+            }
+            instanceInbox = inbox
             guard let lease = InstanceLease(path: support.appendingPathComponent("workspace.lock").path)
             else {
+                let payload = try JSONEncoder().encode(arguments)
+                _ = try await fileIO.run {
+                    try inbox.enqueue(payload)
+                }
+                DistributedNotificationCenter.default().postNotificationName(
+                    InstanceInbox.notification,
+                    object: nil,
+                    userInfo: nil,
+                    deliverImmediately: true
+                )
                 let existing = NSRunningApplication.runningApplications(
                     withBundleIdentifier: "io.github.Nasa666999.nate"
                 )
@@ -89,6 +123,21 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 return
             }
             instanceLease = lease
+            if arguments.noRestore {
+                // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
+                try await recoveryIO.run {
+                    let old = support.appendingPathComponent("Recovery", isDirectory: true)
+                    if FileManager.default.fileExists(atPath: old.path) {
+                        try FileManager.default.moveItem(
+                            at: old,
+                            to: support.appendingPathComponent(
+                                "Recovery-paused-" + UUID().uuidString,
+                                isDirectory: true
+                            )
+                        )
+                    }
+                }
+            }
             let store = RecoveryStore(
                 directory: support.appendingPathComponent("Recovery", isDirectory: true)
             )
@@ -100,14 +149,29 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 directory: SystemIntegration.resourceDirectory().appendingPathComponent("languages")
             )
             let restored = try await recoveryIO.run {
-                try store.restore()
+                let result = try store.restore()
+                return (
+                    documents: result.documents.map {
+                        (record: $0, tree: PieceTree($0.text))
+                    }, active: result.active
+                )
+            }
+            recoveryReady = true
+            do {
+                let directory = SystemIntegration.resourceDirectory().appendingPathComponent("completion")
+                completionCatalog = try await fileIO.run {
+                    try CompletionCatalog(directory: directory)
+                }
+            }
+            catch {
+                SystemIntegration.alert("补全资源未载入", error.localizedDescription)
             }
             await loadUserLanguages()
-            let catalog = codecs
-            for record in restored.documents {
+            for (record, tree) in restored.documents {
                 let document = WorkspaceDocument(
                     name: record.name,
                     text: record.text,
+                    textTree: tree,
                     id: record.id,
                     encoding: record.encoding,
                     lineEnding: record.lineEnding ?? .lf
@@ -123,26 +187,10 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 document.buffer.bookmarks = record.bookmarks
                 document.buffer.isReadOnly = record.readOnly
                 if let path = record.path {
-                    let url = URL(fileURLWithPath: path)
-                    let baseline = try? await fileIO.run {
-                        try FileStorage.baseline(url)
-                    }
-                    if baseline == record.baseline, let baseline {
-                        document.url = url
-                        document.baseline = baseline
-                        let loaded = try? await fileIO.run {
-                            try FileStorage.load(url, encoding: record.encoding, catalog: catalog)
-                        }
-                        document.savedText = PieceTree(loaded?.text ?? "")
-                        document.evaluateDirty()
-                        document.state = document.isDirty ? "恢复内容 · 待保存到原文件" : "已保存"
-                    }
-                    else {
-                        // 原路径身份不一致时以独立恢复文档呈现，禁止自动覆盖。
-                        document.name += "（恢复副本）"
-                        document.failure = "原文件已变化或不可用，恢复内容需要另存为。原路径：\(path)"
-                        document.state = "恢复副本 · 原文件未改动"
-                    }
+                    // 恢复正文先显示，原路径核验完成前不授予自动写入权。
+                    document.pendingOriginalPath = path
+                    document.pendingOriginalBaseline = record.baseline
+                    document.state = "恢复内容已载入 · 原路径正在核验"
                 }
                 documents.append(document)
             }
@@ -150,6 +198,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         catch {
             SystemIntegration.alert("启动信息", error.localizedDescription)
+            // 未取得进程级写入权时不得退化成另一个可自动写盘的工作区。
+            if instanceLease == nil {
+                NSApp.terminate(nil)
+                return
+            }
         }
         if documents.isEmpty {
             _ = newDocument()
@@ -180,12 +233,16 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         initialized = true
         startAutosave()
+        for document in documents where document.pendingOriginalPath != nil {
+            verifyRecoveryBinding(document)
+        }
         let paths = pendingURLs
         pendingURLs.removeAll()
         for url in paths {
             await openFile(url)
         }
-        await handleCLI()
+        await handleCLI(startupArguments)
+        await drainInstanceRequests()
     }
 
     /// 业务作用：所有界面入口统一委派给应用命令与文件协调。
@@ -233,6 +290,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     @discardableResult
     func newDocument() -> WorkspaceDocument {
         let document = WorkspaceDocument(name: "新文档 \(documents.count + 1)")
+        if !recoveryReady {
+            document.recoveryError = "恢复索引尚未完成校验，现有记录保持原状。"
+        }
         documents.append(document)
         activate(document.buffer.id)
         return document
@@ -251,6 +311,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return
         }
         mainWindow?.editor.finishComposition()
+        cancelCompletion()
         activeID = id
         mainWindow?.showDocument(document.buffer)
         previousTextForMacro = document.buffer.text
@@ -264,6 +325,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         guard let active else {
             return
         }
+        cancelCompletion()
         active.dirtyHint = true
         if macroRecording && !macroPlaying {
             recordTextChange(active)
@@ -306,8 +368,16 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         let head = active.buffer.selections.first?.head ?? 0
         let line = active.buffer.text.lineNumber(at: head)
-        let column =
-            active.buffer.text.text(in: ByteRange(active.buffer.text.lineStart(line), head)).count + 1
+        let lineStart = active.buffer.text.lineStart(line)
+        let column: String
+        if head - lineStart > 1_048_576 {
+            // 超长行状态更新不能在每次输入时复制整段前缀，单位在界面中明确标出。
+            column =
+                "\((active.buffer.text.utf16Offset(byte: head) ?? 0) - (active.buffer.text.utf16Offset(byte: lineStart) ?? 0) + 1) UTF-16"
+        }
+        else {
+            column = String(active.buffer.text.text(in: ByteRange(lineStart, head)).count + 1)
+        }
         let selectionCount = active.buffer.selections.reduce(0) {
             $0 + $1.range.count
         }

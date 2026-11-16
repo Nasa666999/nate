@@ -24,6 +24,7 @@ extension ApplicationController {
                 guard let self else {
                     break
                 }
+                self.scheduleInstanceRequests()
                 if !self.closing && self.externalObservationTask == nil {
                     self.externalObservationTask = Task {
                         [weak self] in
@@ -180,12 +181,12 @@ extension ApplicationController {
     /// - force: 是否在退出等边界重新固定视图元数据。
     /// 返回：每份正文先同步，再可靠发布有序恢复索引。
     func scheduleRecovery(force: Bool = false) {
-        guard recoveryTask == nil, let store = recovery else {
+        guard recoveryReady, recoveryTask == nil, let store = recovery else {
             return
         }
         let captured = documents
         let changed = captured.filter {
-            force || $0.recoveryReference == nil || $0.recoveryRevision != $0.buffer.revision
+            $0.recoveryReference == nil || $0.recoveryRevision != $0.buffer.revision
                 || $0.lastRecoveryMetadata != $0.recoveryMetadataKey
         }
         let metadataKeys = Dictionary(
@@ -249,7 +250,9 @@ extension ApplicationController {
                     if document.url == nil && document.buffer.revision == metadata.revision
                         && document.lastRecoveryMetadata == document.recoveryMetadataKey
                     {
-                        document.state = "恢复内容已保存 · 尚未选择原文件"
+                        document.state =
+                            document.pendingOriginalPath == nil
+                            ? "恢复内容已保存 · 尚未选择原文件" : "恢复内容已保存 · 原路径等待核验"
                         document.dirtyHint = false
                     }
                 }
@@ -279,6 +282,9 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：当前工作区索引可靠发布后为真。
     func flushRecovery() async -> Bool {
+        guard recoveryReady else {
+            return false
+        }
         if let task = recoveryTask {
             _ = await task.value
         }

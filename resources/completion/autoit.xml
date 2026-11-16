@@ -171,7 +171,7 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="AutoItSetOption" func="yes">
-			<Overload retVal="" descr="Changes how literal strings and % symbols are interpreted.  By default strings are treated literally, this option allows you to use %environment% variables inside strings, e.g., &quot;The temp directory is: %temp%&quot;. 1 = expand environment variables (similar to AutoIt v2) 0 = do not expand environment variables (default) Without this option the usual way would be:  &quot;The temp directory is: &quot; &amp; EnvGet(&quot;temp&quot;) ">
+			<Overload retVal="" descr="Changes how literal strings and % symbols are interpreted.  By default strings are treated literally, this option allows you to use %environment% variables inside strings, e.g., &quot;The temp directory is: %temp%&quot;. 1 = expand environment variables (similar to AutoIt v2) 0 = do not expand environment variables (default) Without this option the usual way would be: &#09;&quot;The temp directory is: &quot; &amp; EnvGet(&quot;temp&quot;) ">
 				<Param name="&quot;ExpandEnvStrings&quot;" />
 				<Param name="param" />
 			</Overload>
@@ -2273,7 +2273,7 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="Opt" func="yes">
-			<Overload retVal="" descr="Changes how literal strings and % symbols are interpreted.  By default strings are treated literally, this option allows you to use %environment% variables inside strings, e.g., &quot;The temp directory is: %temp%&quot;. 1 = expand environment variables (similar to AutoIt v2) 0 = do not expand environment variables (default) Without this option the usual way would be:  &quot;The temp directory is: &quot; &amp; EnvGet(&quot;temp&quot;) ">
+			<Overload retVal="" descr="Changes how literal strings and % symbols are interpreted.  By default strings are treated literally, this option allows you to use %environment% variables inside strings, e.g., &quot;The temp directory is: %temp%&quot;. 1 = expand environment variables (similar to AutoIt v2) 0 = do not expand environment variables (default) Without this option the usual way would be: &#09;&quot;The temp directory is: &quot; &amp; EnvGet(&quot;temp&quot;) ">
 				<Param name="&quot;ExpandEnvStrings&quot;" />
 				<Param name="param" />
 			</Overload>
