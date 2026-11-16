@@ -1,0 +1,195 @@
+import Foundation
+
+extension PieceTree {
+    /// 业务作用：将系统 UTF-16 坐标转换到内核字节坐标，不接受半代理项。
+    /// 参数说明:
+    /// - offset: 系统文本服务的 UTF-16 位置。
+    /// 返回：合法标量边界的字节位置；越界或半代理项为空。
+    public func byteOffset(utf16 offset: Int) -> Int? {
+        guard offset >= 0, offset <= utf16Count else {
+            return nil
+        }
+        var node = root
+        var remaining = offset
+        var base = 0
+        while let left = node.left, let right = node.right {
+            if remaining < left.utf16Count {
+                node = left
+            }
+            else {
+                remaining -= left.utf16Count
+                base += left.count
+                node = right
+            }
+        }
+        var units = 0
+        var bytes = 0
+        for scalar in String(decoding: node.bytes, as: UTF8.self).unicodeScalars {
+            if units == remaining {
+                return base + bytes
+            }
+            units += scalar.value > 0xFFFF ? 2 : 1
+            bytes += scalar.utf8.count
+        }
+        return units == remaining ? base + bytes : nil
+    }
+
+    /// 业务作用：向 AppKit 提供与同一快照一致的 UTF-16 位置。
+    /// 参数说明:
+    /// - offset: 合法 UTF-8 字节位置。
+    /// 返回：对应 UTF-16 单元数；非法边界为空。
+    public func utf16Offset(byte offset: Int) -> Int? {
+        guard isBoundary(offset) else {
+            return nil
+        }
+        var node = root
+        var remaining = offset
+        var units = 0
+        while let left = node.left, let right = node.right {
+            if remaining < left.count {
+                node = left
+            }
+            else {
+                remaining -= left.count
+                units += left.utf16Count
+                node = right
+            }
+        }
+        return units + String(decoding: node.bytes.prefix(remaining), as: UTF8.self).utf16.count
+    }
+
+    /// 业务作用：严格转换系统范围，拒绝哨兵值和越界输入。
+    /// 参数说明:
+    /// - range: 同一快照上的 UTF-16 半开范围。
+    /// 返回：能够无损映射的 UTF-8 范围。
+    public func byteRange(_ range: NSRange) -> ByteRange? {
+        guard range.location != NSNotFound, range.location >= 0, range.length >= 0,
+            range.location <= utf16Count, range.length <= utf16Count - range.location,
+            let a = byteOffset(utf16: range.location),
+            let b = byteOffset(utf16: range.location + range.length)
+        else {
+            return nil
+        }
+        return ByteRange(a, b)
+    }
+
+    /// 业务作用：转换选区供原生文本服务读取。
+    /// 参数说明:
+    /// - range: 当前快照的字节范围。
+    /// 返回：合法 UTF-16 范围，失败不返回伪造位置。
+    public func nsRange(_ range: ByteRange) -> NSRange? {
+        guard let a = utf16Offset(byte: range.lower), let b = utf16Offset(byte: range.upper), b >= a else {
+            return nil
+        }
+        return NSRange(location: a, length: b - a)
+    }
+
+    /// 业务作用：按真实换行查找指定逻辑行，软换行不改变行号。
+    /// 参数说明:
+    /// - line: 从零开始的逻辑行号。
+    /// 返回：行首字节；超出末行时返回文档末端。
+    public func lineStart(_ line: Int) -> Int {
+        guard line > 0 else {
+            return 0
+        }
+        guard line < lineCount else {
+            return byteCount
+        }
+        let result = Self.breakEnd(root, number: line, previousCR: false)
+        if result > 0, byte(at: result - 1) == 13, byte(at: result) == 10 {
+            return result + 1
+        }
+        return result
+    }
+
+    /// 业务作用：提供保留换行的完整逻辑行范围。
+    /// 参数说明:
+    /// - line: 从零开始的行号。
+    /// - includeEnding: 是否包含该行实际换行字节。
+    /// 返回：文档内有效范围。
+    public func lineRange(_ line: Int, includeEnding: Bool = true) -> ByteRange {
+        let start = lineStart(line)
+        var end = lineStart(line + 1)
+        if !includeEnding {
+            if end > start, byte(at: end - 1) == 10 {
+                end -= 1
+            }
+            if end > start, byte(at: end - 1) == 13 {
+                end -= 1
+            }
+        }
+        return ByteRange(start, max(start, end))
+    }
+
+    /// 业务作用：用树行索引定位光标行，末端仍属于合法行。
+    /// 参数说明:
+    /// - offset: 当前快照字节位置。
+    /// 返回：从零开始的逻辑行号。
+    public func lineNumber(at offset: Int) -> Int {
+        var low = 0
+        var high = lineCount
+        while low + 1 < high {
+            let mid = (low + high) / 2
+            if lineStart(mid) <= offset {
+                low = mid
+            }
+            else {
+                high = mid
+            }
+        }
+        return low
+    }
+
+    /// 业务作用：逐字移动和删除遵守扩展字形簇，CRLF 不被切开。
+    /// 参数说明:
+    /// - offset: 当前字节位置。
+    /// - forward: 是否向后一个字形移动。
+    /// 返回：相邻字形边界；文档边界保持不变。
+    public func graphemeBoundary(from offset: Int, forward: Bool) -> Int {
+        let line = lineNumber(at: offset)
+        let start = lineStart(max(0, line - (forward ? 0 : 1)))
+        let end = lineStart(min(lineCount, line + 2))
+        let text = text(in: ByteRange(start, end))
+        var position = start
+        var previous = start
+        for character in text {
+            position += character.utf8.count
+            if forward && position > offset {
+                return position
+            }
+            if !forward && position >= offset {
+                return previous
+            }
+            previous = position
+        }
+        return forward ? byteCount : previous
+    }
+
+    /// 业务作用：在缓存换行数帮助下定位行界，跨叶片 CRLF 按一个换行处理。
+    /// 参数说明:
+    /// - node: 当前子树。
+    /// - number: 子树内第几个有效换行。
+    /// - previousCR: 前一子树末字节是否为 CR。
+    /// 返回：该换行结束的局部偏移。
+    private static func breakEnd(_ node: PieceNode, number: Int, previousCR: Bool) -> Int {
+        if let left = node.left, let right = node.right {
+            let count = left.breaks - (previousCR && left.first == 10 ? 1 : 0)
+            if number <= count {
+                return breakEnd(left, number: number, previousCR: previousCR)
+            }
+            return left.count + breakEnd(right, number: number - count, previousCR: left.last == 13)
+        }
+        var remaining = number
+        var previous: UInt8 = previousCR ? 13 : 0
+        for (index, byte) in node.bytes.enumerated() {
+            if byte == 13 || (byte == 10 && previous != 13) {
+                remaining -= 1
+                if remaining == 0 {
+                    return index + 1
+                }
+            }
+            previous = byte
+        }
+        return node.count
+    }
+}

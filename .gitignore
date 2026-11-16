@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+dist/
+tests/
+.DS_Store
+*.xcuserstate
+assets/icons/Nate.iconset/

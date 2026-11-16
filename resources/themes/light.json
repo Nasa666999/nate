@@ -1,0 +1,9 @@
+{
+  "name": "Light",
+  "background": "#FFFFFF",
+  "foreground": "#24292F",
+  "comment": "#6E7781",
+  "keyword": "#8250DF",
+  "string": "#0A7B43",
+  "number": "#0969DA"
+}

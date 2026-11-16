@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NotepadPlus>
+	<functionList>
+		
+		
+
+		
+		<parser displayName="Sinumerik" id="sinumerik_function" commentExpr="(?m-s:;(?!\$PATH).*?$)">
+			<function mainExpr="(?m)^%_N_\K[A-Za-z_]\w*" />
+		</parser>
+	</functionList>
+</NotepadPlus>

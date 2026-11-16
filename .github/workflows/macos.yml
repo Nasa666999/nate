@@ -1,0 +1,23 @@
+name: macOS
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  application:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build application
+        run: bash scripts/package-macos.sh
+      - name: Verify packaged resources
+        run: swift scripts/VerifyBundle.swift dist/Nate.app
+      - name: Archive application
+        run: ditto -c -k --sequesterRsrc --keepParent dist/Nate.app dist/Nate-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nate-macOS
+          path: dist/Nate-macOS.zip
+          if-no-files-found: error

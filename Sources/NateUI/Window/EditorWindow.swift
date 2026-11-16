@@ -1,0 +1,239 @@
+import AppKit
+import NateCore
+
+public struct TabPresentation {
+    public var id: UUID
+    public var title: String
+    public var path: String?
+    public var selected: Bool
+    public var pinned: Bool
+    public var dirty: Bool
+    public var failed: Bool
+
+    /// 业务作用：将文档状态映射为标签呈现，不泄露磁盘访问职责。
+    /// 参数说明:
+    /// - id: 文档身份。
+    /// - title: 名称与状态。
+    /// - path: 悬停路径。
+    /// - selected: 当前活动状态。
+    /// - pinned: 固定状态。
+    /// - dirty: 是否待保存。
+    /// - failed: 是否存在保存失败。
+    /// 返回：只读标签模型。
+    public init(
+        id: UUID,
+        title: String,
+        path: String?,
+        selected: Bool,
+        pinned: Bool,
+        dirty: Bool,
+        failed: Bool
+    ) {
+        self.id = id
+        self.title = title
+        self.path = path
+        self.selected = selected
+        self.pinned = pinned
+        self.dirty = dirty
+        self.failed = failed
+    }
+}
+
+@MainActor
+public final class EditorWindow: NSWindowController, NSWindowDelegate {
+    public var onCommand: ((String) -> Void)?
+    public var onSelect: ((UUID) -> Void)?
+    public var onCloseTab: ((UUID) -> Void)?
+    public var onTabAction: ((UUID, String) -> Void)?
+    public var onEdit: (() -> Void)?
+    public var onWindowClose: (() -> Void)?
+    public internal(set) var editor: EditorView
+    public let status = NSTextField(labelWithString: "")
+    public let results = NSTextView()
+    public var onResult: ((Int) -> Void)?
+    let tabs = TabStrip()
+    let scroll = NSScrollView()
+    let split = NSSplitView()
+    let editorSplit = NSSplitView()
+    let resultsScroll = NSScrollView()
+    let toolbarStack = NSStackView()
+    var scrollPositions: [UUID: NSPoint] = [:]
+
+    /// 业务作用：组装工具栏、独立标签、编辑视口、结果面板和状态栏。
+    /// 参数说明:
+    /// - document: 初始文档。
+    /// 返回：可直接输入的原生主窗口。
+    public init(document: DocumentBuffer) {
+        editor = EditorView(document: document)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1160, height: 760),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Nate"
+        window.minSize = NSSize(width: 640, height: 420)
+        window.setFrameAutosaveName("Nate.MainWindow")
+        super.init(window: window)
+        window.delegate = self
+        let root = NSView()
+        root.translatesAutoresizingMaskIntoConstraints = false
+        window.contentView = NSView()
+        window.contentView?.addSubview(root)
+        if let content = window.contentView {
+            NSLayoutConstraint.activate([
+                root.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                root.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                root.topAnchor.constraint(equalTo: content.topAnchor),
+                root.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            ])
+        }
+        toolbarStack.orientation = .horizontal
+        toolbarStack.spacing = 4
+        toolbarStack.edgeInsets = NSEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        for (id, symbol, name) in [
+            ("new", "doc.badge.plus", "新建 ⌘N"), ("open", "folder", "打开 ⌘O"),
+            ("save", "square.and.arrow.down", "立即保存 ⌘S"),
+            ("saveAll", "square.and.arrow.down.on.square", "全部保存 ⌘⌥S"),
+            ("undo", "arrow.uturn.backward", "撤销 ⌘Z"), ("redo", "arrow.uturn.forward", "重做 ⌘⇧Z"),
+            ("find", "magnifyingglass", "查找 ⌘F / Ctrl+F"), ("replace", "arrow.left.arrow.right", "替换 Ctrl+H"),
+            ("wrap", "text.word.spacing", "自动换行"), ("symbols", "paragraphsign", "显示符号"),
+            ("recordMacro", "record.circle", "录制宏"), ("playMacro", "play", "播放宏"),
+        ] {
+            let button = NSButton(
+                image: NSImage(systemSymbolName: symbol, accessibilityDescription: name) ?? NSImage(),
+                target: self,
+                action: #selector(toolbarAction(_:))
+            )
+            button.identifier = NSUserInterfaceItemIdentifier(id)
+            button.toolTip = name
+            button.bezelStyle = .texturedRounded
+            toolbarStack.addArrangedSubview(button)
+        }
+        toolbarStack.addArrangedSubview(NSView())
+        root.addSubview(toolbarStack)
+        root.addSubview(tabs)
+        tabs.heightAnchor.constraint(equalToConstant: 33).isActive = true
+        tabs.onSelect = {
+            [weak self] id in self?.onSelect?(id)
+        }
+        tabs.onClose = {
+            [weak self] id in self?.onCloseTab?(id)
+        }
+        tabs.onAction = {
+            [weak self] id, action in self?.onTabAction?(id, action)
+        }
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.documentView = editor
+        split.isVertical = false
+        split.dividerStyle = .thin
+        editorSplit.isVertical = true
+        editorSplit.dividerStyle = .thin
+        editorSplit.addArrangedSubview(scroll)
+        split.addArrangedSubview(editorSplit)
+        results.isEditable = false
+        results.isSelectable = true
+        results.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        resultsScroll.hasVerticalScroller = true
+        resultsScroll.documentView = results
+        resultsScroll.isHidden = true
+        split.addArrangedSubview(resultsScroll)
+        root.addSubview(split)
+        status.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        status.lineBreakMode = .byTruncatingMiddle
+        root.addSubview(status)
+        status.heightAnchor.constraint(equalToConstant: 25).isActive = true
+        for view in [toolbarStack, tabs, split, status] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+        }
+        NSLayoutConstraint.activate([
+            toolbarStack.topAnchor.constraint(equalTo: root.topAnchor),
+            toolbarStack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            toolbarStack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            toolbarStack.heightAnchor.constraint(equalToConstant: 38),
+            tabs.topAnchor.constraint(equalTo: toolbarStack.bottomAnchor),
+            tabs.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            tabs.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            split.topAnchor.constraint(equalTo: tabs.bottomAnchor),
+            split.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            split.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            split.bottomAnchor.constraint(equalTo: status.topAnchor),
+            status.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
+            status.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
+            status.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+        ])
+        status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        split.setContentHuggingPriority(.defaultLow, for: .vertical)
+        editor.onChange = {
+            [weak self] in self?.onEdit?()
+        }
+        editor.onSelection = {
+            [weak self] in self?.onCommand?("selectionChanged")
+        }
+        editor.onCommand = {
+            [weak self] id in self?.onCommand?(id)
+        }
+        window.center()
+    }
+
+    /// 业务作用：窗口不使用归档创建，工作区拥有唯一文档集合。
+    /// 参数说明:
+    /// - coder: 系统归档。
+    /// 返回：不支持归档初始化。
+    required init?(coder: NSCoder) {
+        return nil
+    }
+
+    /// 业务作用：切换标签时保留各文档视口，避免后台更新抢焦点。
+    /// 参数说明:
+    /// - document: 新活动文档。
+    /// 返回：正文视图切换为共享缓冲区，原视口保存。
+    public func showDocument(_ document: DocumentBuffer) {
+        editor.finishComposition()
+        scrollPositions[editor.document.id] = scroll.contentView.bounds.origin
+        editor.document = document
+        editor.refresh()
+        scroll.contentView.scroll(to: scrollPositions[document.id] ?? .zero)
+        window?.makeFirstResponder(editor)
+    }
+
+    /// 业务作用：更新标签呈现，标签上下文动作始终绑定被点击身份。
+    /// 参数说明:
+    /// - presentations: 按工作区顺序排列的标签。
+    /// 返回：当前标签栏反映真实文档状态。
+    public func updateTabs(_ presentations: [TabPresentation]) {
+        tabs.update(presentations)
+    }
+
+    /// 业务作用：显示可复制的搜索或工具结果，关闭面板不销毁文档。
+    /// 参数说明:
+    /// - text: 完整可读结果。
+    /// 返回：底部结果面板可见。
+    public func showResults(_ text: String) {
+        results.string = text
+        resultsScroll.isHidden = false
+        split.setPosition(max(200, split.bounds.height - 190), ofDividerAt: 0)
+    }
+
+    /// 业务作用：将工具栏入口交给同一命令路由。
+    /// 参数说明:
+    /// - sender: 具有命令标识的按钮。
+    /// 返回：发出业务意图。
+    @objc func toolbarAction(_ sender: NSButton) {
+        if let id = sender.identifier?.rawValue {
+            onCommand?(id)
+        }
+    }
+
+    /// 业务作用：关闭主窗口前交由应用异步保护最后修订。
+    /// 参数说明:
+    /// - sender: 请求关闭的窗口。
+    /// 返回：阻止立即销毁，保存完成后由应用确认关闭。
+    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        onWindowClose?()
+        return false
+    }
+}

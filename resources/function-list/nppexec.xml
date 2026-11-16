@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NotepadPlus>
+	<functionList>
+		
+
+		<parser displayName="NppExec" id="nppexec_syntax">
+			
+			<classRange mainExpr="(?x)                     # free-spacing (see `RegEx - Pattern Modifiers`)         (?ims)                   # ignore case, ^ and $ match start/end of line, dot matches newline         ^\h*         ::         .*?         (?=::|\Z)        ">
+				<className>
+					
+					<nameExpr expr="(?im-s)^\h*::\K(?:(.+?)(?=\h*\/{2}|$))" />
+				</className>
+				
+				
+				<function mainExpr="(?x)                 # free-spacing (see `RegEx - Pattern Modifiers`)          (?im-s)              # ignore case, ^ and $ match start/end of line, dot doesn't match newline          ^\h*          :{1,2}.+?          \h*(?=\/{2}|$|\Z)         ">
+					 <functionName>
+						
+						<funcNameExpr expr="(?im-s)\h*(?(?=::)(.+)|(?::\K(.+)))" />
+					</functionName>
+				</function>
+			</classRange>
+		</parser>
+	</functionList>
+</NotepadPlus>

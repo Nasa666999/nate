@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NotepadPlus>
+    <functionList>
+        <parser id="css_function" displayName="CSS">
+            <function mainExpr="^([^\n\{]+)\s*\{">
+                <functionName>
+                    <nameExpr expr="[^\n\{]+" />
+                </functionName>
+            </function>
+        </parser>
+    </functionList>
+</NotepadPlus>

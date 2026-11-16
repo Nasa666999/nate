@@ -1,0 +1,9 @@
+{
+  "name": "Dark",
+  "background": "#171D28",
+  "foreground": "#DBE3F0",
+  "comment": "#7F91A9",
+  "keyword": "#B79CFF",
+  "string": "#8DC891",
+  "number": "#80BFFF"
+}

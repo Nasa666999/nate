@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "autosaveEnabled": true,
+  "autosaveMilliseconds": 1000,
+  "fontSize": 13,
+  "wrapLines": false,
+  "showSymbols": false,
+  "newDocumentEncoding": "UTF-8",
+  "newDocumentBOM": false,
+  "newDocumentLineEnding": "LF"
+}

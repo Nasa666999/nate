@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "commands": {
+    "new": "command+n",
+    "open": "command+o",
+    "save": "command+s",
+    "find": "command+f",
+    "replace": "command+shift+h",
+    "findNext": "command+g",
+    "findPrevious": "command+shift+g",
+    "goto": "command+l"
+  }
+}

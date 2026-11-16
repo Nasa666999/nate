@@ -1,0 +1,14 @@
+{
+  "resources": {
+    "project": "Notepad++",
+    "tag": "v8.9.9",
+    "license": "GPL-3.0-or-later",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/tree/v8.9.9",
+    "paths": [
+      "PowerEditor/src/langs.model.xml",
+      "PowerEditor/bin/userDefineLangs",
+      "PowerEditor/installer/APIs",
+      "PowerEditor/installer/functionList"
+    ]
+  }
+}

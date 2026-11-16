@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NotepadPlus>
+	<functionList>
+		
+
+		<parser displayName="Ruby" id="ruby_syntax">
+			
+			<classRange mainExpr="^class\x20\K.*?(?=\n\S|\Z)">
+				<className>
+					<nameExpr expr="\w+" />
+				</className>
+				<function mainExpr="^\s*def\s+\w+">
+					<functionName>
+						<funcNameExpr expr="def\s\K\w+" />
+					</functionName>
+				</function>
+			</classRange>
+			
+			<function mainExpr="^\s*def\s+\w+">
+				<functionName>
+					<nameExpr expr="def\s\K\w+" />
+				</functionName>
+			</function>
+		</parser>
+	</functionList>
+</NotepadPlus>
