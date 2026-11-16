@@ -7,6 +7,7 @@ struct MatchState {
     var captures: [Int: NSRange] = [:]
     var sensitive: Bool
     var dot: Bool
+    var multiline = true
 }
 
 struct CancellableMatcher {
@@ -14,6 +15,7 @@ struct CancellableMatcher {
     let compiled: CompiledRegex
     let limit: Int
     let deadline: ContinuousClock.Instant
+    var softEnd = 0
     var steps = 0
     var scanStart = 0
 
@@ -46,7 +48,9 @@ struct CancellableMatcher {
         }
         var next = state
         switch node {
-        case .empty: return [state]
+        case .directive, .empty: return [state]
+        case .quoted(let units):
+            return try run(.sequence(units.map { .literal($0) }), state, depth: depth + 1)
         case .literal(let value):
             guard state.position < input.count,
                 equal(input[state.position], value, sensitive: state.sensitive)
@@ -109,7 +113,28 @@ struct CancellableMatcher {
                             CharacterSet.whitespaces.contains($0)
                         } ?? false
                 case "v": hit = [10, 11, 12, 13, 0x85, 0x2028, 0x2029].contains(unit)
+                case "l":
+                    hit = Unicode.Scalar(unit).map { CharacterSet.lowercaseLetters.contains($0) } ?? false
+                case "u":
+                    hit = Unicode.Scalar(unit).map { CharacterSet.uppercaseLetters.contains($0) } ?? false
+                case "a": hit = Unicode.Scalar(unit).map { CharacterSet.letters.contains($0) } ?? false
+                case "n": hit = Unicode.Scalar(unit).map { CharacterSet.alphanumerics.contains($0) } ?? false
+                case "t": hit = unit == 9 || unit == 32
+                case "c":
+                    hit = Unicode.Scalar(unit).map { CharacterSet.controlCharacters.contains($0) } ?? false
+                case "g": hit = unit > 32 && unit != 127
+                case "p": hit = unit >= 32 && unit != 127
+                case "q":
+                    hit =
+                        (33...126).contains(unit) && !(48...57).contains(unit)
+                        && !(65...90).contains(unit) && !(97...122).contains(unit)
+                case "o": hit = unit > 127
+                case "x":
+                    hit = (48...57).contains(unit) || (65...70).contains(unit) || (97...102).contains(unit)
                 default: break
+                }
+                if !state.sensitive && (lower == "l" || lower == "u") {
+                    hit = Unicode.Scalar(unit).map { CharacterSet.letters.contains($0) } ?? false
                 }
                 matches = matches || (String(kind) == lower ? hit : !hit)
             }
@@ -125,14 +150,19 @@ struct CancellableMatcher {
             let boundary = (before.map(word) ?? false) != (after.map(word) ?? false)
             let accepted: Bool
             switch anchor {
-            case "^": accepted = p == 0 || before == 10 || (before == 13 && after != 10)
-            case "$": accepted = p == input.count || after == 13 || (after == 10 && before != 13)
+            case "^":
+                accepted = p == 0 || state.multiline && (before == 10 || (before == 13 && after != 10))
+            case "$":
+                accepted =
+                    p == input.count || state.multiline && (after == 13 || (after == 10 && before != 13))
             case "A": accepted = p == 0
             case "z": accepted = p == input.count
-            case "Z": accepted = p == input.count || p == input.count - 1 && [10, 13].contains(after ?? 0)
+            case "Z": accepted = p >= softEnd
             case "G": accepted = p == scanStart
             case "b": accepted = boundary
             case "B": accepted = !boundary
+            case "<": accepted = !(before.map(word) ?? false) && (after.map(word) ?? false)
+            case ">": accepted = (before.map(word) ?? false) && !(after.map(word) ?? false)
             default: accepted = false
             }
             return accepted ? [state] : []
@@ -178,45 +208,24 @@ struct CancellableMatcher {
             }
             next.position += range.length
             return [next]
-        case .repeatNode(let child, let minimum, let maximum, let greedy, let possessive):
-            var levels = [[state]]
-            let cap = max(minimum, min(maximum, input.count + 1))
-            if cap > 0 {
-                for _ in 0..<cap {
-                    var level: [MatchState] = []
-                    for s in levels[levels.count - 1] {
-                        for n in try run(child, s, depth: depth + 1) {
-                            if n.position != s.position {
-                                level.append(n)
-                            }
-                            else if levels.count <= minimum {
-                                level.append(n)
-                            }
-                        }
-                    }
-                    if level.isEmpty {
-                        break
-                    }
-                    guard level.count <= 100_000 else {
-                        throw NateError.message("重复匹配超过内存预算。")
-                    }
-                    levels.append(level)
-                }
+        case .namedReference(let name):
+            guard let ids = compiled.names[name] else {
+                throw NateError.message("未知正则捕获名称。")
             }
-            guard levels.count > minimum else {
+            guard let id = ids.first(where: { state.captures[$0] != nil }) else {
                 return []
             }
-            let indices = greedy ? Array((minimum..<levels.count).reversed()) : Array(minimum..<levels.count)
-            if possessive {
-                return indices.first.flatMap {
-                    levels[$0].first
-                }.map {
-                    [$0]
-                } ?? []
-            }
-            return indices.flatMap {
-                levels[$0]
-            }
+            return try run(.reference(id), state, depth: depth + 1)
+        case .repeatNode(let child, let minimum, let maximum, let greedy, let possessive):
+            return try repeatStates(
+                child,
+                state,
+                minimum: minimum,
+                maximum: maximum,
+                greedy: greedy,
+                possessive: possessive,
+                depth: depth
+            )
         case .assertion(let child, let positive, let behind):
             var probe = state
             if let behind {
@@ -245,15 +254,32 @@ struct CancellableMatcher {
                 throw NateError.message("未知正则子程序 \(id)。")
             }
             return try run(child, state, depth: depth + 1)
-        case .conditional(let id, let yes, let no):
-            return try run(state.captures[id] != nil ? yes : no, state, depth: depth + 1)
-        case .flags(let sensitive, let dot, let child):
+        case .namedRecurse(let name):
+            guard let id = compiled.names[name]?.first else {
+                throw NateError.message("未知正则子程序名称。")
+            }
+            return try run(.recurse(id), state, depth: depth + 1)
+        case .conditional(let condition, let yes, let no):
+            let accepted: MatchState?
+            switch condition {
+            case .capture(let id): accepted = state.captures[id] != nil ? state : nil
+            case .named(let name):
+                accepted =
+                    compiled.names[name]?.contains(where: { state.captures[$0] != nil }) == true ? state : nil
+            case .assertion(let assertion):
+                accepted = try run(assertion, state, depth: depth + 1).first
+            case .definition: accepted = nil
+            }
+            return try run(accepted != nil ? yes : no, accepted ?? state, depth: depth + 1)
+        case .flags(let sensitive, let dot, let multiline, let child):
             next.sensitive = sensitive ?? state.sensitive
             next.dot = dot ?? state.dot
+            next.multiline = multiline ?? state.multiline
             return try run(child, next, depth: depth + 1).map {
                 var result = $0
                 result.sensitive = state.sensitive
                 result.dot = state.dot
+                result.multiline = state.multiline
                 return result
             }
         }

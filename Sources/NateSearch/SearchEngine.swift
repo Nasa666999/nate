@@ -28,7 +28,11 @@ public enum SearchEngine {
         }
         let compiled: CompiledRegex
         if options.mode == .regex {
-            compiled = try RegexParser.compile(options.query)
+            compiled = try RegexParser.compile(
+                options.query,
+                caseSensitive: options.caseSensitive,
+                dotMatchesNewline: options.dotMatchesNewline
+            )
         }
         else {
             let query = options.mode == .extended ? ExtendedEscapes.decode(options.query) : options.query
@@ -48,6 +52,12 @@ public enum SearchEngine {
             limit: options.stepLimit,
             deadline: ContinuousClock.now.advanced(by: .seconds(3))
         )
+        matcher.softEnd = input.count
+        while matcher.softEnd > 0,
+            [10, 13, 0x85, 0x2028, 0x2029].contains(input[matcher.softEnd - 1])
+        {
+            matcher.softEnd -= 1
+        }
         var position = range.location
         let end = range.location + range.length
         var hits: [SearchHit] = []
@@ -64,6 +74,10 @@ public enum SearchEngine {
             if let state = try matcher.run(compiled.root, initial).first(where: {
                 $0.position <= end
             }) {
+                // 断言中的起点重置可能形成反向范围，不能把它作为可写命中发布给正文事务。
+                guard state.start <= state.position else {
+                    throw NateError.message("表达式产生反向匹配范围，请将 \\K 移出前向断言。")
+                }
                 let matched = NSRange(location: state.start, length: state.position - state.start)
                 let whole =
                     options.mode == .regex || !options.wholeWord
@@ -78,7 +92,9 @@ public enum SearchEngine {
                             utf16Range: matched,
                             range: snapshot.text.byteRange(matched),
                             captures: captures,
-                            names: compiled.names
+                            names: compiled.names.mapValues { ids in
+                                ids.first(where: { captures[$0] != nil }) ?? ids[0]
+                            }
                         )
                     )
                     guard hits.count <= options.maxMatches else {
