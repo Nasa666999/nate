@@ -30,7 +30,12 @@ extension ApplicationController {
         }
         if document.monitoring {
             document.monitoring = false
+            document.state = "监视已停止"
             setReadOnly(document, value: document.readOnlyBeforeMonitoring)
+            return
+        }
+        // 已有路径操作尚未收束时，不能再冻结输入并等待同一目标形成循环等待。
+        guard !document.bindingChange else {
             return
         }
         mainWindow?.editor.finishComposition()
@@ -48,6 +53,7 @@ extension ApplicationController {
         document.readOnlyBeforeMonitoring = document.buffer.isReadOnly
         document.monitoring = true
         document.buffer.isReadOnly = true
+        document.state = "监视中 · 等待外部更新"
         guard !document.closing && !closing else {
             return
         }

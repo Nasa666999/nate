@@ -7,6 +7,7 @@ public struct PreparedTransaction: Sendable {
     let after: PieceTree
     let edits: [TextEdit]
     let changes: [PositionChange]
+    let positions: PositionMap
     let selections: [TextSelection]?
     let format: DocumentFormat?
     let name: String
@@ -78,6 +79,7 @@ public struct PreparedTransaction: Sendable {
         changes = unique.map {
             PositionChange(range: $0.range, insertedByteCount: $0.text.utf8.count)
         }
+        positions = PositionMap(validatedChanges: changes)
         selections = selectionsAfter
         format = formatAfter
         self.name = name
@@ -87,39 +89,38 @@ public struct PreparedTransaction: Sendable {
     /// 参数说明:
     /// - snapshot: 替换前的固定文档。
     /// - text: 后台已经完成校验和构建的正文。
-    /// - selectionsAfter: 明确的结果选区。
+    /// - selectionsAfter: 明确的结果选区；为空时按当前选区与实际差异映射。
     /// - formatAfter: 新正文的编码与换行规则。
     /// - name: 用户可理解的撤销动作。
-    /// 返回：一个完整替换事务，正文不同时保留正反位置映射。
+    /// 返回：接管完整目标正文、仅按实际差异更新位置关系的事务。
     public init(
         replacing snapshot: DocumentSnapshot,
         with text: PieceTree,
-        selectionsAfter: [TextSelection],
+        selectionsAfter: [TextSelection]? = nil,
         formatAfter: DocumentFormat,
         name: String
     ) throws {
         try Task.checkCancellation()
-        guard
-            selectionsAfter.allSatisfy({
-                text.isBoundary($0.anchor) && text.isBoundary($0.head)
-            })
-        else {
-            throw NateError.invalidRange
+        if let selectionsAfter {
+            guard
+                selectionsAfter.allSatisfy({
+                    text.isBoundary($0.anchor) && text.isBoundary($0.head)
+                })
+            else {
+                throw NateError.invalidRange
+            }
         }
         documentID = snapshot.id
         revision = snapshot.revision
         before = snapshot.text
         after = text
         edits = []
+        // 共同前后缀不属于删除范围，追加日志不能把既有书签和克隆光标移到末尾。
         changes =
-            snapshot.text.byteEqual(to: text)
-            ? []
-            : [
-                PositionChange(
-                    range: ByteRange(0, snapshot.text.byteCount),
-                    insertedByteCount: text.byteCount
-                )
-            ]
+            try snapshot.text.differenceBounds(to: text).map {
+                [PositionChange(range: $0.originalRange, insertedByteCount: $0.replacementRange.count)]
+            } ?? []
+        positions = PositionMap(validatedChanges: changes)
         selections = selectionsAfter
         format = formatAfter
         self.name = name

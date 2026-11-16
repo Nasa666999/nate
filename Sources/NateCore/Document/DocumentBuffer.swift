@@ -52,6 +52,8 @@ struct HistoryEntry {
     var bookmarksAfter: Set<Int>
     var forwardChanges: [PositionChange]
     var backwardChanges: [PositionChange]
+    var forwardPositions: PositionMap
+    var backwardPositions: PositionMap
     var retainedBytes: Int
     var name: String
 }
@@ -83,6 +85,8 @@ public final class DocumentBuffer {
     public private(set) var lastActionName = ""
     private var undoEntries: [HistoryEntry] = []
     private var redoEntries: [HistoryEntry] = []
+    var positionJournal: [RevisionPositionMap] = []
+    var positionJournalChanges = 0
     public var canUndo: Bool {
         !undoEntries.isEmpty && !isReadOnly && !isEditingSuspended
     }
@@ -175,6 +179,7 @@ public final class DocumentBuffer {
         }
         let unique = transaction.edits
         let changes = transaction.changes
+        let positions = transaction.positions
         let formatAfter = transaction.format
         let name = transaction.name
         guard
@@ -192,8 +197,8 @@ public final class DocumentBuffer {
             transaction.selections
             ?? normalizedSelections().map {
                 TextSelection(
-                    anchor: Self.map($0.anchor, through: changes),
-                    head: Self.map($0.head, through: changes),
+                    anchor: positions.map($0.anchor),
+                    head: positions.map($0.head),
                     virtualColumn: $0.virtualColumn
                 )
             }
@@ -208,9 +213,10 @@ public final class DocumentBuffer {
             bookmarks.map {
                 text.lineStart($0)
             }.map {
-                Self.map($0, through: changes)
+                positions.map($0)
             }
         )
+        let backwardChanges = Self.inverseChanges(changes)
         let entry = HistoryEntry(
             before: text,
             after: prepared,
@@ -225,7 +231,9 @@ public final class DocumentBuffer {
                 }
             ),
             forwardChanges: changes,
-            backwardChanges: Self.inverseChanges(changes),
+            backwardChanges: backwardChanges,
+            forwardPositions: positions,
+            backwardPositions: PositionMap(validatedChanges: backwardChanges),
             retainedBytes: changes.reduce(512) {
                 $0 + $1.range.count + $1.insertedByteCount + 4096
             },
@@ -238,6 +246,7 @@ public final class DocumentBuffer {
         lastChanges = entry.forwardChanges
         lastActionName = name
         selections = after
+        recordPositions(positions)
         revision += 1
         undoEntries.append(entry)
         var retained = undoEntries.reduce(0) {
@@ -324,6 +333,7 @@ public final class DocumentBuffer {
         lastEdits = []
         lastChanges = entry.backwardChanges
         selections = entry.selectionsBefore
+        recordPositions(entry.backwardPositions)
         revision += 1
         redoEntries.append(entry)
     }
@@ -341,6 +351,7 @@ public final class DocumentBuffer {
         lastEdits = []
         lastChanges = entry.forwardChanges
         selections = entry.selectionsAfter
+        recordPositions(entry.forwardPositions)
         revision += 1
         undoEntries.append(entry)
     }
@@ -350,7 +361,7 @@ public final class DocumentBuffer {
     /// - position: 修改前位置。
     /// - edits: 已排序的修改列表。
     /// 返回：删除内位置收拢到新片段末端，边界插入归属于后侧。
-    public static func map(_ position: Int, through edits: [TextEdit]) -> Int {
+    public nonisolated static func map(_ position: Int, through edits: [TextEdit]) -> Int {
         map(
             position,
             through: edits.map {
@@ -364,7 +375,7 @@ public final class DocumentBuffer {
     /// - position: 修改前字节位置。
     /// - changes: 同一快照上的有序范围变换。
     /// 返回：被删除位置归于新片段末端，未涉及位置保持相对文本关系。
-    public static func map(_ position: Int, through changes: [PositionChange]) -> Int {
+    public nonisolated static func map(_ position: Int, through changes: [PositionChange]) -> Int {
         var delta = 0
         for edit in changes {
             if position < edit.range.lower {

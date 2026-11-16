@@ -62,6 +62,15 @@ extension ApplicationController {
         guard await flushRecovery() else {
             return
         }
+        // 恢复等待期间可以发生关闭、只读切换或其他目标动作，旧确认不能跨越这些边界。
+        guard !closing, !document.closing, !document.bindingChange, !document.buffer.isReadOnly,
+            !document.buffer.isEditingSuspended,
+            documents.contains(where: {
+                $0 === document
+            })
+        else {
+            return
+        }
         document.bindingChange = true
         defer {
             document.bindingChange = false
@@ -70,19 +79,31 @@ extension ApplicationController {
             _ = await task.value
         }
         // 恢复落盘与在途写入均可挂起，授权只属于用户刚刚审阅的正文。
-        guard document.buffer.revision == revision, document.url == url else {
+        guard document.buffer.revision == revision, document.url == url,
+            !document.buffer.isReadOnly, !document.buffer.isEditingSuspended
+        else {
             SystemIntegration.alert("文档已变化", "请基于当前正文与路径重新处理冲突。")
             return
         }
         let snapshot = document.buffer.snapshot
         let encoding = document.encoding
         let catalog = codecs
+        let permit = CancellationToken()
+        document.savePermit = permit
+        defer {
+            if document.savePermit === permit {
+                document.savePermit = nil
+            }
+        }
         do {
             let result = try await fileIO.run {
                 try FileStorage.save(
                     encoding.encode(snapshot.text.text(), catalog: catalog),
                     to: url,
-                    expected: expected
+                    expected: expected,
+                    permit: {
+                        !permit.isCancelled
+                    }
                 )
             }
             document.baseline = result
@@ -93,6 +114,10 @@ extension ApplicationController {
             document.failure = nil
             document.state = "已保存"
             document.evaluateDirty()
+            refreshUI()
+        }
+        catch is CancellationError {
+            document.state = "本次写回已取消"
             refreshUI()
         }
         catch {

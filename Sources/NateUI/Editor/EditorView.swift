@@ -111,14 +111,13 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             viewSelections = document.selections
         }
         else if observedRevision != document.revision {
-            viewSelections = viewSelections.map {
-                selection in
-                let anchor = DocumentBuffer.map(selection.anchor, through: document.lastChanges)
-                let head = DocumentBuffer.map(selection.head, through: document.lastChanges)
-                return TextSelection(
-                    anchor: min(anchor, document.text.byteCount),
-                    head: min(head, document.text.byteCount)
-                )
+            if let mapped = document.mapSelections(viewSelections, from: observedRevision) {
+                viewSelections = mapped
+            }
+            else {
+                // 无完整修订证据时不猜测旧偏移，采用文档当前的合法活动选区。
+                viewSelections = document.selections
+                onStatus?("原视图位置超出保留的修订链，已同步当前活动光标。")
             }
         }
         if observedRevision != document.revision {

@@ -137,13 +137,28 @@ extension ApplicationController {
         defer {
             releaseTarget(resolved.path, owner: owner)
         }
+        // 只读切换撤销尚未发布的显式保存，替换已完成时仍确认实际保存点。
+        let permit = CancellationToken()
+        document.savePermit = permit
+        defer {
+            if document.savePermit === permit {
+                document.savePermit = nil
+            }
+        }
         do {
             let result = try await fileIO.run {
                 let expected =
                     FileManager.default.fileExists(atPath: destination.path)
                     ? try FileStorage.baseline(destination) : nil
                 let data = try encoding.encode(snapshot.text.text(), catalog: catalog)
-                return try FileStorage.save(data, to: destination, expected: expected)
+                return try FileStorage.save(
+                    data,
+                    to: destination,
+                    expected: expected,
+                    permit: {
+                        !permit.isCancelled
+                    }
+                )
             }
             if !copy {
                 document.targetGeneration += 1
@@ -177,6 +192,9 @@ extension ApplicationController {
             refreshUI()
             _ = await flushRecovery()
         }
+        catch is CancellationError {
+            mainWindow?.status.stringValue = "保存请求已取消，当前正文与原关联保持可用。"
+        }
         catch {
             SystemIntegration.alert("保存失败", error.localizedDescription)
         }
@@ -200,7 +218,6 @@ extension ApplicationController {
             return
         }
         let snapshot = document.buffer.snapshot
-        let positions = document.buffer.selections
         let monitoring = document.monitoring
         if let task = document.saveTask {
             _ = await task.value
@@ -211,31 +228,23 @@ extension ApplicationController {
         do {
             let (loaded, prepared) = try await readIO.read {
                 let loaded = try FileStorage.load(url, encoding: encoding, catalog: catalog)
-                let selections =
-                    monitoring
-                    ? positions.map {
-                        selection -> TextSelection in
-                        var head = min(selection.head, loaded.tree.byteCount)
-                        if selection.head == snapshot.text.byteCount {
-                            head = loaded.tree.byteCount
-                        }
-                        while !loaded.tree.isBoundary(head) {
-                            head -= 1
-                        }
-                        return TextSelection(anchor: head, head: head)
-                    } : [TextSelection(anchor: 0, head: 0)]
+                let format = DocumentFormat(
+                    codePage: loaded.encoding.codePage,
+                    bom: loaded.encoding.bom,
+                    lineEnding: loaded.lineEnding
+                )
                 let prepared = try PreparedTransaction(
                     replacing: snapshot,
                     with: loaded.tree,
-                    selectionsAfter: selections,
-                    formatAfter: DocumentFormat(
-                        codePage: loaded.encoding.codePage,
-                        bom: loaded.encoding.bom,
-                        lineEnding: loaded.lineEnding
-                    ),
+                    selectionsAfter: monitoring ? nil : [TextSelection(anchor: 0, head: 0)],
+                    formatAfter: format,
                     name: "重新载入"
                 )
                 return (loaded, prepared)
+            }
+            // 停止监视或开始关闭后，旧读取结果不得继续发布到缓冲区。
+            guard !closing, !document.closing, !monitoring || document.monitoring else {
+                return
             }
             let readOnly = document.buffer.isReadOnly
             document.buffer.isReadOnly = false
@@ -250,8 +259,11 @@ extension ApplicationController {
             document.dirtyHint = false
             document.conflict = false
             document.failure = nil
-            mainWindow?.editor.refresh()
-            if monitoring && positions.first?.head == snapshot.text.byteCount {
+            document.state = monitoring ? "监视中 · 已刷新" : "已重新载入"
+            mainWindow?.refreshEditors()
+            if monitoring && document.buffer.selections.first?.head == document.buffer.text.byteCount
+                && mainWindow?.editor.document.id == document.buffer.id
+            {
                 mainWindow?.editor.revealSelection()
             }
             refreshUI()

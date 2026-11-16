@@ -127,15 +127,15 @@ extension EditorView {
         let edits = merged.map {
             TextEdit($0, "")
         }
-        after = after.map {
-            selection in
-            TextSelection(
-                anchor: DocumentBuffer.map(selection.anchor, through: edits),
-                head: DocumentBuffer.map(selection.head, through: edits),
-                virtualColumn: selection.virtualColumn
-            )
-        }
         do {
+            let positions = try PositionMap(edits: edits)
+            after = after.map {
+                TextSelection(
+                    anchor: positions.map($0.anchor),
+                    head: positions.map($0.head),
+                    virtualColumn: $0.virtualColumn
+                )
+            }
             let changed = try document.commit(edits, selectionsAfter: after, name: forward ? "向后删除" : "退格")
             viewSelections = after
             refresh(reveal: true)
