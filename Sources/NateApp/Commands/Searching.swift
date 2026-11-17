@@ -295,12 +295,14 @@ extension ApplicationController {
                 self.refreshUI()
             }
             catch is CancellationError {
-                if generation == self.queryGeneration {
+                // 错误反馈同样属于原查询，不能覆盖用户已经改写的表达式状态。
+                if generation == self.queryGeneration, self.findWindow?.options == options {
                     self.findWindow?.feedback.stringValue = "已取消，未发布搜索计划。"
                 }
             }
             catch {
-                if generation == self.queryGeneration {
+                // 表达式失败也必须持有原输入的反馈权，不能覆盖已经改变的查找条件。
+                if generation == self.queryGeneration, self.findWindow?.options == options {
                     self.findWindow?.feedback.stringValue = error.localizedDescription
                 }
             }

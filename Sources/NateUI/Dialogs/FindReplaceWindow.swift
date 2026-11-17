@@ -48,6 +48,22 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         return result
     }
 
+    /// 业务作用：复验跨文件请求的完整输入，目录或过滤条件的变化也会撤销旧计划继续发布和写盘的权限。
+    /// 参数说明:
+    /// - options: 发起请求时的查找与替换条件。
+    /// - directory: 原请求根目录的完整输入。
+    /// - filters: 原请求的包含与排除模式。
+    /// 返回：所有条件和路径、过滤原文完全相同时为真，不进行 Unicode 规范化或路径改写。
+    public func matchesDirectoryRequest(
+        options: SearchOptions,
+        directory: String,
+        filters: String
+    ) -> Bool {
+        self.options == options
+            && self.directory.stringValue.utf8.elementsEqual(directory.utf8)
+            && self.filters.stringValue.utf8.elementsEqual(filters.utf8)
+    }
+
     /// 业务作用：创建可持续操作的非模态查找替换窗口，常用选项始终可见。
     /// 参数说明: 无。
     /// 返回：不阻断正文编辑的独立窗口。

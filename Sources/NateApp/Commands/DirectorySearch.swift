@@ -188,7 +188,14 @@ extension ApplicationController {
                 guard !self.closing, generation == self.queryGeneration else {
                     return
                 }
-                guard self.findWindow?.options == requested else {
+                // 目录和过滤条件同样决定目标集合，后台计划不能在这些输入变化后取得发布权。
+                guard
+                    self.findWindow?.matchesDirectoryRequest(
+                        options: requested,
+                        directory: directory,
+                        filters: filters
+                    ) == true
+                else {
                     self.findWindow?.feedback.stringValue = "条件已改变，旧计划未发布。"
                     return
                 }
@@ -210,7 +217,13 @@ extension ApplicationController {
                     }
                 }
                 // 确认窗口会运行嵌套事件循环，原查询条件仍须成立才能开始执行固定计划。
-                guard self.findWindow?.options == requested else {
+                guard
+                    self.findWindow?.matchesDirectoryRequest(
+                        options: requested,
+                        directory: directory,
+                        filters: filters
+                    ) == true
+                else {
                     self.findWindow?.feedback.stringValue = "条件已改变，原计划未执行。"
                     return
                 }
@@ -220,7 +233,13 @@ extension ApplicationController {
                         break
                     }
                     // 文件动作等待期间可以重新编辑条件，后续文件不得继续沿用已经撤销的请求参数。
-                    guard self.findWindow?.options == requested else {
+                    guard
+                        self.findWindow?.matchesDirectoryRequest(
+                            options: requested,
+                            directory: directory,
+                            filters: filters
+                        ) == true
+                    else {
                         output.append("条件已改变；后续文件未开始。")
                         break
                     }
@@ -339,7 +358,14 @@ extension ApplicationController {
                 self.refreshUI()
             }
             catch {
-                if generation == self.queryGeneration {
+                // 枚举或编译失败也不能把旧目录条件的错误发布到新请求上。
+                if generation == self.queryGeneration,
+                    self.findWindow?.matchesDirectoryRequest(
+                        options: requested,
+                        directory: directory,
+                        filters: filters
+                    ) == true
+                {
                     self.findWindow?.feedback.stringValue =
                         error is CancellationError
                         ? "已取消，未发布新的替换计划。" : error.localizedDescription

@@ -160,12 +160,14 @@ extension ApplicationController {
                 }
             }
             catch is CancellationError {
-                if generation == self.queryGeneration {
+                // 取消提示也需保留原表达式身份，输入已改变时不能覆盖当前反馈。
+                if generation == self.queryGeneration, self.findWindow?.options == options {
                     self.findWindow?.feedback.stringValue = "已取消，未发布搜索计划。"
                 }
             }
             catch {
-                if generation == self.queryGeneration {
+                // 迟到的表达式错误不能借相同任务代次覆盖新输入。
+                if generation == self.queryGeneration, self.findWindow?.options == options {
                     self.findWindow?.feedback.stringValue = error.localizedDescription
                 }
             }
