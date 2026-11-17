@@ -121,8 +121,11 @@ public enum FileStorage {
         let target =
             expected.map {
                 URL(fileURLWithPath: $0.resolvedPath)
-            } ?? url.standardizedFileURL
-        let publishedPath = target.resolvingSymlinksInPath().standardizedFileURL.path
+            }
+            ?? url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL
+            .appendingPathComponent(url.lastPathComponent)
+        // 新目标尚不存在时不能依赖整条路径解析；先固定已有父目录，避免别名在发布前后产生不同路径证据。
+        let publishedPath = target.path
         let expectedDigest = digest(data)
         // 符号链接仅写确认过的目标；删除或换目标都必须先重新授权。
         if let expected {
