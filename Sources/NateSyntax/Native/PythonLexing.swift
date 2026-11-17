@@ -1,6 +1,7 @@
 import Foundation
 import NateCore
 
+// Python 样式与字面规则按 Lexilla 的公开定义适配，原作者和许可见随包 licenses/sources.json。
 struct PythonLiteral: Sendable, Equatable {
     let quote: UInt8
     let triple: Bool
@@ -21,6 +22,9 @@ struct PythonExpression: Sendable, Equatable {
 struct PythonLexicalState: Sendable, Equatable {
     var literal: PythonLiteral?
     var expressions: [PythonExpression] = []
+    var keyword = PythonKeywordContext.other
+    var previousAttributeStyle: Int?
+    var continuedInvalid: Bool?
 }
 
 enum PythonLexing {
@@ -29,12 +33,20 @@ enum PythonLexing {
     /// - text: 当前物理行，最后一行可没有换行。
     /// - base: 该行在快照内的 UTF-8 起点。
     /// - keywords: 当前资源的精确关键字集合。
+    /// - secondaryKeywords: 单独呈现的内置标识符集合。
+    /// - rules: 与当前语言一起载入的固定 Unicode 标识符范围。
+    /// - snapshot: 完整呈现所依据的固定正文；为空时只传播当前片段状态。
+    /// - deadline: 当前完整扫描流程的截止时刻。
     /// - state: 当前快照独立维护的词法状态和容量说明。
     /// 返回：原字节范围内的呈现片段，超出单行或嵌套预算时记录原因并拒绝后续样式。
     static func highlight(
         _ text: String,
         base: Int,
         keywords: Set<String>,
+        secondaryKeywords: Set<String>,
+        rules: UnicodeIdentifierRules?,
+        snapshot: DocumentSnapshot?,
+        deadline: ContinuousClock.Instant,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
         // 已失去完整状态的流程不能恢复为中性代码；调用方必须舍弃本次未发布的解析结果。
@@ -45,7 +57,16 @@ enum PythonLexing {
             state.diagnostic = "Python 高亮暂停：单行超过 1 MB。"
             return []
         }
+        // 缺少固定边界资源时不能借用系统属性猜测名称与字符串前缀，避免结构分类随环境改变。
+        guard let rules else {
+            state.diagnostic = "Python 高亮暂停：缺少 Unicode 标识符资源。"
+            return []
+        }
         let bytes = Array(text.utf8)
+        let decoratorLine =
+            bytes.first {
+                $0 != 32 && $0 != 9
+            } == 64
         var output: [SyntaxToken] = []
         var exceeded = false
         var cursor = 0
@@ -86,6 +107,7 @@ enum PythonLexing {
                 let start = literalStart ?? cursor
                 literalStart = nil
                 var style = literal.style
+                let inheritedInvalid = state.python.continuedInvalid
                 var continued = false
                 while cursor < bytes.count {
                     let byte = bytes[cursor]
@@ -102,6 +124,9 @@ enum PythonLexing {
                             continued = true
                         }
                         else {
+                            if cursor + 1 == bytes.count {
+                                continued = true
+                            }
                             cursor = min(bytes.count, cursor + 2)
                         }
                     }
@@ -147,35 +172,76 @@ enum PythonLexing {
                     state.python.literal = nil
                     style = 13
                 }
+                if !literal.triple && state.python.literal != nil && continued,
+                    let last = bytes.last, last == 10 || last == 13, let snapshot
+                {
+                    do {
+                        if state.python.continuedInvalid == nil {
+                            state.python.continuedInvalid = try PythonContinuation.invalid(
+                                snapshot: snapshot,
+                                from: base + cursor,
+                                literal: literal,
+                                deadline: deadline
+                            )
+                        }
+                    }
+                    catch {
+                        // 无法完整确认后续字面时，不把此前续行发布为已确定的正常字符串。
+                        state.diagnostic = error.localizedDescription
+                        return []
+                    }
+                }
+                if inheritedInvalid == true || state.python.continuedInvalid == true {
+                    style = 13
+                }
+                if state.python.literal == nil {
+                    state.python.continuedInvalid = nil
+                }
                 emit(start, cursor, style: style)
                 continue
             }
             let start = cursor
             let byte = bytes[cursor]
+            if [10, 13].contains(byte) && state.python.keyword.isCython {
+                state.python.keyword = .other
+            }
             if let expression = state.python.expressions.last {
                 let conversion = byte == 33 && (cursor + 1 == bytes.count || bytes[cursor + 1] != 61)
                 if expression.depth == 0 && (byte == 125 || byte == 58 || conversion) {
                     // 最外层格式分隔符属于原字符串，字典和括号内部的同类字符仍属于表达式。
                     state.python.literal = state.python.expressions.removeLast().literal
+                    state.python.continuedInvalid = nil
                     continue
                 }
                 if [40, 91, 123].contains(byte) {
                     state.python.expressions[state.python.expressions.count - 1].depth += 1
                 }
                 else if [41, 93, 125].contains(byte) {
-                    state.python.expressions[state.python.expressions.count - 1].depth = max(
-                        0,
-                        expression.depth - 1
-                    )
+                    state.python.expressions[state.python.expressions.count - 1].depth = expression.depth - 1
                 }
             }
             if let opening = literalOpening(bytes, at: cursor) {
                 state.python.literal = opening.literal
+                state.python.continuedInvalid = nil
                 literalStart = cursor
                 cursor = opening.end
             }
             else if byte == 35 {
                 while cursor < bytes.count && ![10, 13].contains(bytes[cursor]) {
+                    if let expression = state.python.expressions.last {
+                        let byte = bytes[cursor]
+                        let conversion = byte == 33 && (cursor + 1 == bytes.count || bytes[cursor + 1] != 61)
+                        // 固定词法规则在插值注释中仍识别格式边界，注释样式不能吞掉后续字面区域。
+                        if expression.depth == 0 && (byte == 125 || byte == 58 || conversion) {
+                            break
+                        }
+                        if [40, 91, 123].contains(byte) {
+                            state.python.expressions[state.python.expressions.count - 1].depth += 1
+                        }
+                        else if [41, 93, 125].contains(byte) {
+                            state.python.expressions[state.python.expressions.count - 1].depth -= 1
+                        }
+                    }
                     cursor += 1
                 }
                 emit(start, cursor, style: start + 1 < bytes.count && bytes[start + 1] == 35 ? 12 : 1)
@@ -186,19 +252,48 @@ enum PythonLexing {
                 cursor = numberEnd(bytes, at: cursor)
                 emit(start, cursor, style: 2)
             }
-            else if SyntaxEngine.isWord(byte) {
-                cursor += 1
-                while cursor < bytes.count
-                    && (SyntaxEngine.isWord(bytes[cursor]) || (48...57).contains(bytes[cursor]))
-                {
-                    cursor += 1
+            else if PythonIdentifiers.width(bytes, at: cursor, first: true, rules: rules) > 0 {
+                cursor += PythonIdentifiers.width(bytes, at: cursor, first: true, rules: rules)
+                while cursor < bytes.count {
+                    let width = PythonIdentifiers.width(bytes, at: cursor, first: false, rules: rules)
+                    guard width > 0 else {
+                        break
+                    }
+                    cursor += width
                 }
-                let word = String(decoding: bytes[start..<cursor], as: UTF8.self)
-                emit(start, cursor, style: keywords.contains(word) ? 5 : 11)
+                let attribute = PythonIdentifiers.attributeStyle(
+                    bytes,
+                    before: start,
+                    tokens: output,
+                    base: base,
+                    decoratorLine: decoratorLine,
+                    previous: state.python.previousAttributeStyle
+                )
+                let style = PythonIdentifiers.style(
+                    bytes,
+                    range: start..<cursor,
+                    keywords: keywords,
+                    secondary: secondaryKeywords,
+                    attribute: attribute,
+                    context: &state.python.keyword
+                )
+                emit(start, cursor, style: style)
+            }
+            else if byte == 64 && PythonIdentifiers.firstNonWhitespace(bytes, at: cursor) {
+                cursor += 1
+                while cursor < bytes.count {
+                    let width = PythonIdentifiers.width(bytes, at: cursor, first: true, rules: rules)
+                    guard width > 0 else {
+                        break
+                    }
+                    cursor += width
+                }
+                emit(start, cursor, style: 15)
             }
             else {
                 cursor += 1
-                if "+-*/%&|^~<>=()[]{}:.,;@`".utf8.contains(byte) {
+                if "+-*/%&|^~<>=()[]{}:.,;@`?!".utf8.contains(byte) {
+                    state.python.keyword = .other
                     emit(start, cursor, style: 10)
                 }
             }
@@ -213,6 +308,14 @@ enum PythonLexing {
             state.diagnostic = "Python 高亮暂停：单行词法片段超过 65536 个。"
             return []
         }
+        state.python.previousAttributeStyle = PythonIdentifiers.attributeStyle(
+            bytes,
+            before: bytes.count,
+            tokens: output,
+            base: base,
+            decoratorLine: decoratorLine,
+            previous: state.python.previousAttributeStyle
+        )
         return output
     }
 
@@ -226,12 +329,6 @@ enum PythonLexing {
     )? {
         var quote = offset
         if ![34, 39].contains(bytes[quote]) {
-            guard
-                offset == 0
-                    || !(SyntaxEngine.isWord(bytes[offset - 1]) || (48...57).contains(bytes[offset - 1]))
-            else {
-                return nil
-            }
             while quote < min(bytes.count, offset + 2), "rRuUbBfFtT".utf8.contains(bytes[quote]) {
                 quote += 1
             }
@@ -281,10 +378,12 @@ enum PythonLexing {
     private static func numberEnd(_ bytes: [UInt8], at offset: Int) -> Int {
         var cursor = offset + 1
         var previous = bytes[offset]
+        let based = bytes[offset] == 48 && cursor < bytes.count && "xXoObB".utf8.contains(bytes[cursor])
         while cursor < bytes.count {
             let byte = bytes[cursor]
-            if (48...57).contains(byte) || "abcdefABCDEFxXoObBeEjJ._".utf8.contains(byte)
-                || ([43, 45].contains(byte) && [69, 101].contains(previous))
+            if (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+                || byte == 46 || byte == 95
+                || (!based && [43, 45].contains(byte) && [69, 101].contains(previous))
             {
                 previous = byte
                 cursor += 1

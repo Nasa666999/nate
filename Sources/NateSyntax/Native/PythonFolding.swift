@@ -90,7 +90,7 @@ enum PythonFolding {
         guard snapshot.text.lineCount <= 1_048_576 else {
             throw NateError.message("Python 折叠暂停：真实行数超过 1048576 行。")
         }
-        let scanner = SyntaxScanner(language: language)
+        let scanner = SyntaxScanner(language: language, snapshot: snapshot)
         var state = SyntaxState()
         var output: [PythonFoldLine] = []
         output.reserveCapacity(snapshot.text.lineCount)

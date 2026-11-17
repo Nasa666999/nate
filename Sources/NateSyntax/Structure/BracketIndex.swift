@@ -67,7 +67,9 @@ public struct BracketIndex: Sendable {
         else {
             throw NateError.message("括号匹配暂停：正文超过当前分析预算，或预算配置无效。")
         }
-        let scanner = language.map(SyntaxScanner.init)
+        let scanner = language.map {
+            SyntaxScanner(language: $0, snapshot: snapshot)
+        }
         var native = SyntaxState()
         var user = UDLState()
         var stacks: [BracketClass: [Int]] = [:]

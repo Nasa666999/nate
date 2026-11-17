@@ -57,7 +57,8 @@ extension EditorView {
             syntaxGeneration = UUID()
             syntaxFailure = nil
             syntaxFailedLines = nil
-            if syntaxDocument == document.id, syntaxLanguage == resource,
+            // Python 前置续行样式依赖后续终止符；正文变化后不能仅按修改行复用原先的前缀证据。
+            if language.id != "python", syntaxDocument == document.id, syntaxLanguage == resource,
                 syntaxRevision < UInt64.max,
                 syntaxRevision + 1 == document.revision,
                 let changed = document.lastEdits.map(\.range.lower).min()

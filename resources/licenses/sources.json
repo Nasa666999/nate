@@ -18,5 +18,19 @@
     "licenseFile": "Lexilla-LICENSE.txt",
     "copyright": "Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>",
     "implementation": "Python 折叠级别的 Swift 适配"
+  },
+  "pythonLexing": {
+    "project": "Lexilla",
+    "sources": [
+      "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexPython.cxx",
+      "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexlib/CharacterCategory.cxx"
+    ],
+    "license": "License for Lexilla, Scintilla, and SciTE",
+    "licenseFile": "Lexilla-LICENSE.txt",
+    "copyright": [
+      "Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>",
+      "Copyright 2013 by Neil Hodgson <neilh@scintilla.org>"
+    ],
+    "implementation": "Python 词法样式的 Swift 适配及固定 Unicode 标识符范围"
   }
 }

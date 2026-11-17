@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "22d7b5bea43c5960681951f613b2b25570fe8a986b5615d84fc302c9356c0a20"
+      "sha256" : "b4b6ac1af215564c626397ebb66691ba8f37bb33711f39bea7444f85b9dfed7b"
     },
     {
       "path" : "licenses\/Lexilla-LICENSE.txt",
@@ -554,7 +554,7 @@
     },
     {
       "path" : "licenses\/sources.json",
-      "sha256" : "f41fecfaf286d6e9e575813bf85a2f22a42362bf298858995f2aca7c50e20f59"
+      "sha256" : "01b86d9106e829ac368954a786ed38436c91cee1c99d4e2ea7cfe5c4aa8ebaba"
     },
     {
       "path" : "themes\/dark.json",

@@ -56,12 +56,12 @@ extension ApplicationController {
         )
         if let language = registry?.language(document.language) {
             var state = SyntaxState()
+            let scanner = SyntaxScanner(language: language, snapshot: document.buffer.snapshot)
             for line in 0..<tree.lineCount {
                 let range = tree.lineRange(line)
-                for token in SyntaxEngine.highlight(
+                for token in scanner.highlight(
                     tree.text(in: range),
                     base: range.lower,
-                    language: language,
                     state: &state
                 ) {
                     guard let ns = tree.nsRange(token.range) else {

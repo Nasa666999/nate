@@ -37,7 +37,7 @@ public struct SyntaxAnalysis: Sendable {
         }
         var checkpoints: [Int: LexicalState] = [:]
         var output: [Int: [SyntaxToken]] = [:]
-        let scanner = SyntaxScanner(language: language)
+        let scanner = SyntaxScanner(language: language, snapshot: snapshot)
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         var consumed = 0
         var retainedTokens = 0

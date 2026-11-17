@@ -9,6 +9,8 @@ public struct LanguageDefinition: Codable, Sendable, Identifiable {
     public var blockStart: String
     public var blockEnd: String
     public var keywords: [String]
+    public var keywordGroups: [String: [String]]?
+    var identifierRules: UnicodeIdentifierRules?
 }
 
 public struct LanguageRegistry: Sendable {

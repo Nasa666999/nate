@@ -50,14 +50,24 @@ public struct SyntaxState: Sendable, Equatable {
 public struct SyntaxScanner: Sendable {
     let language: LanguageDefinition
     let keywords: Set<String>
+    let secondaryKeywords: Set<String>
+    let snapshot: DocumentSnapshot?
+    let deadline: ContinuousClock.Instant
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
     /// - language: 本次分析采用的不可变语言定义。
+    /// - snapshot: 完整呈现时用于确认后续字面证据；为空时只传播当前片段的状态。
     /// 返回：可跨后台任务传递的扫描上下文，词法状态由每个调用流程分别持有。
-    public init(language: LanguageDefinition) {
+    public init(language: LanguageDefinition, snapshot: DocumentSnapshot? = nil) {
         self.language = language
-        keywords = Set(language.keywords)
+        self.snapshot = language.id == "python" ? snapshot : nil
+        deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        keywords = Set(
+            language.id == "python"
+                ? language.keywordGroups?["instre1"] ?? language.keywords : language.keywords
+        )
+        secondaryKeywords = Set(language.keywordGroups?["instre2"] ?? [])
     }
 
     /// 业务作用：在固定语言定义下识别当前行并更新其后续词法状态。
@@ -67,7 +77,25 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
-        SyntaxEngine.scan(text, base: base, language: language, keywords: keywords, state: &state)
+        if language.id == "python" {
+            return PythonLexing.highlight(
+                text,
+                base: base,
+                keywords: keywords,
+                secondaryKeywords: secondaryKeywords,
+                rules: language.identifierRules,
+                snapshot: snapshot,
+                deadline: deadline,
+                state: &state
+            )
+        }
+        return SyntaxEngine.scan(
+            text,
+            base: base,
+            language: language,
+            keywords: keywords,
+            state: &state
+        )
     }
 }
 
@@ -103,9 +131,6 @@ public enum SyntaxEngine {
         keywords: Set<String>,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
-        if language.id == "python" {
-            return PythonLexing.highlight(text, base: base, keywords: keywords, state: &state)
-        }
         if ["normal", "nfo"].contains(language.id) {
             return []
         }
