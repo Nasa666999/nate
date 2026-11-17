@@ -2,9 +2,21 @@ import AppKit
 import NateSearch
 
 @MainActor
-public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
+public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, NSWindowDelegate {
     public var onAction: ((String, SearchOptions, String, String) -> Void)?
     public var onDismiss: (() -> Void)?
+    public var onStateChange: ((SearchWindowState) -> Void)?
+    public var onResetSavedState: ((SearchWindowState) -> Void)? {
+        didSet {
+            resetSavedState.isHidden = onResetSavedState == nil
+        }
+    }
+    var restoringState = false
+    let resetSavedState = NSButton(
+        title: "重新保存设置",
+        target: nil,
+        action: nil
+    )
     public let feedback = NSTextField(wrappingLabelWithString: "输入查找内容。普通模式按字面查找，扩展模式解释反斜杠转义。")
     let query = SearchInputBox(frame: .zero)
     let replacement = SearchInputBox(frame: .zero)
@@ -95,6 +107,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         window.minSize = NSSize(width: 750, height: 400)
         window.setFrameAutosaveName("Nate.FindReplace")
         super.init(window: window)
+        window.delegate = self
         let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
@@ -129,18 +142,29 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         query.onHistoryChange = {
             [weak self] values in
             self?.queryHistory = values
+            self?.stateChanged()
         }
         replacement.onHistoryChange = {
             [weak self] values in
             self?.replaceHistory = values
+            self?.stateChanged()
         }
         directory.onHistoryChange = {
             [weak self] values in
             self?.directoryHistory = values
+            self?.stateChanged()
         }
         filters.onHistoryChange = {
             [weak self] values in
             self?.filterHistory = values
+            self?.stateChanged()
+        }
+        for option in [
+            caseSensitive, wholeWord, dot, backwards, wrap, selection, recursive, includeHidden, diskBuffers,
+            stay, confirmOpen,
+        ] {
+            option.target = self
+            option.action = #selector(optionsChanged)
         }
         let grid = NSGridView(views: [
             [NSTextField(labelWithString: "查找内容"), query],
@@ -195,7 +219,11 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         }
         let swap = NSButton(title: "交换查找与替换", target: self, action: #selector(swapInputs))
         swap.controlSize = .small
-        root.addArrangedSubview(NSStackView(views: [button("cancel", "取消任务"), swap]))
+        resetSavedState.controlSize = .small
+        resetSavedState.target = self
+        resetSavedState.action = #selector(resetSavedSettings)
+        resetSavedState.isHidden = true
+        root.addArrangedSubview(NSStackView(views: [button("cancel", "取消任务"), swap, resetSavedState]))
         feedback.font = NSFont.systemFont(ofSize: 11)
         feedback.textColor = .secondaryLabelColor
         root.addArrangedSubview(feedback)
@@ -272,6 +300,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         if focus {
             window?.makeFirstResponder(query)
         }
+        stateChanged()
     }
 
     /// 业务作用：交换完整查找和替换原文，长内容与不可见字符不经过显示摘要或历史标签。
@@ -287,6 +316,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         let originalReplacement = replacement.stringValue
         query.stringValue = originalReplacement
         replacement.stringValue = originalQuery
+        stateChanged()
     }
 
     /// 业务作用：独立按钮标识与公共命令回调保持一致。
@@ -318,6 +348,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
             wholeWord.state = .off
             backwards.state = .off
         }
+        stateChanged()
     }
 
     /// 业务作用：记录完整历史并将操作提交给应用后台搜索协调。
@@ -345,6 +376,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
             }
             feedback.stringValue =
                 "正在执行… · 查找 \(query.stringValue.utf8.count) 字节，替换 \(replacement.stringValue.utf8.count) 字节"
+            stateChanged()
         }
         onAction?(id, options, directory.stringValue, filters.stringValue)
     }
@@ -380,6 +412,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
             return false
         }
         if name == "cancelOperation:" {
+            stateChanged()
             window?.orderOut(nil)
             onDismiss?()
             return true

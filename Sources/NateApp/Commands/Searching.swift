@@ -15,6 +15,22 @@ extension ApplicationController {
         mainWindow?.editor.finishComposition()
         if findWindow == nil {
             let window = FindReplaceWindow()
+            do {
+                try window.restore(searchSettingsState)
+            }
+            catch {
+                searchSettingsError = error.localizedDescription
+            }
+            if searchSettingsURL != nil {
+                window.onStateChange = {
+                    [weak self] state in
+                    self?.scheduleSearchSettings(state)
+                }
+                window.onResetSavedState = {
+                    [weak self] state in
+                    self?.resetSearchSettings(state)
+                }
+            }
             window.onAction = {
                 [weak self] action, options, directory, filters in
                 self?.search(action, options: options, directory: directory, filters: filters)
@@ -33,6 +49,9 @@ extension ApplicationController {
             range.range.count <= 4096 ? active?.buffer.text.text(in: range.range) : nil
         }
         findWindow?.present(selection: selection, page: inFiles ? .files : replacing ? .replace : .find)
+        if let searchSettingsError {
+            findWindow?.feedback.stringValue = searchSettingsError
+        }
     }
 
     /// 业务作用：固定请求身份、快照和范围，在后台搜索完成后复验再发布。

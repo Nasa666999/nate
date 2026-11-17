@@ -40,6 +40,9 @@ extension ApplicationController {
             return .terminateCancel
         }
         closing = true
+        if let findWindow {
+            scheduleSearchSettings(findWindow.state)
+        }
         readIO.cancelReads()
         cancelCompletion()
         cancelStructure()
@@ -61,7 +64,8 @@ extension ApplicationController {
             _ = await TaskBoundary.wait(
                 until: deadline,
                 while: {
-                    externalCommandTask != nil || searchTask != nil || !closingDocumentIDs.isEmpty
+                    externalCommandTask != nil || searchTask != nil || searchSettingsTask != nil
+                        || !closingDocumentIDs.isEmpty
                 }
             )
             // 既有关闭仍可能移除或恢复标签，成员集合未收束时不能确认最终退出索引。
@@ -72,6 +76,9 @@ extension ApplicationController {
                 return
             }
             var failures: [String] = []
+            if searchSettingsTask != nil || searchSettingsError != nil {
+                failures.append(searchSettingsError ?? "搜索设置仍在保存。")
+            }
             // 临时文档由最后一次统一恢复发布保护，避免逐标签重复写入整份工作区正文。
             for document in documents where document.url != nil {
                 if !(await flush(document, deadline: deadline)) {
@@ -106,7 +113,7 @@ extension ApplicationController {
             }
             if !failures.isEmpty || !protected {
                 let alert = NSAlert()
-                alert.messageText = protected ? "恢复副本已保存，部分原文件未保存" : "恢复内容尚未全部落盘"
+                alert.messageText = protected ? "恢复副本已保存，部分内容尚未持久化" : "恢复内容尚未全部落盘"
                 alert.informativeText = failures.joined(separator: "\n") + "\n取消可继续编辑并处理保存失败。"
                 alert.addButton(withTitle: "取消退出")
                 if protected {

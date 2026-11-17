@@ -32,6 +32,18 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var userLanguageBaselines: [String: DiskBaseline] = [:]
     var publishingResources = false
     var findWindow: FindReplaceWindow?
+    let searchSettingsIO = IOExecutor(
+        name: "nate.search.settings",
+        concurrency: 1,
+        maximumStalled: 0
+    )
+    var searchSettingsURL: URL?
+    var searchSettingsState = SearchWindowState()
+    var searchSettingsBaseline: DiskBaseline?
+    var searchSettingsReady = false
+    var searchSettingsError: String?
+    var pendingSearchSettings: SearchWindowState?
+    var searchSettingsTask: Task<Void, Never>?
     var fileTasksWindow: FileTasksWindow?
     var savedBackupsWindow: SavedBackupsWindow?
     var savedBackupRecords: [SavedFileBackup] = []
@@ -153,6 +165,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             instanceLease = lease
             saveBackupStore = SaveBackupStore(directory: support.appendingPathComponent("SavedBackups"))
             loadSaveBackupPolicy()
+            await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
                 try await recoveryIO.run {
