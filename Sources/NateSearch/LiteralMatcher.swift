@@ -9,18 +9,21 @@ enum LiteralMatcher {
     /// - range: 当前搜索范围。
     /// - options: 大小写、全词与结果预算。
     /// - firstOnly: 是否在首个完整命中后停止。
+    /// - backwards: 是否从范围终点倒向起点匹配，保留反向查找的重叠候选。
     /// 返回：不交叠的字面命中，取消与超时明确失败。
     static func find(
         snapshot: DocumentSnapshot,
         input: [UInt16],
         range: NSRange,
         options: SearchOptions,
-        firstOnly: Bool = false
+        firstOnly: Bool = false,
+        backwards: Bool = false
     )
         throws -> SearchResult
     {
         let query = options.mode == .extended ? ExtendedEscapes.decode(options.query) : options.query
-        let pattern = query.utf16.map {
+        let units = Array(query.utf16)
+        let pattern = (backwards ? Array(units.reversed()) : units).map {
             fold($0, sensitive: options.caseSensitive)
         }
         guard !pattern.isEmpty else {
@@ -42,8 +45,9 @@ enum LiteralMatcher {
         var hits: [SearchHit] = []
         j = 0
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-        for i in range.location..<(range.location + range.length) {
-            if i % 4096 == 0 {
+        for offset in 0..<range.length {
+            let i = backwards ? range.location + range.length - 1 - offset : range.location + offset
+            if offset % 4096 == 0 {
                 try Task.checkCancellation()
                 guard ContinuousClock.now < deadline else {
                     throw NateError.message("字面搜索超过 10 秒预算。")
@@ -57,12 +61,15 @@ enum LiteralMatcher {
                 j += 1
             }
             if j == pattern.count {
-                let start = i + 1 - pattern.count
-                let end = i + 1
+                let start = backwards ? i : i + 1 - pattern.count
+                let end = start + pattern.count
                 if !options.wholeWord
                     || (start == 0 || !word(input[start - 1])) && (end == input.count || !word(input[end]))
                 {
-                    let range = NSRange(location: start, length: pattern.count)
+                    let range = NSRange(
+                        location: start,
+                        length: pattern.count
+                    )
                     hits.append(
                         SearchHit(
                             utf16Range: range,

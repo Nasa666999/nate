@@ -50,14 +50,10 @@ extension ApplicationController {
         afterReplacement: Bool = false
     ) {
         searchTask?.cancel()
-        if action == "cancel" {
-            findWindow?.feedback.stringValue = "正在取消；已发布的文件修改会保留实际完成清单。"
-            return
-        }
         queryGeneration = UUID()
         let generation = queryGeneration
         if action == "cancel" {
-            findWindow?.feedback.stringValue = "已取消搜索。"
+            findWindow?.feedback.stringValue = "正在取消；已发布的文件修改会保留实际完成清单。"
             return
         }
         if action == "files" || action == "replaceFiles" {
@@ -75,6 +71,10 @@ extension ApplicationController {
         }
         if options.mode == .regex && (action == "previous" || options.backwards) {
             findWindow?.feedback.stringValue = "正则默认禁用反向搜索；请使用正向匹配导航。"
+            return
+        }
+        if ["next", "previous", "replaceOne"].contains(action) {
+            navigateSearch(action, options: options, afterReplacement: afterReplacement)
             return
         }
         if action == "replaceOpen", findWindow?.confirmsOpenReplacement == true {
@@ -109,8 +109,6 @@ extension ApplicationController {
             return
         }
         let actualScope = captured.count == 1 ? captured[0].1.description : "\(captured.count) 个文档全文 · 正向"
-        let startingSelection = active.buffer.selections.first?.range ?? ByteRange(0, 0)
-        let activeID = active.buffer.id
         searchTask = Task {
             [weak self] in
             guard let self else {
@@ -125,9 +123,7 @@ extension ApplicationController {
                         let result = try SearchEngine.find(
                             in: snapshot,
                             options: scope.options,
-                            scope: scope.range,
-                            enumeration: ["next", "previous", "replaceOne"].contains(action)
-                                ? .navigation : .batch
+                            scope: scope.range
                         )
                         let edits =
                             action.hasPrefix("replace")
@@ -173,65 +169,6 @@ extension ApplicationController {
                         document.dirtyHint = !edits.isEmpty || document.dirtyHint
                         count += result.hits.count
                     }
-                    else if action == "replaceOne" {
-                        guard document.buffer.id == activeID else {
-                            continue
-                        }
-                        guard
-                            let index = result.hits.firstIndex(where: {
-                                $0.range == startingSelection
-                            })
-                        else {
-                            self.findWindow?.feedback.stringValue = "当前选区不是该条件的完整匹配，请先查找。"
-                            return
-                        }
-                        try document.buffer.commit(
-                            [edits[index]],
-                            expectedRevision: snapshot.revision,
-                            name: "替换一个"
-                        )
-                        document.dirtyHint = true
-                        count = 1
-                        if self.findWindow?.stayAfterReplace == true {
-                            let range = ByteRange(
-                                edits[index].range.lower,
-                                edits[index].range.lower + edits[index].text.utf8.count
-                            )
-                            document.buffer.selections = [
-                                TextSelection(anchor: range.lower, head: range.upper)
-                            ]
-                        }
-                    }
-                    else if ["next", "previous"].contains(action) {
-                        let previous = action == "previous"
-                        let candidates = result.hits.filter {
-                            hit in
-                            guard let range = hit.range else {
-                                return false
-                            }
-                            return previous
-                                ? range.upper <= startingSelection.lower && range != startingSelection
-                                : range.lower >= startingSelection.upper && range != startingSelection
-                        }
-                        let hit =
-                            previous
-                            ? candidates.last ?? (options.wrap ? result.hits.last : nil)
-                            : candidates.first ?? (options.wrap ? result.hits.first : nil)
-                        if let range = hit?.range {
-                            document.buffer.selections = [
-                                TextSelection(anchor: range.lower, head: range.upper)
-                            ]
-                            self.mainWindow?.editor.refresh(reveal: true)
-                            self.findWindow?.feedback.stringValue =
-                                (afterReplacement ? "已替换 1 处；" : "") + "共 \(result.hits.count) 个匹配，已定位当前匹配。"
-                        }
-                        else {
-                            self.findWindow?.feedback.stringValue =
-                                (afterReplacement ? "已替换 1 处；" : "") + "已到达边界或没有匹配。"
-                        }
-                        self.refreshUI()
-                        return
-                    }
                     else if action == "mark" {
                         for hit in result.hits {
                             guard let range = hit.range else {
@@ -275,15 +212,6 @@ extension ApplicationController {
                 }
                 self.mainWindow?.refreshEditors()
                 self.refreshUI()
-                if action == "replaceOne" && self.findWindow?.stayAfterReplace == false {
-                    self.search(
-                        options.backwards ? "previous" : "next",
-                        options: options,
-                        directory: "",
-                        filters: "",
-                        afterReplacement: true
-                    )
-                }
             }
             catch is CancellationError {
                 if generation == self.queryGeneration {

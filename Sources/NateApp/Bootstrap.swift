@@ -63,6 +63,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var initialRecoveryConfirmation = true
     var publishedRecoveryWorkspace: RecoveryWorkspaceState?
     var searchTask: Task<Void, Never>?
+    var searchNavigationEvidence: SearchNavigationEvidence?
+    var searchNavigationGeneration = UUID()
     var externalObservationTask: Task<Void, Never>?
     var externalStamps: [UUID: FileStamp] = [:]
     var targetReservations: [String: UUID] = [:]

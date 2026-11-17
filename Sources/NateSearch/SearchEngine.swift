@@ -36,6 +36,7 @@ public enum SearchEngine {
     /// - allowEmpty: 是否发布零长度命中；结构提取只接受非空名称。
     /// - enumeration: 相邻匹配和末尾边界的继续规则。
     /// - limitContextToScope: 为真时断言和全文终点受目标终点约束；结构规则可保留完整正文上下文。
+    /// - allowEmptyAtStart: 是否接受本次调用起点的空匹配；已选中的空命中继续导航时关闭。
     /// 返回：与同一正文身份关联的搜索结果。
     static func find(
         in snapshot: DocumentSnapshot,
@@ -45,7 +46,8 @@ public enum SearchEngine {
         firstOnly: Bool,
         allowEmpty: Bool,
         enumeration: SearchEnumeration = .batch,
-        limitContextToScope: Bool = true
+        limitContextToScope: Bool = true,
+        allowEmptyAtStart: Bool = true
     ) throws -> SearchResult {
         guard !options.query.isEmpty else {
             throw NateError.message("请输入查找内容。")
@@ -88,7 +90,7 @@ public enum SearchEngine {
         var hits: [SearchHit] = []
         var callStart = position
         var searchStart = position
-        var previousEmpty: Bool?
+        var previousEmpty: Bool? = allowEmptyAtStart ? nil : true
         let policy = allowEmpty ? enumeration : .nonEmpty
         while position <= end {
             try matcher.checkpoint()

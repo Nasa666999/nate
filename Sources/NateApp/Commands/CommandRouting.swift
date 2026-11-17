@@ -158,6 +158,8 @@ extension ApplicationController {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
         case "selectionChanged":
+            searchNavigationEvidence = nil
+            searchNavigationGeneration = UUID()
             cancelCompletion()
             activeID = mainWindow?.editor.document.id
             refreshUI()
