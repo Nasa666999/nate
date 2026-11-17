@@ -2,12 +2,12 @@ import AppKit
 import NateSearch
 
 @MainActor
-public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
+public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
     public var onAction: ((String, SearchOptions, String, String) -> Void)?
     public var onDismiss: (() -> Void)?
     public let feedback = NSTextField(wrappingLabelWithString: "输入查找内容。普通模式按字面查找，扩展模式解释反斜杠转义。")
-    let query = NSComboBox()
-    let replacement = NSComboBox()
+    let query = SearchInputBox(frame: .zero)
+    let replacement = SearchInputBox(frame: .zero)
     let directory = NSTextField()
     let filters = NSTextField(string: "*.*")
     let mode = NSPopUpButton()
@@ -90,6 +90,12 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
         replacement.placeholderString = "替换为（留空表示删除）"
         query.delegate = self
         replacement.delegate = self
+        for input in [query, replacement] {
+            input.onFeedback = {
+                [weak self] message in
+                self?.feedback.stringValue = message
+            }
+        }
         let grid = NSGridView(views: [
             [NSTextField(labelWithString: "查找内容"), query],
             [NSTextField(labelWithString: "替换为"), replacement],
@@ -203,13 +209,13 @@ public final class FindReplaceWindow: NSWindowController, NSComboBoxDelegate {
         queryHistory = Array(
             ([query.stringValue]
                 + queryHistory.filter {
-                    $0 != query.stringValue
+                    !$0.utf8.elementsEqual(query.stringValue.utf8)
                 }).prefix(30)
         )
         replaceHistory = Array(
             ([replacement.stringValue]
                 + replaceHistory.filter {
-                    $0 != replacement.stringValue
+                    !$0.utf8.elementsEqual(replacement.stringValue.utf8)
                 }).prefix(30)
         )
         query.removeAllItems()

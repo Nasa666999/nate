@@ -101,20 +101,21 @@ extension ApplicationController {
                 (document.buffer.id, SearchDocumentAuthority(document))
             }
         )
-        let captured: [(DocumentSnapshot, ResolvedSearchScope, String)]
+        let captured: [BufferSearchCapture]
         do {
             captured = try targets.map {
                 document in
                 let snapshot = document.buffer.snapshot
-                return (
-                    snapshot,
-                    try SearchScope.resolve(
+                return BufferSearchCapture(
+                    snapshot: snapshot,
+                    scope: try SearchScope.resolve(
                         action: action,
                         snapshot: snapshot,
                         options: options,
                         selections: document.buffer.selections
                     ),
-                    document.url?.path ?? document.name
+                    label: document.url?.path ?? document.name,
+                    bookmarks: action == "mark" ? document.buffer.bookmarks : nil
                 )
             }
         }
@@ -122,7 +123,7 @@ extension ApplicationController {
             findWindow?.feedback.stringValue = error.localizedDescription
             return
         }
-        let actualScope = captured.count == 1 ? captured[0].1.description : "\(captured.count) 个文档全文 · 正向"
+        let actualScope = captured.count == 1 ? captured[0].scope.description : "\(captured.count) 个文档全文 · 正向"
         let displaysResults = !action.hasPrefix("replace") && !["count", "mark"].contains(action)
         searchTask = Task {
             [weak self] in
@@ -138,15 +139,15 @@ extension ApplicationController {
             do {
                 let worker = Task.detached(priority: .userInitiated) {
                     var preview = SearchResultPreviewBuilder()
+                    var unmappedBookmarks = 0
                     let batches = try captured.map {
-                        snapshot,
-                        scope,
-                        label in
+                        capture in
                         try Task.checkCancellation()
+                        let snapshot = capture.snapshot
                         let result = try SearchEngine.find(
                             in: snapshot,
-                            options: scope.options,
-                            scope: scope.range
+                            options: capture.scope.options,
+                            scope: capture.scope.range
                         )
                         let edits =
                             action.hasPrefix("replace")
@@ -160,10 +161,22 @@ extension ApplicationController {
                             ) : nil
                         let rows =
                             displaysResults
-                            ? try preview.prepare(result.hits, text: snapshot.text, label: label) : []
-                        return (snapshot, result, edits, prepared, rows)
+                            ? try preview.prepare(result.hits, text: snapshot.text, label: capture.label) : []
+                        let bookmarks = try capture.bookmarks.map {
+                            try SearchEngine.bookmarkPlan(result, snapshot: snapshot, existing: $0)
+                        }
+                        unmappedBookmarks += bookmarks?.unmappedCount ?? 0
+                        return BufferSearchPlan(
+                            snapshot: snapshot,
+                            result: result,
+                            edits: edits,
+                            transaction: prepared,
+                            previews: rows,
+                            originalBookmarks: capture.bookmarks,
+                            bookmarkPlan: bookmarks
+                        )
                     }
-                    return (batches, preview.unmappedCount)
+                    return (batches, preview.unmappedCount + unmappedBookmarks)
                 }
                 let (batches, unmapped) = try await withTaskCancellationHandler(
                     operation: {
@@ -180,7 +193,8 @@ extension ApplicationController {
                 }
                 var resolved: [UUID: WorkspaceDocument] = [:]
                 // 多文档动作先复验完整集合，再开始同步发布，避免后一个目标失效时前一个已经被改写。
-                for (snapshot, _, _, _, _) in batches {
+                for plan in batches {
+                    let snapshot = plan.snapshot
                     guard
                         let document = self.documents.first(where: {
                             candidate in
@@ -188,6 +202,12 @@ extension ApplicationController {
                         }), authorities[snapshot.id]?.matches(document) == true
                     else {
                         throw NateError.staleRevision
+                    }
+                    // 后台期间手动增删的书签属于更新的用户意图，旧集合不能覆盖它们。
+                    if let original = plan.originalBookmarks {
+                        guard document.buffer.bookmarks == original else {
+                            throw NateError.message("书签已改变，原标记计划未发布，请重新执行。")
+                        }
                     }
                     if action.hasPrefix("replace"), !document.buffer.isReadOnly {
                         guard !document.buffer.isEditingSuspended, document.buffer.revision < UInt64.max
@@ -201,7 +221,9 @@ extension ApplicationController {
                 var skipped = 0
                 var output: [String] = []
                 var navigation: [ResultNavigation] = []
-                for (snapshot, result, edits, prepared, rows) in batches {
+                for plan in batches {
+                    let snapshot = plan.snapshot
+                    let result = plan.result
                     guard let document = resolved[snapshot.id] else {
                         throw NateError.staleRevision
                     }
@@ -210,27 +232,22 @@ extension ApplicationController {
                             skipped += 1
                             continue
                         }
-                        if let prepared {
+                        if let prepared = plan.transaction {
                             try document.buffer.commit(prepared)
                         }
-                        document.dirtyHint = !edits.isEmpty || document.dirtyHint
+                        document.dirtyHint = !plan.edits.isEmpty || document.dirtyHint
                         count += result.hits.count
                     }
                     else if action == "mark" {
-                        for hit in result.hits {
-                            guard let range = hit.range else {
-                                continue
-                            }
-                            let a = snapshot.text.lineNumber(at: range.lower)
-                            let b = snapshot.text.lineNumber(at: max(range.lower, range.upper - 1))
-                            document.buffer.bookmarks.formUnion(a...b)
+                        if let bookmarks = plan.bookmarkPlan {
+                            document.buffer.bookmarks = bookmarks.lines
                         }
                         count += result.hits.count
                     }
                     else {
                         count += result.hits.count
                         if displaysResults {
-                            for row in rows {
+                            for row in plan.previews {
                                 output.append(row.text)
                                 navigation.append(
                                     ResultNavigation(
