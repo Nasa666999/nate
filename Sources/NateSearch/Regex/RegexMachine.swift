@@ -18,6 +18,7 @@ enum RegexInstruction {
     case repetition(RegexRepeat)
     case repeated(RegexRepeat, Int)
     case alternative([RegexNode], Int, Int)
+    case subroutine([Int: NSRange])
 }
 
 struct RegexPath {
@@ -42,8 +43,12 @@ extension CancellableMatcher {
         requiredEnd: Int? = nil
     ) throws -> MatchState? {
         var choices = [RegexPath(state: state, pending: [.node(node, depth)])]
+        var pruned = false
+        var thenEncountered = false
         try reserve(paths: 1, instructions: 1)
         defer {
+            lastRegionPruned = pruned
+            lastRegionThen = thenEncountered
             for choice in choices {
                 release(choice)
             }
@@ -55,7 +60,19 @@ extension CancellableMatcher {
             while let instruction = path.pending.popLast() {
                 retainedInstructions -= 1
                 try checkpoint()
+                if path.state.accepted {
+                    switch instruction {
+                    case .capture, .modes, .subroutine:
+                        break
+                    default:
+                        continue
+                    }
+                }
                 switch instruction {
+                case .subroutine(let captures):
+                    // 子程序内部捕获只属于本次调用，返回后恢复调用方证据，定义块不能冒充已经参与的捕获。
+                    path.state.captures = captures
+                    path.state.accepted = false
                 case .capture(let id, let start):
                     path.state.captures[id] = NSRange(location: start, length: path.state.position - start)
                 case .modes(let sensitive, let dot, let multiline):
@@ -117,16 +134,20 @@ extension CancellableMatcher {
                         try push(.node(.reference(id), depth + 1), onto: &path)
                     case .repeatNode(let child, let minimum, let maximum, let greedy, let possessive):
                         if possessive {
-                            guard
-                                let accepted = try firstMatch(
-                                    .repeatNode(child, minimum, maximum, greedy, false),
-                                    path.state,
-                                    depth: depth + 1
-                                )
-                            else {
+                            let accepted = try firstMatch(
+                                .repeatNode(child, minimum, maximum, greedy, false),
+                                path.state,
+                                depth: depth + 1
+                            )
+                            if accepted == nil && lastRegionPruned {
+                                // 原子区域失败时的 PRUNE 控制仍约束外层旧候选，不能重新尝试被撤销的路径。
+                                trim(&choices, throughAlternative: false)
+                                pruned = true
+                            }
+                            guard let accepted else {
                                 continue backtrack
                             }
-                            path.state = accepted
+                            try acceptAtomic(accepted, path: &path, choices: &choices)
                         }
                         else {
                             try push(
@@ -143,29 +164,40 @@ extension CancellableMatcher {
                             )
                         }
                     case .assertion(let child, let positive, let behind):
-                        guard
-                            let accepted = try assertion(
-                                child,
-                                positive: positive,
-                                behind: behind,
-                                state: path.state,
-                                depth: depth + 1
-                            )
-                        else {
+                        let accepted = try assertion(
+                            child,
+                            positive: positive,
+                            behind: behind,
+                            state: path.state,
+                            depth: depth + 1
+                        )
+                        if lastRegionThen && accepted?.accepted != true {
+                            // 普通断言的 THEN 会撤销外层最近分支资格，不能将其当作负向断言成功。
+                            trim(&choices, throughAlternative: true)
+                            thenEncountered = true
+                            continue backtrack
+                        }
+                        guard let accepted else {
                             continue backtrack
                         }
                         path.state = accepted
                     case .atomic(let child):
-                        guard let accepted = try firstMatch(child, path.state, depth: depth + 1) else {
+                        let accepted = try firstMatch(child, path.state, depth: depth + 1)
+                        if accepted == nil && lastRegionPruned {
+                            trim(&choices, throughAlternative: false)
+                            pruned = true
+                        }
+                        guard let accepted else {
                             continue backtrack
                         }
-                        path.state = accepted
+                        try acceptAtomic(accepted, path: &path, choices: &choices)
                     case .resetStart:
                         path.state.start = path.state.position
                     case .recurse(let id):
                         guard let child = id == 0 ? compiled.root : compiled.groups[id] else {
                             throw NateError.message("未知正则子程序 \(id)。")
                         }
+                        try push(.subroutine(path.state.captures), onto: &path)
                         try push(.node(child, depth + 1), onto: &path)
                     case .namedRecurse(let name):
                         guard let id = compiled.names[name]?.first else {
@@ -185,13 +217,33 @@ extension CancellableMatcher {
                         path.state.dot = dot ?? path.state.dot
                         path.state.multiline = multiline ?? path.state.multiline
                         try push(.node(child, depth + 1), onto: &path)
+                    case .control(let verb):
+                        switch verb {
+                        case .fail:
+                            continue backtrack
+                        case .accept:
+                            path.state.accepted = true
+                        case .then:
+                            trim(&choices, throughAlternative: true)
+                            thenEncountered = true
+                        case .prune, .skip, .commit:
+                            // 控制点之前的候选不再具有回退资格，后续表达式仍可产生自己的局部候选。
+                            trim(&choices, throughAlternative: false)
+                            pruned = true
+                            if verb == .commit {
+                                restart = .stop
+                            }
+                            else if verb == .skip && path.state.position != scanStart {
+                                restart = .position(path.state.position)
+                            }
+                        }
                     }
                 }
             }
             if let end, path.state.position > end {
                 continue
             }
-            if let requiredEnd, path.state.position != requiredEnd {
+            if let requiredEnd, !path.state.accepted, path.state.position != requiredEnd {
                 continue
             }
             return path.state
@@ -210,6 +262,7 @@ extension CancellableMatcher {
     mutating func assertion(_ child: RegexNode, positive: Bool, behind: Int?, state: MatchState, depth: Int)
         throws -> MatchState?
     {
+        lastRegionThen = false
         var probe = state
         if let behind {
             guard state.position >= behind else {
@@ -223,6 +276,10 @@ extension CancellableMatcher {
             depth: depth,
             requiredEnd: behind == nil ? nil : state.position
         )
+        if var accepted = matched, accepted.accepted {
+            accepted.position = state.position
+            return accepted
+        }
         if positive, var accepted = matched {
             accepted.position = state.position
             return accepted
@@ -245,7 +302,20 @@ extension CancellableMatcher {
             return compiled.names[name]?.contains(where: {
                 state.captures[$0] != nil
             }) == true ? state : nil
-        case .assertion(let expression): return try firstMatch(expression, state, depth: depth)
+        case .assertion(let expression):
+            guard case .assertion(let child, let positive, let behind) = expression else {
+                throw NateError.message("条件断言缺少独立的查找规则。")
+            }
+            var accepted = try assertion(
+                child,
+                positive: positive,
+                behind: behind,
+                state: state,
+                depth: depth
+            )
+            // 条件谓词的提前接受只确认条件，后续仍须执行选定分支。
+            accepted?.accepted = false
+            return accepted
         case .definition: return nil
         }
     }

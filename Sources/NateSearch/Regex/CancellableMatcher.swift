@@ -8,6 +8,7 @@ struct MatchState {
     var sensitive: Bool
     var dot: Bool
     var multiline = true
+    var accepted = false
 }
 
 struct CancellableMatcher {
@@ -20,6 +21,9 @@ struct CancellableMatcher {
     var scanStart = 0
     var retainedPaths = 0
     var retainedInstructions = 0
+    var restart = RegexRestart.next
+    var lastRegionPruned = false
+    var lastRegionThen = false
 
     /// 业务作用：在每个执行步骤限制计算、内存和取消延迟。
     /// 参数说明: 无。

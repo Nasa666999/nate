@@ -82,6 +82,7 @@ public enum SearchEngine {
         while position <= end {
             try matcher.checkpoint()
             matcher.scanStart = lastEnd
+            matcher.restart = .next
             let initial = MatchState(
                 position: position,
                 start: position,
@@ -130,7 +131,14 @@ public enum SearchEngine {
                     continue
                 }
             }
-            position += 1
+            switch matcher.restart {
+            case .next:
+                position += 1
+            case .position(let next):
+                position = max(position + 1, next)
+            case .stop:
+                position = end + 1
+            }
         }
         return SearchResult(
             documentID: snapshot.id,

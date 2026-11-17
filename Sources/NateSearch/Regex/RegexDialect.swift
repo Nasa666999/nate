@@ -22,6 +22,7 @@ indirect enum RegexNode: Sendable {
     case namedRecurse(String)
     case conditional(RegexCondition, RegexNode, RegexNode)
     case flags(Bool?, Bool?, Bool?, RegexNode)
+    case control(RegexVerb)
 }
 
 struct RegexModes {
@@ -269,7 +270,7 @@ struct RegexParser {
         switch node {
         case .literal, .any, .characterClass: return 1
         case .quoted(let units): return units.count
-        case .directive, .empty, .anchor, .assertion, .resetStart: return 0
+        case .directive, .empty, .anchor, .assertion, .resetStart, .control: return 0
         case .capture(_, let n), .atomic(let n), .flags(_, _, _, let n): return fixedWidth(n)
         case .sequence(let nodes):
             let widths = nodes.compactMap(fixedWidth)

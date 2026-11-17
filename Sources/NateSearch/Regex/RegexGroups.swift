@@ -2,11 +2,18 @@ import Foundation
 import NateCore
 
 extension RegexParser {
-    /// 业务作用：解析捕获、断言与子程序，保证组内模式不会泄漏到外层。
+    /// 业务作用：解析捕获、断言、子程序和回溯控制，未知动词在匹配前失败，组内模式不泄漏到外层。
     /// 参数说明:
     /// - depth: 外层语法深度。
     /// 返回：完整分组节点；结构或捕获引用无效时失败。
     mutating func group(depth: Int) throws -> RegexNode {
+        if take(42) {
+            let name = try readUntil(41)
+            guard let verb = RegexVerb(rawValue: name == "F" ? "FAIL" : name) else {
+                throw diagnostic("未知回溯控制动词或不支持的动词参数")
+            }
+            return .control(verb)
+        }
         var group: Int?
         var assertion: (Bool, Bool)?
         var atomic = false
