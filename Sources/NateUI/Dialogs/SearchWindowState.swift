@@ -15,11 +15,12 @@ public struct SearchWindowState: Codable, Sendable {
     public var stayAfterReplace = false
     public var confirmsOpenReplacement = true
     public var presentation = SearchPresentationPreferences()
+    public var inputFont = SearchInputFont()
 
     enum CodingKeys: String, CodingKey {
         case format, options, directory, filters
         case queryHistory, replacementHistory, directoryHistory, filterHistory
-        case page, stayAfterReplace, confirmsOpenReplacement, presentation
+        case page, stayAfterReplace, confirmsOpenReplacement, presentation, inputFont
     }
 
     /// 业务作用：建立独立于文档和窗口对象的搜索配置快照，供启动恢复与后台保存使用。
@@ -48,6 +49,7 @@ public struct SearchWindowState: Codable, Sendable {
         presentation =
             try values.decodeIfPresent(SearchPresentationPreferences.self, forKey: .presentation)
             ?? SearchPresentationPreferences()
+        inputFont = try values.decodeIfPresent(SearchInputFont.self, forKey: .inputFont) ?? SearchInputFont()
     }
 
     /// 业务作用：在归档解析后和编码前限定配置格式、历史条目和完整文本容量，拒绝无界配置分配。
@@ -59,6 +61,7 @@ public struct SearchWindowState: Codable, Sendable {
             throw NateError.message("搜索设置格式无法识别，原归档已保留。")
         }
         try presentation.validate()
+        try inputFont.validate()
         let histories = [queryHistory, replacementHistory, directoryHistory, filterHistory]
         guard histories.allSatisfy({ $0.count <= 30 }) else {
             throw NateError.message("搜索历史每类最多 30 项，原归档已保留。")

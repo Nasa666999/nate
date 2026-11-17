@@ -15,6 +15,7 @@ extension FindReplaceWindow {
         result.stayAfterReplace = stayAfterReplace
         result.confirmsOpenReplacement = confirmsOpenReplacement
         result.presentation = presentationPreferences
+        result.inputFont = inputFontConfiguration
         return result
     }
 
@@ -29,6 +30,7 @@ extension FindReplaceWindow {
         defer {
             restoringState = false
         }
+        try applyInputFont(state.inputFont, notify: false)
         query.stringValue = state.options.query
         presentationPreferences = state.presentation
         replacement.stringValue = state.options.replacement

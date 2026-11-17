@@ -7,6 +7,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     public var onDismiss: (() -> Void)?
     public var onSelectionContextRequest: (() -> Void)?
     public var presentationPreferences = SearchPresentationPreferences()
+    var inputFontConfiguration = SearchInputFont()
     public var onStateChange: ((SearchWindowState) -> Void)?
     public var onResetSavedState: ((SearchWindowState) -> Void)? {
         didSet {
@@ -231,14 +232,28 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
             action: #selector(showInputPreferences)
         )
         inputSettings.controlSize = .small
+        let fontSettings = NSButton(
+            title: "输入字体",
+            target: self,
+            action: #selector(showInputFont)
+        )
+        fontSettings.controlSize = .small
         root.addArrangedSubview(
-            NSStackView(views: [button("cancel", "取消任务"), swap, inputSettings, resetSavedState])
+            NSStackView(views: [
+                button("cancel", "取消任务"), swap, inputSettings, fontSettings, resetSavedState,
+            ])
         )
         feedback.font = NSFont.systemFont(ofSize: 11)
         feedback.textColor = .secondaryLabelColor
         root.addArrangedSubview(feedback)
         feedback.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -36).isActive = true
         window.center()
+        do {
+            try applyInputFont(inputFontConfiguration, notify: false)
+        }
+        catch {
+            feedback.stringValue = error.localizedDescription
+        }
         modeChanged()
         selectPage(.find, focus: false)
     }
@@ -322,6 +337,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         fileActions.isHidden = !files
         markActions.isHidden = page != .mark
         window?.title = page.rawValue + " — Nate"
+        updateInputMinimumSize()
         window?.contentView?.layoutSubtreeIfNeeded()
         if focus {
             window?.makeFirstResponder(query)

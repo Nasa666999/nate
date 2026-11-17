@@ -13,6 +13,14 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     public weak var delegate: (any NSTextFieldDelegate)?
     public var onFeedback: ((String) -> Void)?
     public var onHistoryChange: (([String]) -> Void)?
+    public var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) {
+        didSet {
+            field.font = font
+            field.currentEditor()?.font = font
+            editor?.text.font = font
+            invalidateIntrinsicContentSize()
+        }
+    }
     public var placeholderString: String? {
         get {
             field.placeholderString
@@ -36,11 +44,12 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
         }
     }
 
-    /// 业务作用：搜索输入尺寸由窗口约束决定，不按完整表达式测量固有宽高。
+    /// 业务作用：搜索输入按字体行高确定尺寸，不按完整表达式测量固有宽高。
     /// 参数说明: 无。
-    /// 返回：固定的单行输入区域。
+    /// 返回：随字号调整、与表达式长度无关的单行输入区域。
     public override var intrinsicContentSize: NSSize {
-        NSSize(width: 550, height: 28)
+        // 大段粘贴转入摘要期间原生字段可能短暂持有完整内容，尺寸只能读取字体度量，不能查询字段文字尺寸。
+        NSSize(width: 550, height: max(28, ceil(font.ascender - font.descender + font.leading + 12)))
     }
 
     /// 业务作用：允许查找窗口把键盘焦点交给输入组件，由组件选择短输入或全文编辑入口。
@@ -57,6 +66,7 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         field.delegate = self
+        field.font = font
         field.maximumNumberOfLines = 1
         field.lineBreakMode = .byClipping
         edit.target = self
@@ -216,7 +226,7 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
         let full = requiresFullEditor
         field.isEditable = !full
         field.stringValue = full ? "完整输入 · \(raw.utf8.count) 字节 · 请使用“编辑全文”" : raw
-        field.toolTip = full ? "完整表达式已保留，点击“编辑全文”查看或修改。" : nil
+        field.toolTip = full ? "完整输入 · \(raw.utf8.count) 字节；点击“编辑全文”查看或修改。" : nil
     }
 
     /// 业务作用：选择历史时恢复完整表达式，短菜单标签不能成为查询原文。
@@ -265,6 +275,7 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
             window?.makeFirstResponder(edit)
         }
         let controller = SearchExpressionEditor(value: raw)
+        controller.text.font = font
         let generation = inputGeneration
         controller.onComplete = {
             [weak self] value in
