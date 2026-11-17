@@ -35,6 +35,8 @@ public struct SearchHit: Sendable {
     public let captures: [Int: NSRange]
     public let names: [String: Int]
     public let context: SearchMatchContext?
+    public let captureCount: Int
+    public let lastClosedCapture: Int?
 
     /// 业务作用：保留正则字符单位与无损修改范围的差异。
     /// 参数说明:
@@ -43,19 +45,25 @@ public struct SearchHit: Sendable {
     /// - captures: 已参与的捕获，未参与组不登记。
     /// - names: 命名捕获索引。
     /// - context: 本轮搜索实际允许读取的替换前后文，为空时采用原始完整正文。
+    /// - captureCount: 表达式实际定义的最高捕获号，包含未参与的尾部捕获；省略时从已有捕获推导。
+    /// - lastClosedCapture: 最终成功路径最后关闭的捕获号，不能以最大已参与组号代替。
     /// 返回：只读命中证据。
     public init(
         utf16Range: NSRange,
         range: ByteRange?,
         captures: [Int: NSRange] = [:],
         names: [String: Int] = [:],
-        context: SearchMatchContext? = nil
+        context: SearchMatchContext? = nil,
+        captureCount: Int? = nil,
+        lastClosedCapture: Int? = nil
     ) {
         self.utf16Range = utf16Range
         self.range = range
         self.captures = captures
         self.names = names
         self.context = context
+        self.captureCount = captureCount ?? captures.keys.max() ?? 0
+        self.lastClosedCapture = lastClosedCapture
     }
 }
 

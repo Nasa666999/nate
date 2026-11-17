@@ -1,16 +1,19 @@
+// Copyright (c) 1998-2009 John Maddock
+// Copyright 2008 Eric Niebler.
+// 替换格式适配按 Boost Software License 1.0 分发，许可全文见 resources/licenses/Boost-LICENSE.txt。
 import Foundation
 import NateCore
 
 enum Substitution {
-    /// 业务作用：解释 Boost 风格捕获、上下文与大小写替换，空替换合法。
+    /// 业务作用：解释 Boost 扩展替换格式，分组、条件与大小写状态沿实际执行顺序共享。
     /// 参数说明:
-    /// - format: 用户替换表达式。
-    /// - hit: 已参与捕获、命名映射和本轮前后文范围。
-    /// - text: 原快照正文树，只有实际引用的范围才建立有界副本。
-    /// - outputLimit: 单项与整份计划剩余额度中的较小值。
-    /// - budget: 全部命中与嵌套格式共用的实际计算及展开预算。
-    /// - depth: 内部分组展开深度。
-    /// 返回：完整替换文字；格式错误在提交前失败。
+    /// - format: 完整替换格式，UTF-8 输入上限为 1 MiB。
+    /// - hit: 原快照的捕获、最后关闭捕获和逐轮上下文。
+    /// - text: 不可变正文树，只读取实际引用的范围。
+    /// - outputLimit: 单项和整份计划剩余输出额度中的较小值。
+    /// - budget: 整份计划共用的计算和读取预算。
+    /// - depth: 所属格式的初始嵌套深度。
+    /// 返回：完整合法 UTF-8 输出；孤立代理项、取消及任何预算失败均不产生部分计划。
     static func expand(
         _ format: String,
         hit: SearchHit,
@@ -20,289 +23,167 @@ enum Substitution {
         depth: Int = 0
     ) throws -> String {
         try budget.checkpoint(force: true)
-        guard depth < 128 else {
-            throw NateError.message("替换格式嵌套超过 128 层。")
+        guard format.utf8.count <= ReplacementBudget.formatLimit else {
+            throw NateError.message("替换格式超过 1 MiB。")
         }
-        let chars = Array(format)
-        var i = 0
-        var result = ""
-        var resultBytes = 0
-        var mode = ""
-        var one = ""
-        /// 业务作用：读取实际参与捕获的原文本，不将未参与组登记为空捕获。
-        /// 参数说明:
-        /// - id: 捕获组号。
-        /// 返回：参与捕获的正文，未参与组只在输出时产生空文字。
-        func captured(_ id: Int) throws -> String {
-            guard let range = hit.captures[id] else {
-                return ""
-            }
-            return try source(range)
+        var formatter = ReplacementFormatter(
+            units: Array(format.utf16),
+            hit: hit,
+            text: text,
+            writer: ReplacementWriter(limit: outputLimit)
+        )
+        try formatter.scope(depth: depth, budget: &budget)
+        return try formatter.writer.finish(budget: &budget)
+    }
+}
+
+enum ReplacementCase {
+    case copy, none, lower, upper, nextLower, nextUpper
+}
+
+struct ReplacementWriter {
+    let limit: Int
+    var state = ReplacementCase.copy
+    var restore = ReplacementCase.copy
+    var result = ""
+    var byteCount = 0
+    var buffer: [UInt8] = []
+    var highSurrogate: UInt16?
+
+    /// 业务作用：对完整合法片段采用有界直接追加，大小写转换仍按 UTF-16 单元执行。
+    /// 参数说明:
+    /// - text: 最多一个读取分块的合法原文。
+    /// - budget: 原计划的共享预算。
+    /// 返回：按当前状态写入片段，不跨片段重置单次大小写状态。
+    mutating func write(_ text: String, budget: inout ReplacementBudget) throws {
+        if state == .none {
+            return
         }
-        /// 业务作用：只复制替换格式实际请求的原文，禁止在额度校验前展开整篇上下文。
-        /// 参数说明:
-        /// - range: 已参与捕获或本轮上下文的 UTF-16 范围。
-        /// 返回：最多 64 MiB 的合法原文；不能无损映射或超过读取预算时失败。
-        func source(_ range: NSRange) throws -> String {
-            guard let bytes = text.byteRange(range) else {
-                throw NateError.message("替换引用不能无损映射到原文。")
-            }
-            // 大小写转换前的原文也有独立上限，避免用最终输出很小的格式掩盖无界输入分配。
-            guard bytes.count <= ReplacementBudget.itemLimit else {
-                throw NateError.message("单次捕获或上下文读取超过 64 MiB。")
-            }
-            try budget.reserve(bytes.count)
-            let value = text.text(in: bytes)
-            try budget.checkpoint(force: true)
-            return value
-        }
-        /// 业务作用：按当前替换大小写状态追加文字。
-        /// 参数说明:
-        /// - text: 已解释的替换片段。
-        /// 返回：更新输出及单次大小写状态。
-        func append(_ text: String) throws {
-            try budget.reserve(text.utf8.count)
-            var text = text
-            if mode == "L" {
-                text = text.lowercased()
-            }
-            if mode == "U" {
-                text = text.uppercased()
-            }
-            if !one.isEmpty, let first = text.first {
-                text =
-                    (one == "l" ? String(first).lowercased() : String(first).uppercased()) + text.dropFirst()
-                one = ""
-            }
-            try budget.checkpoint(force: true)
-            let count = text.utf8.count
-            guard count <= outputLimit - resultBytes else {
-                throw NateError.message("替换输出超过单项 64 MiB 或总量 256 MiB 预算。")
-            }
-            try budget.reserve(count)
-            result += text
-            resultBytes += count
-        }
-        while i < chars.count {
+        let units = Array(text.utf16)
+        var index = 0
+        while index < units.count {
             try budget.checkpoint()
-            let ch = chars[i]
-            i += 1
-            if ch == "(" {
-                let content = try group(chars, index: &i, budget: &budget)
-                let selected = try conditional(content, hit: hit, budget: &budget)
-                let value = try expand(
-                    selected,
-                    hit: hit,
-                    text: text,
-                    outputLimit: outputLimit - resultBytes,
-                    budget: &budget,
-                    depth: depth + 1
-                )
-                try append(value)
+            if state == .copy && highSurrogate == nil {
+                try flush(budget: &budget)
+                let remainder = String(decoding: units[index...], as: UTF16.self)
+                try append(remainder, budget: &budget)
+                return
             }
-            else if ch == ")" {
-                throw NateError.message("替换格式包含未配对括号；字面括号需要反斜杠转义。")
-            }
-            else if ch == "\\", i < chars.count {
-                let escape = chars[i]
-                i += 1
-                switch escape {
-                case "L", "U": mode = String(escape)
-                case "E": mode = ""
-                case "l", "u": one = String(escape)
-                case "n": try append("\n")
-                case "r": try append("\r")
-                case "t": try append("\t")
-                default:
-                    if escape.isNumber {
-                        var digits = String(escape)
-                        while i < chars.count && chars[i].isNumber {
-                            try budget.checkpoint()
-                            digits.append(chars[i])
-                            i += 1
-                        }
-                        try append(captured(Int(digits) ?? 0))
-                    }
-                    else {
-                        try append(String(escape))
-                    }
-                }
-            }
-            else if ch == "$", i < chars.count {
-                let token = chars[i]
-                i += 1
-                if token == "$" {
-                    try append("$")
-                }
-                else if token == "&" {
-                    try append(captured(0))
-                }
-                else if token == "`" {
-                    let range =
-                        hit.context?.prefix
-                        ?? NSRange(
-                            location: 0,
-                            length: hit.utf16Range.location
-                        )
-                    try append(source(range))
-                }
-                else if token == "'" {
-                    let end = hit.utf16Range.location + hit.utf16Range.length
-                    let range =
-                        hit.context?.suffix
-                        ?? NSRange(
-                            location: end,
-                            length: text.utf16Count - end
-                        )
-                    try append(source(range))
-                }
-                else if token == "+", i < chars.count, chars[i] == "{" {
-                    i += 1
-                    let start = i
-                    while i < chars.count && chars[i] != "}" {
-                        try budget.checkpoint()
-                        i += 1
-                    }
-                    guard i < chars.count else {
-                        throw NateError.message("替换捕获名称未闭合。")
-                    }
-                    let name = String(chars[start..<i])
-                    i += 1
-                    guard let id = hit.names[name] else {
-                        throw NateError.message("替换中引用未知捕获 \(name)。")
-                    }
-                    try append(captured(id))
-                }
-                else if token == "{" || token.isNumber {
-                    var digits = token == "{" ? "" : String(token)
-                    while i < chars.count && chars[i].isNumber {
-                        try budget.checkpoint()
-                        digits.append(chars[i])
-                        i += 1
-                    }
-                    if token == "{" {
-                        guard i < chars.count, chars[i] == "}" else {
-                            throw NateError.message("替换组号未闭合。")
-                        }
-                        i += 1
-                    }
-                    guard let id = Int(digits) else {
-                        throw NateError.message("替换组号无效。")
-                    }
-                    try append(captured(id))
-                }
-                else {
-                    try append("$" + String(token))
-                }
-            }
-            else {
-                try append(String(ch))
-            }
+            try put(units[index], budget: &budget)
+            index += 1
         }
-        return result
     }
 
-    /// 业务作用：保留嵌套与转义边界，读取完整的 Boost 替换分组。
+    /// 业务作用：按单个 UTF-16 单元推进大小写和代理项状态，禁止用替代字符掩盖非法输出。
     /// 参数说明:
-    /// - chars: 原始格式字符。
-    /// - index: 左括号后的解析位置，完成后位于右括号之后。
-    /// - budget: 与外层计划共用的解析及取消预算。
-    /// 返回：分组内部原始格式；未闭合时失败。
-    static func group(_ chars: [Character], index: inout Int, budget: inout ReplacementBudget) throws
-        -> String
-    {
-        let start = index
-        var nesting = 1
-        while index < chars.count {
-            try budget.checkpoint()
-            let ch = chars[index]
-            index += 1
-            if ch == "\\" {
-                index = min(chars.count, index + 1)
-                continue
-            }
-            if ch == "(" {
-                nesting += 1
-            }
-            if ch == ")" {
-                nesting -= 1
-            }
-            guard nesting <= 128 else {
-                throw NateError.message("替换分组超过 128 层。")
-            }
-            if nesting == 0 {
-                return String(chars[start..<(index - 1)])
-            }
+    /// - unit: 格式或捕获中的原始单元。
+    /// - budget: 整份计划预算。
+    /// 返回：只有完整标量进入 UTF-8 缓冲区，等待中的高代理项不提前发布。
+    mutating func put(_ unit: UInt16, budget: inout ReplacementBudget) throws {
+        var unit = unit
+        switch state {
+        case .none:
+            return
+        case .nextLower:
+            unit = mapped(unit, upper: false)
+            state = restore
+        case .nextUpper:
+            unit = mapped(unit, upper: true)
+            state = restore
+        case .lower:
+            unit = mapped(unit, upper: false)
+        case .upper:
+            unit = mapped(unit, upper: true)
+        case .copy:
+            break
         }
-        throw NateError.message("替换分组未闭合。")
-    }
-
-    /// 业务作用：条件替换以捕获是否参与决定分支，而非判断捕获文字是否为空。
-    /// 参数说明:
-    /// - content: 分组内部格式。
-    /// - hit: 原始命中的捕获证据。
-    /// - budget: 与外层计划共用的解析及取消预算。
-    /// 返回：选中的原始分支格式，普通分组保持其内容。
-    static func conditional(_ content: String, hit: SearchHit, budget: inout ReplacementBudget) throws
-        -> String
-    {
-        guard content.first == "?" else {
-            return content
+        let value: UInt32
+        if let high = highSurrogate {
+            guard (0xdc00...0xdfff).contains(unit) else {
+                throw NateError.message("替换输出含孤立 UTF-16 代理项，未修改原文。")
+            }
+            value = 0x10000 + (UInt32(high) - 0xd800) * 1024 + UInt32(unit) - 0xdc00
+            highSurrogate = nil
         }
-        let chars = Array(content)
-        var index = 1
-        let id: Int
-        if index < chars.count && chars[index] == "{" {
-            index += 1
-            let start = index
-            while index < chars.count && chars[index] != "}" {
-                try budget.checkpoint()
-                index += 1
-            }
-            guard index < chars.count, let found = hit.names[String(chars[start..<index])] else {
-                throw NateError.message("条件替换捕获名称无效。")
-            }
-            id = found
-            index += 1
+        else if (0xd800...0xdbff).contains(unit) {
+            highSurrogate = unit
+            return
         }
         else {
-            let start = index
-            while index < chars.count && chars[index].isNumber {
-                try budget.checkpoint()
-                index += 1
-            }
-            guard let found = Int(String(chars[start..<index])) else {
-                throw NateError.message("条件替换缺少组号。")
-            }
-            id = found
+            value = UInt32(unit)
         }
-        let start = index
-        var nesting = 0
-        var divider: Int?
-        while index < chars.count {
-            try budget.checkpoint()
-            let ch = chars[index]
-            if ch == "\\" {
-                index += 2
-                continue
-            }
-            if ch == "(" {
-                nesting += 1
-            }
-            if ch == ")" {
-                nesting -= 1
-            }
-            if ch == ":" && nesting == 0 {
-                divider = index
-                break
-            }
-            index += 1
+        guard let scalar = Unicode.Scalar(value) else {
+            throw NateError.message("替换输出含孤立 UTF-16 代理项，未修改原文。")
         }
-        if hit.captures[id] != nil {
-            return String(chars[start..<(divider ?? chars.count)])
+        let bytes = String(scalar).utf8
+        guard bytes.count <= limit - byteCount else {
+            throw NateError.message("替换输出超过单项 64 MiB 或总量 256 MiB 预算。")
         }
-        return divider.map {
-            String(chars[($0 + 1)...])
-        } ?? ""
+        buffer.append(contentsOf: bytes)
+        byteCount += bytes.count
+        if buffer.count >= 4096 {
+            try flush(budget: &budget)
+        }
+    }
+
+    /// 业务作用：大小写映射保持 Windows 正则的单元边界，不把一个单元扩成多个输出字符。
+    /// 参数说明:
+    /// - unit: 待映射的 UTF-16 单元。
+    /// - upper: 是否使用大写映射。
+    /// 返回：单单元映射；代理项或多单元扩展保留原值，系统非 ASCII 分类仍受平台规则约束。
+    func mapped(_ unit: UInt16, upper: Bool) -> UInt16 {
+        if upper, (97...122).contains(unit) {
+            return unit - 32
+        }
+        if !upper, (65...90).contains(unit) {
+            return unit + 32
+        }
+        guard unit >= 128, let scalar = Unicode.Scalar(unit) else {
+            return unit
+        }
+        let value = upper ? String(scalar).uppercased() : String(scalar).lowercased()
+        let mapped = Array(value.utf16)
+        return mapped.count == 1 ? mapped[0] : unit
+    }
+
+    /// 业务作用：将已经确认合法的片段计入总输出，追加前完成剩余额度校验。
+    /// 参数说明:
+    /// - text: 合法 UTF-8 片段。
+    /// - budget: 原计划共享预算。
+    /// 返回：更新输出及精确 UTF-8 字节数，超限前不追加。
+    mutating func append(_ text: String, budget: inout ReplacementBudget) throws {
+        let count = text.utf8.count
+        guard count <= limit - byteCount else {
+            throw NateError.message("替换输出超过单项 64 MiB 或总量 256 MiB 预算。")
+        }
+        try budget.reserve(count)
+        result += text
+        byteCount += count
+    }
+
+    /// 业务作用：集中发布完整标量缓冲，避免每写入一个字符重算既有输出长度。
+    /// 参数说明:
+    /// - budget: 整份计划的共享预算。
+    /// 返回：缓冲内容追加一次并释放已处理单元，额度或取消失败时停止。
+    mutating func flush(budget: inout ReplacementBudget) throws {
+        guard !buffer.isEmpty else {
+            return
+        }
+        try budget.reserve(buffer.count)
+        result += String(decoding: buffer, as: UTF8.self)
+        buffer.removeAll(keepingCapacity: true)
+    }
+
+    /// 业务作用：完整格式结束后复验输出标量闭合，再交付可进入事务的正文。
+    /// 参数说明:
+    /// - budget: 原计划预算。
+    /// 返回：合法完整替换文本；尾部孤立高代理项明确拒绝。
+    mutating func finish(budget: inout ReplacementBudget) throws -> String {
+        guard highSurrogate == nil else {
+            throw NateError.message("替换输出含孤立 UTF-16 代理项，未修改原文。")
+        }
+        try flush(budget: &budget)
+        try budget.checkpoint(force: true)
+        return result
     }
 }

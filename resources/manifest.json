@@ -537,6 +537,10 @@
       "sha256" : "b4b6ac1af215564c626397ebb66691ba8f37bb33711f39bea7444f85b9dfed7b"
     },
     {
+      "path" : "licenses\/Boost-LICENSE.txt",
+      "sha256" : "2aa0c9c2f81c640306d8394b826e483630e3608e9545a21059b78bfc91c6826f"
+    },
+    {
       "path" : "licenses\/Lexilla-LICENSE.txt",
       "sha256" : "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d"
     },
@@ -554,7 +558,7 @@
     },
     {
       "path" : "licenses\/sources.json",
-      "sha256" : "01b86d9106e829ac368954a786ed38436c91cee1c99d4e2ea7cfe5c4aa8ebaba"
+      "sha256" : "70cd3fd327664fbbfd3626c3cec485493ef9ce1e73ba9393b9c5a4208ecb8e68"
     },
     {
       "path" : "themes\/dark.json",

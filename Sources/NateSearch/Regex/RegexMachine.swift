@@ -18,7 +18,7 @@ enum RegexInstruction {
     case repetition(RegexRepeat)
     case repeated(RegexRepeat, Int)
     case alternative([RegexNode], Int, Int)
-    case subroutine([Int: NSRange], Int?)
+    case subroutine([Int: NSRange], Int?, Int?)
 }
 
 struct RegexPath {
@@ -32,7 +32,7 @@ extension CancellableMatcher {
     /// - node: 本次根表达式、原子区域或断言子树。
     /// - state: 当前起点、捕获和模式。
     /// - depth: 当前语法与子调用深度。
-    /// - end: 完整命中可消费的最后边界；断言仍可读取范围外的真实正文。
+    /// - end: 完整命中可消费的最后边界；回看保留左侧真实正文，前向断言服从上下文终点。
     /// - requiredEnd: Lookbehind 必须结束的精确位置，为空时不增加此限制。
     /// 返回：首个满足终点限制的完整状态；全部路径失败时为空，取消或超限时整次搜索失败。
     mutating func firstMatch(
@@ -69,13 +69,15 @@ extension CancellableMatcher {
                     }
                 }
                 switch instruction {
-                case .subroutine(let captures, let previousRecursion):
-                    // 子程序内部捕获与递归身份只属于本次调用，返回后恢复调用方证据，定义块不能冒充已参与的捕获。
+                case .subroutine(let captures, let previousRecursion, let previousClosed):
+                    // 子程序内部捕获、最后关闭组与递归身份属于本次调用，返回后恢复调用方证据，定义块不能冒充已参与捕获。
                     path.state.captures = captures
                     path.state.currentRecursion = previousRecursion
+                    path.state.lastClosedCapture = previousClosed
                     path.state.accepted = false
                 case .capture(let id, let start):
                     path.state.captures[id] = NSRange(location: start, length: path.state.position - start)
+                    path.state.lastClosedCapture = id
                 case .modes(let sensitive, let dot, let multiline):
                     path.state.sensitive = sensitive
                     path.state.dot = dot
@@ -198,7 +200,14 @@ extension CancellableMatcher {
                         guard let child = id == 0 ? compiled.root : compiled.groups[id] else {
                             throw NateError.message("未知正则子程序 \(id)。")
                         }
-                        try push(.subroutine(path.state.captures, path.state.currentRecursion), onto: &path)
+                        try push(
+                            .subroutine(
+                                path.state.captures,
+                                path.state.currentRecursion,
+                                path.state.lastClosedCapture
+                            ),
+                            onto: &path
+                        )
                         path.state.currentRecursion = id
                         try push(.node(child, depth + 1), onto: &path)
                     case .namedRecurse(let name):

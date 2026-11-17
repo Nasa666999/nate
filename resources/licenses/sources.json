@@ -11,6 +11,17 @@
       "PowerEditor/installer/functionList"
     ]
   },
+  "replacementFormatting": {
+    "project": "Boost.Regex",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/boostregex/boost/regex/v5/regex_format.hpp",
+    "license": "Boost Software License 1.0",
+    "licenseFile": "Boost-LICENSE.txt",
+    "copyright": [
+      "Copyright (c) 1998-2009 John Maddock",
+      "Copyright 2008 Eric Niebler."
+    ],
+    "implementation": "扩展替换格式及大小写状态的 Swift 适配"
+  },
   "pythonFolding": {
     "project": "Lexilla",
     "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexPython.cxx",

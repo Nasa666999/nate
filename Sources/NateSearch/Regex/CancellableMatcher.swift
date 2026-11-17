@@ -10,6 +10,7 @@ struct MatchState {
     var multiline = true
     var accepted = false
     var currentRecursion: Int?
+    var lastClosedCapture: Int?
 }
 
 struct CancellableMatcher {

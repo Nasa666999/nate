@@ -79,6 +79,7 @@ public enum SearchEngine {
             deadline: ContinuousClock.now.advanced(by: .seconds(3))
         )
         let end = range.location + range.length
+        let captureCount = compiled.groups.keys.max() ?? 0
         matcher.contextEnd = limitContextToScope ? end : input.count
         matcher.softEnd = matcher.inputEnd
         while matcher.softEnd > 0,
@@ -154,7 +155,9 @@ public enum SearchEngine {
                                     location: state.position,
                                     length: matcher.inputEnd - state.position
                                 )
-                            )
+                            ),
+                            captureCount: captureCount,
+                            lastClosedCapture: state.lastClosedCapture
                         )
                     )
                     guard hits.count <= options.maxMatches else {
