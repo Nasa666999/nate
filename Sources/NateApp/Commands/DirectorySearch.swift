@@ -83,6 +83,7 @@ extension ApplicationController {
                     let all = listing.files
                     var failures = listing.failures
                     var plans: [DirectoryPlan] = []
+                    var budget = DirectorySearchPlanBudget()
                     var preview = SearchResultPreviewBuilder(permit: {
                         !token.isCancelled
                     })
@@ -99,6 +100,7 @@ extension ApplicationController {
                             let loaded = try self.fileAccess.load(
                                 url,
                                 catalog: catalog,
+                                maximumBytes: DirectoryPlan.maximumSourceBytes,
                                 permit: {
                                     !token.isCancelled
                                 }
@@ -107,10 +109,11 @@ extension ApplicationController {
                             if !identities.insert(identity).inserted {
                                 continue
                             }
+                            let original =
+                                (!options.ignoreOpenBuffers || replacing)
+                                ? opened[loaded.baseline.resolvedPath] : nil
                             let snapshot =
-                                ((!options.ignoreOpenBuffers || replacing)
-                                    ? opened[loaded.baseline.resolvedPath] : nil)
-                                ?? DocumentSnapshot(id: UUID(), revision: 0, text: loaded.tree)
+                                original ?? DocumentSnapshot(id: UUID(), revision: 0, text: loaded.tree)
                             let result = try SearchEngine.find(
                                 in: snapshot,
                                 options: options,
@@ -119,6 +122,7 @@ extension ApplicationController {
                                 }
                             )
                             if !result.hits.isEmpty {
+                                try budget.reserveHits(result.hits.count)
                                 let edits =
                                     replacing
                                     ? try SearchEngine.replacementPlan(
@@ -128,8 +132,14 @@ extension ApplicationController {
                                             !token.isCancelled
                                         }
                                     ) : []
+                                try budget.reserveReplacements(
+                                    edits,
+                                    permit: {
+                                        !token.isCancelled
+                                    }
+                                )
                                 let prepared =
-                                    replacing && opened[loaded.baseline.resolvedPath] != nil
+                                    replacing && original != nil
                                     ? try PreparedTransaction(
                                         snapshot: snapshot,
                                         edits: edits,
@@ -143,10 +153,12 @@ extension ApplicationController {
                                 plans.append(
                                     DirectoryPlan(
                                         url: url,
-                                        loaded: loaded,
-                                        snapshot: snapshot,
-                                        result: result,
-                                        edits: edits,
+                                        baseline: loaded.baseline,
+                                        encoding: loaded.encoding,
+                                        documentID: original?.id,
+                                        revision: original?.revision,
+                                        hitCount: result.hits.count,
+                                        edits: original == nil ? edits : [],
                                         prepared: prepared,
                                         previews: rows
                                     )
@@ -154,7 +166,9 @@ extension ApplicationController {
                             }
                         }
                         catch {
-                            if error is CancellationError || error is SearchPreviewFailure {
+                            if error is CancellationError || error is SearchPreviewFailure
+                                || error is DirectorySearchPlanFailure
+                            {
                                 throw error
                             }
                             failures.append(url.path + "：" + error.localizedDescription)
@@ -178,11 +192,11 @@ extension ApplicationController {
                 var completedFiles = 0
                 var completedHits = 0
                 var unconfirmedFiles = 0
-                if replacing {
+                if replacing && !plans.isEmpty {
                     let alert = NSAlert()
                     alert.messageText = "文件中替换：\(plans.count) 个文件"
                     alert.informativeText =
-                        "共 \(plans.reduce(0) { $0 + $1.result.hits.count }) 处。已打开文件修改缓冲区且可撤销；未打开文件直接写盘并先保存 .nate-backup 副本。"
+                        "共 \(plans.reduce(0) { $0 + $1.hitCount }) 处。已打开文件修改缓冲区且可撤销；未打开文件逐个复验后直接写盘并先保存 .nate-backup 副本。"
                     alert.addButton(withTitle: "执行替换")
                     alert.addButton(withTitle: "取消")
                     guard alert.runModal() == .alertFirstButtonReturn else {
@@ -190,90 +204,72 @@ extension ApplicationController {
                         return
                     }
                 }
+                // 确认窗口会运行嵌套事件循环，原查询条件仍须成立才能开始执行固定计划。
+                guard self.findWindow?.options == requested else {
+                    self.findWindow?.feedback.stringValue = "条件已改变，原计划未执行。"
+                    return
+                }
                 for plan in plans {
                     if Task.isCancelled || self.closing || generation != self.queryGeneration {
                         output.append("已取消；以上为已完成清单。")
                         break
                     }
+                    // 文件动作等待期间可以重新编辑条件，后续文件不得继续沿用已经撤销的请求参数。
+                    guard self.findWindow?.options == requested else {
+                        output.append("条件已改变；后续文件未开始。")
+                        break
+                    }
                     if replacing {
                         do {
-                            if let original = opened[plan.loaded.baseline.resolvedPath] {
+                            if let documentID = plan.documentID {
                                 // 原计划属于打开缓冲区时，关闭、重新打开或改绑都不能降级成直接覆盖磁盘。
                                 guard
                                     let document = self.documents.first(where: {
                                         candidate in
-                                        candidate.buffer.id == original.id
+                                        candidate.buffer.id == documentID
                                     }),
-                                    authorities[original.id]?.matches(document, requireTarget: true) == true,
+                                    authorities[documentID]?.matches(document, requireTarget: true) == true,
                                     !self.closing
                                 else {
                                     throw NateError.message("原缓冲区已关闭、改变或重新绑定，请重新生成替换计划。")
                                 }
-                                if let prepared = plan.prepared {
-                                    try document.buffer.commit(prepared)
+                                guard let prepared = plan.prepared else {
+                                    throw NateError.message("打开缓冲区缺少完整替换事务，正文未改变。")
                                 }
-                                document.dirtyHint = true
+                                if try document.buffer.commit(prepared) {
+                                    document.dirtyHint = true
+                                }
                             }
                             else {
                                 // 计划后新打开的文件不能沿用旧的关闭文件写入通道。
                                 guard
                                     !self.documents.contains(where: {
-                                        $0.baseline?.resolvedPath == plan.loaded.baseline.resolvedPath
+                                        $0.baseline?.resolvedPath == plan.baseline.resolvedPath
                                     })
                                 else {
                                     throw NateError.message("该文件在计划后已打开，请重新执行以修改当前缓冲区。")
                                 }
                                 let owner = UUID()
-                                guard self.reserveTarget(plan.loaded.baseline.resolvedPath, owner: owner)
+                                guard self.reserveTarget(plan.baseline.resolvedPath, owner: owner)
                                 else {
                                     throw NateError.message("目标正在执行其他文件动作。")
                                 }
                                 defer {
-                                    self.releaseTarget(plan.loaded.baseline.resolvedPath, owner: owner)
+                                    self.releaseTarget(plan.baseline.resolvedPath, owner: owner)
                                 }
                                 try await executor.runCancellable {
                                     token in
-                                    var tree = plan.snapshot.text
-                                    for edit in plan.edits.reversed() {
-                                        tree = try tree.replacing(edit.range, with: edit.text)
-                                    }
-                                    let data = try plan.loaded.encoding.encode(tree.text(), catalog: catalog)
-                                    try token.check()
-                                    let backup = plan.url.deletingLastPathComponent().appendingPathComponent(
-                                        plan.url.lastPathComponent + "." + UUID().uuidString + ".nate-backup"
+                                    try plan.replaceFile(
+                                        using: self.fileAccess,
+                                        operations: self.fileOperations,
+                                        catalog: catalog,
+                                        token: token
                                     )
-                                    // 原字节副本先完成持久化，当前目标才可取得自己的单次发布权。
-                                    try token.withChild {
-                                        request in
-                                        _ = try self.fileOperations.save(
-                                            using: self.fileAccess,
-                                            plan.loaded.originalBytes,
-                                            to: backup,
-                                            expected: nil,
-                                            permit: {
-                                                !request.isCancelled
-                                            },
-                                            authority: request
-                                        )
-                                    }
-                                    try token.withChild {
-                                        request in
-                                        _ = try self.fileOperations.save(
-                                            using: self.fileAccess,
-                                            data,
-                                            to: plan.url,
-                                            expected: plan.loaded.baseline,
-                                            permit: {
-                                                !request.isCancelled
-                                            },
-                                            authority: request
-                                        )
-                                    }
                                 }
                             }
-                            output.append("成功 · \(plan.url.path) · \(plan.result.hits.count) 处")
+                            output.append("成功 · \(plan.url.path) · \(plan.hitCount) 处")
                             completedFiles += 1
-                            completedHits += plan.result.hits.count
+                            completedHits += plan.hitCount
                         }
                         catch {
                             output.append("失败 · \(plan.url.path) · \(error.localizedDescription)")
@@ -281,21 +277,20 @@ extension ApplicationController {
                         }
                     }
                     else {
-                        let fromDisk =
-                            options.ignoreOpenBuffers || opened[plan.loaded.baseline.resolvedPath] == nil
+                        let fromDisk = plan.documentID == nil
                         for row in plan.previews {
                             output.append(row.text)
                             navigation.append(
                                 ResultNavigation(
-                                    documentID: fromDisk
-                                        ? nil : opened[plan.loaded.baseline.resolvedPath]?.id,
-                                    revision: fromDisk
-                                        ? nil : opened[plan.loaded.baseline.resolvedPath]?.revision,
+                                    documentID: plan.documentID,
+                                    revision: plan.revision,
                                     url: plan.url,
                                     range: row.range,
-                                    diskBaseline: fromDisk ? plan.loaded.baseline : nil,
-                                    diskEncoding: fromDisk ? plan.loaded.encoding : nil,
-                                    authority: fromDisk ? nil : authorities[plan.snapshot.id]
+                                    diskBaseline: fromDisk ? plan.baseline : nil,
+                                    diskEncoding: fromDisk ? plan.encoding : nil,
+                                    authority: plan.documentID.flatMap {
+                                        authorities[$0]
+                                    }
                                 )
                             )
                         }
@@ -330,7 +325,7 @@ extension ApplicationController {
                     self.findWindow?.feedback.stringValue =
                         Task.isCancelled
                         ? "已取消；以上为实际完成清单。"
-                        : "完成 · \(plans.count) 个命中文件，\(plans.reduce(0) { $0 + $1.result.hits.count }) 处。"
+                        : "完成 · \(plans.count) 个命中文件，\(plans.reduce(0) { $0 + $1.hitCount }) 处。"
                     if unmapped > 0 {
                         self.findWindow?.feedback.stringValue += "其中 \(unmapped) 个 UTF-16 命中无法无损定位。"
                     }
@@ -347,14 +342,4 @@ extension ApplicationController {
             }
         }
     }
-}
-
-struct DirectoryPlan: Sendable {
-    var url: URL
-    var loaded: LoadedFile
-    var snapshot: DocumentSnapshot
-    var result: SearchResult
-    var edits: [TextEdit]
-    var prepared: PreparedTransaction?
-    var previews: [SearchPreviewRow]
 }

@@ -105,12 +105,14 @@ public struct CoordinatedFileAccess: Sendable {
     /// - url: 用户请求打开的文件。
     /// - encoding: 明确指定的解释方式。
     /// - catalog: 严格传统代码页映射。
+    /// - maximumBytes: 同一描述符读取的原字节上限。
     /// - permit: 请求等待与读取的取消权限。
     /// 返回：与原目标一致的完整载入；协调期间移动目标时要求重新打开。
     public func load(
         _ url: URL,
         encoding: TextEncoding? = nil,
         catalog: LegacyCodecCatalog? = nil,
+        maximumBytes: Int = Int.max,
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -118,7 +120,13 @@ public struct CoordinatedFileAccess: Sendable {
         try coordinator.read(at: url, permit: permit) {
             coordinated in
             try validate(coordinated, requested: url, permit: permit)
-            return try FileStorage.load(url, encoding: encoding, catalog: catalog, permit: permit)
+            return try FileStorage.load(
+                url,
+                encoding: encoding,
+                catalog: catalog,
+                maximumBytes: maximumBytes,
+                permit: permit
+            )
         }
     }
 

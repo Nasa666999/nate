@@ -48,19 +48,21 @@ public enum FileStorage {
     /// - url: 待打开文件。
     /// - encoding: 可选的用户指定解释方式。
     /// - catalog: 注入的严格代码页映射。
+    /// - maximumBytes: 原字节读取上限，超过时在分配完整正文前拒绝。
     /// - permit: 等待与读取期间有效的请求权限。
     /// 返回：正文、原始字节与可靠基线；读取中变化时失败。
     public static func load(
         _ url: URL,
         encoding: TextEncoding? = nil,
         catalog: LegacyCodecCatalog? = nil,
+        maximumBytes: Int = Int.max,
         permit: @Sendable () -> Bool = {
             true
         }
     )
         throws -> LoadedFile
     {
-        let bytes = try readData(url, permit: permit)
+        let bytes = try readData(url, maximumBytes: maximumBytes, permit: permit)
         let data = bytes.data
         let baseline = bytes.baseline
         let decoded: (String, TextEncoding, Bool)
