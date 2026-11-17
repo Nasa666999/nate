@@ -194,19 +194,35 @@ public enum SearchEngine {
     /// 参数说明:
     /// - result: 对应快照的匹配结果。
     /// - snapshot: 原始正文与捕获上下文。
-    /// 返回：所有替换均使用原匹配，不重新搜索本次生成的内容。
+    /// 返回：所有替换均使用原匹配，不重新搜索生成内容；范围、取消、格式及膨胀预算失败时不产生部分计划。
     public static func replacementPlan(_ result: SearchResult, snapshot: DocumentSnapshot) throws
         -> [TextEdit]
     {
         guard result.documentID == snapshot.id, result.revision == snapshot.revision else {
             throw NateError.staleRevision
         }
-        let units = Array(snapshot.text.text().utf16)
-        return try result.hits.map {
-            hit in
-            guard let range = hit.range else {
+        guard result.options.replacement.utf8.count <= ReplacementBudget.formatLimit else {
+            throw NateError.message("替换格式超过 1 MiB；请输入完整且不超过上限的格式。")
+        }
+        var budget = ReplacementBudget()
+        try budget.checkpoint(force: true)
+        var edits: [TextEdit] = []
+        var outputBytes = 0
+        var removedBytes = 0
+        var previousEnd = 0
+        let plain =
+            result.options.mode == .extended
+            ? ExtendedEscapes.decode(result.options.replacement) : result.options.replacement
+        for hit in result.hits {
+            try budget.checkpoint(force: true)
+            guard let range = hit.range, snapshot.text.byteRange(hit.utf16Range) == range else {
                 throw NateError.message("命中切开了 UTF-16 代理项，不能无损替换。")
             }
+            // 所有范围属于同一原快照且必须有序不交叠，才能准确预留最终正文而不重复扣除旧内容。
+            guard range.lower >= previousEnd else {
+                throw NateError.message("替换命中范围交叠或顺序失效，未生成计划。")
+            }
+            previousEnd = range.upper
             // 捕获和前后文也会生成正文，任何半代理项都不能经替代字符进入可提交的替换计划。
             let contexts =
                 hit.context.map {
@@ -221,11 +237,38 @@ public enum SearchEngine {
             }
             let value: String
             switch result.options.mode {
-            case .literal: value = result.options.replacement
-            case .extended: value = ExtendedEscapes.decode(result.options.replacement)
-            case .regex: value = try Substitution.expand(result.options.replacement, hit: hit, input: units)
+            case .literal, .extended:
+                value = plain
+            case .regex:
+                value = try Substitution.expand(
+                    result.options.replacement,
+                    hit: hit,
+                    text: snapshot.text,
+                    outputLimit: min(
+                        ReplacementBudget.itemLimit,
+                        ReplacementBudget.outputLimit - outputBytes
+                    ),
+                    budget: &budget
+                )
             }
-            return TextEdit(range, value)
+            let count = value.utf8.count
+            // 先按差额校验再相加，输出和正文预算不会因整数溢出或大量小命中被绕过。
+            guard count <= ReplacementBudget.itemLimit,
+                count <= ReplacementBudget.outputLimit - outputBytes
+            else {
+                throw NateError.message("替换输出超过单项 64 MiB 或总量 256 MiB 预算。")
+            }
+            outputBytes += count
+            removedBytes += range.count
+            edits.append(TextEdit(range, value))
         }
+        guard
+            edits.isEmpty
+                || snapshot.text.byteCount - removedBytes <= ReplacementBudget.documentLimit - outputBytes
+        else {
+            throw NateError.message("替换后的正文超过 1 GiB 预算，未修改原文。")
+        }
+        try budget.checkpoint(force: true)
+        return edits
     }
 }

@@ -6,36 +6,62 @@ enum Substitution {
     /// 参数说明:
     /// - format: 用户替换表达式。
     /// - hit: 已参与捕获、命名映射和本轮前后文范围。
-    /// - input: 原快照 UTF-16 上下文。
+    /// - text: 原快照正文树，只有实际引用的范围才建立有界副本。
+    /// - outputLimit: 单项与整份计划剩余额度中的较小值。
+    /// - budget: 全部命中与嵌套格式共用的实际计算及展开预算。
     /// - depth: 内部分组展开深度。
     /// 返回：完整替换文字；格式错误在提交前失败。
-    static func expand(_ format: String, hit: SearchHit, input: [UInt16], depth: Int = 0) throws -> String {
+    static func expand(
+        _ format: String,
+        hit: SearchHit,
+        text: PieceTree,
+        outputLimit: Int,
+        budget: inout ReplacementBudget,
+        depth: Int = 0
+    ) throws -> String {
+        try budget.checkpoint(force: true)
         guard depth < 128 else {
             throw NateError.message("替换格式嵌套超过 128 层。")
         }
         let chars = Array(format)
         var i = 0
         var result = ""
+        var resultBytes = 0
         var mode = ""
         var one = ""
         /// 业务作用：读取实际参与捕获的原文本，不将未参与组登记为空捕获。
         /// 参数说明:
         /// - id: 捕获组号。
         /// 返回：参与捕获的正文，未参与组只在输出时产生空文字。
-        func captured(_ id: Int) -> String {
-            guard let r = hit.captures[id], r.location >= 0, r.location + r.length <= input.count else {
+        func captured(_ id: Int) throws -> String {
+            guard let range = hit.captures[id] else {
                 return ""
             }
-            return String(
-                decoding: input[r.location..<(r.location + r.length)],
-                as: UTF16.self
-            )
+            return try source(range)
+        }
+        /// 业务作用：只复制替换格式实际请求的原文，禁止在额度校验前展开整篇上下文。
+        /// 参数说明:
+        /// - range: 已参与捕获或本轮上下文的 UTF-16 范围。
+        /// 返回：最多 64 MiB 的合法原文；不能无损映射或超过读取预算时失败。
+        func source(_ range: NSRange) throws -> String {
+            guard let bytes = text.byteRange(range) else {
+                throw NateError.message("替换引用不能无损映射到原文。")
+            }
+            // 大小写转换前的原文也有独立上限，避免用最终输出很小的格式掩盖无界输入分配。
+            guard bytes.count <= ReplacementBudget.itemLimit else {
+                throw NateError.message("单次捕获或上下文读取超过 64 MiB。")
+            }
+            try budget.reserve(bytes.count)
+            let value = text.text(in: bytes)
+            try budget.checkpoint(force: true)
+            return value
         }
         /// 业务作用：按当前替换大小写状态追加文字。
         /// 参数说明:
         /// - text: 已解释的替换片段。
         /// 返回：更新输出及单次大小写状态。
-        func append(_ text: String) {
+        func append(_ text: String) throws {
+            try budget.reserve(text.utf8.count)
             var text = text
             if mode == "L" {
                 text = text.lowercased()
@@ -48,15 +74,31 @@ enum Substitution {
                     (one == "l" ? String(first).lowercased() : String(first).uppercased()) + text.dropFirst()
                 one = ""
             }
+            try budget.checkpoint(force: true)
+            let count = text.utf8.count
+            guard count <= outputLimit - resultBytes else {
+                throw NateError.message("替换输出超过单项 64 MiB 或总量 256 MiB 预算。")
+            }
+            try budget.reserve(count)
             result += text
+            resultBytes += count
         }
         while i < chars.count {
+            try budget.checkpoint()
             let ch = chars[i]
             i += 1
             if ch == "(" {
-                let content = try group(chars, index: &i)
-                let selected = try conditional(content, hit: hit)
-                append(try expand(selected, hit: hit, input: input, depth: depth + 1))
+                let content = try group(chars, index: &i, budget: &budget)
+                let selected = try conditional(content, hit: hit, budget: &budget)
+                let value = try expand(
+                    selected,
+                    hit: hit,
+                    text: text,
+                    outputLimit: outputLimit - resultBytes,
+                    budget: &budget,
+                    depth: depth + 1
+                )
+                try append(value)
             }
             else if ch == ")" {
                 throw NateError.message("替换格式包含未配对括号；字面括号需要反斜杠转义。")
@@ -68,20 +110,21 @@ enum Substitution {
                 case "L", "U": mode = String(escape)
                 case "E": mode = ""
                 case "l", "u": one = String(escape)
-                case "n": append("\n")
-                case "r": append("\r")
-                case "t": append("\t")
+                case "n": try append("\n")
+                case "r": try append("\r")
+                case "t": try append("\t")
                 default:
                     if escape.isNumber {
                         var digits = String(escape)
                         while i < chars.count && chars[i].isNumber {
+                            try budget.checkpoint()
                             digits.append(chars[i])
                             i += 1
                         }
-                        append(captured(Int(digits) ?? 0))
+                        try append(captured(Int(digits) ?? 0))
                     }
                     else {
-                        append(String(escape))
+                        try append(String(escape))
                     }
                 }
             }
@@ -89,10 +132,10 @@ enum Substitution {
                 let token = chars[i]
                 i += 1
                 if token == "$" {
-                    append("$")
+                    try append("$")
                 }
                 else if token == "&" {
-                    append(captured(0))
+                    try append(captured(0))
                 }
                 else if token == "`" {
                     let range =
@@ -101,12 +144,7 @@ enum Substitution {
                             location: 0,
                             length: hit.utf16Range.location
                         )
-                    append(
-                        String(
-                            decoding: input[range.location..<(range.location + range.length)],
-                            as: UTF16.self
-                        )
-                    )
+                    try append(source(range))
                 }
                 else if token == "'" {
                     let end = hit.utf16Range.location + hit.utf16Range.length
@@ -114,19 +152,15 @@ enum Substitution {
                         hit.context?.suffix
                         ?? NSRange(
                             location: end,
-                            length: input.count - end
+                            length: text.utf16Count - end
                         )
-                    append(
-                        String(
-                            decoding: input[range.location..<(range.location + range.length)],
-                            as: UTF16.self
-                        )
-                    )
+                    try append(source(range))
                 }
                 else if token == "+", i < chars.count, chars[i] == "{" {
                     i += 1
                     let start = i
                     while i < chars.count && chars[i] != "}" {
+                        try budget.checkpoint()
                         i += 1
                     }
                     guard i < chars.count else {
@@ -137,11 +171,12 @@ enum Substitution {
                     guard let id = hit.names[name] else {
                         throw NateError.message("替换中引用未知捕获 \(name)。")
                     }
-                    append(captured(id))
+                    try append(captured(id))
                 }
                 else if token == "{" || token.isNumber {
                     var digits = token == "{" ? "" : String(token)
                     while i < chars.count && chars[i].isNumber {
+                        try budget.checkpoint()
                         digits.append(chars[i])
                         i += 1
                     }
@@ -154,17 +189,14 @@ enum Substitution {
                     guard let id = Int(digits) else {
                         throw NateError.message("替换组号无效。")
                     }
-                    append(captured(id))
+                    try append(captured(id))
                 }
                 else {
-                    append("$" + String(token))
+                    try append("$" + String(token))
                 }
             }
             else {
-                append(String(ch))
-            }
-            guard result.utf8.count <= 64 * 1024 * 1024 else {
-                throw NateError.message("单项替换输出超过 64 MB。")
+                try append(String(ch))
             }
         }
         return result
@@ -174,11 +206,15 @@ enum Substitution {
     /// 参数说明:
     /// - chars: 原始格式字符。
     /// - index: 左括号后的解析位置，完成后位于右括号之后。
+    /// - budget: 与外层计划共用的解析及取消预算。
     /// 返回：分组内部原始格式；未闭合时失败。
-    static func group(_ chars: [Character], index: inout Int) throws -> String {
+    static func group(_ chars: [Character], index: inout Int, budget: inout ReplacementBudget) throws
+        -> String
+    {
         let start = index
         var nesting = 1
         while index < chars.count {
+            try budget.checkpoint()
             let ch = chars[index]
             index += 1
             if ch == "\\" {
@@ -205,8 +241,11 @@ enum Substitution {
     /// 参数说明:
     /// - content: 分组内部格式。
     /// - hit: 原始命中的捕获证据。
+    /// - budget: 与外层计划共用的解析及取消预算。
     /// 返回：选中的原始分支格式，普通分组保持其内容。
-    static func conditional(_ content: String, hit: SearchHit) throws -> String {
+    static func conditional(_ content: String, hit: SearchHit, budget: inout ReplacementBudget) throws
+        -> String
+    {
         guard content.first == "?" else {
             return content
         }
@@ -217,6 +256,7 @@ enum Substitution {
             index += 1
             let start = index
             while index < chars.count && chars[index] != "}" {
+                try budget.checkpoint()
                 index += 1
             }
             guard index < chars.count, let found = hit.names[String(chars[start..<index])] else {
@@ -228,6 +268,7 @@ enum Substitution {
         else {
             let start = index
             while index < chars.count && chars[index].isNumber {
+                try budget.checkpoint()
                 index += 1
             }
             guard let found = Int(String(chars[start..<index])) else {
@@ -239,6 +280,7 @@ enum Substitution {
         var nesting = 0
         var divider: Int?
         while index < chars.count {
+            try budget.checkpoint()
             let ch = chars[index]
             if ch == "\\" {
                 index += 2
