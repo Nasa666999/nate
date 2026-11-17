@@ -68,18 +68,20 @@ extension EditorView {
         }
         if let previous = folds.context, previous.documentID == context.documentID,
             previous.resource == context.resource,
+            // 折叠端点必须保持完整 UTF-8 边界，末尾多字节字符的续字节不能充当位置锚点。
             let mapped = document.mapSelections(
                 folds.collapsed.map {
-                    TextSelection(anchor: $0.lower, head: $0.upper - 1)
+                    TextSelection(anchor: $0.lower, head: $0.upper)
                 },
                 from: previous.revision
             )
         {
             folds.collapsed = Set(
                 mapped.filter {
-                    $0.anchor < $0.head && document.text.isBoundary($0.head)
+                    $0.anchor < $0.head && document.text.isBoundary($0.anchor)
+                        && document.text.isBoundary($0.head)
                 }.map {
-                    ByteRange($0.anchor, $0.head + 1)
+                    ByteRange($0.anchor, $0.head)
                 }
             )
         }

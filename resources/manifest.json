@@ -537,6 +537,10 @@
       "sha256" : "22d7b5bea43c5960681951f613b2b25570fe8a986b5615d84fc302c9356c0a20"
     },
     {
+      "path" : "licenses\/Lexilla-LICENSE.txt",
+      "sha256" : "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d"
+    },
+    {
       "path" : "licenses\/NotepadPlusPlus-GPL.txt",
       "sha256" : "eff1a5fb1d62193999db46a025232c87ef9976b9a55613439b0dd149ab97afcd"
     },
@@ -550,7 +554,7 @@
     },
     {
       "path" : "licenses\/sources.json",
-      "sha256" : "84dbbdfbe3d7629bec7eb54efcaf143da56974f78b0e51af80040f85ba92b574"
+      "sha256" : "f41fecfaf286d6e9e575813bf85a2f22a42362bf298858995f2aca7c50e20f59"
     },
     {
       "path" : "themes\/dark.json",

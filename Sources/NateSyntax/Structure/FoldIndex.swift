@@ -18,12 +18,12 @@ public struct FoldIndex: Sendable {
     /// 参数说明:
     /// - language: 当前内置语言资源。
     /// - udl: 独立用户语言；其折叠需采用自己的字面规则。
-    /// 返回：当前语言具有圆、方或花括号结构规则时为真。
+    /// 返回：当前语言具有括号或 Python 缩进结构规则时为真。
     public static func supports(language: LanguageDefinition?, udl: UDLDefinition?) -> Bool {
-        udl == nil && !openers(for: language?.id ?? "").isEmpty
+        udl == nil && (language?.id == "python" || !openers(for: language?.id ?? "").isEmpty)
     }
 
-    /// 业务作用：将同一修订的完整词法配对转成真实行折叠范围，排除字符串、注释、单行和交叉结构。
+    /// 业务作用：将同一修订的词法证据按语言规则转成真实行折叠范围，未完成结构不用于隐藏正文。
     /// 参数说明:
     /// - snapshot: 配对所属的完整正文快照。
     /// - brackets: 已完成且与快照身份一致的结构证据。
@@ -35,31 +35,36 @@ public struct FoldIndex: Sendable {
             throw NateError.staleRevision
         }
         let allowed = Self.openers(for: language?.id ?? "")
-        let deadline = ContinuousClock.now.advanced(by: .seconds(1))
+        let deadline = ContinuousClock.now.advanced(by: language?.id == "python" ? .seconds(5) : .seconds(1))
         var candidates: [FoldRegion] = []
-        for (offset, pair) in brackets.structuralPairs.enumerated() {
-            if offset & 255 == 0 {
-                try Self.check(deadline)
-            }
-            guard allowed.contains(pair.opener) else {
-                continue
-            }
-            let start = snapshot.text.lineNumber(at: pair.range.lower)
-            let end = snapshot.text.lineNumber(at: pair.range.upper - 1)
-            guard end > start else {
-                continue
-            }
-            guard candidates.count < 65_536 else {
-                throw NateError.message("折叠解析暂停：多行结构数量超过 65536 个。")
-            }
-            candidates.append(
-                FoldRegion(
-                    range: pair.range,
-                    startLine: start,
-                    endLine: end,
-                    level: 0
+        if let language, language.id == "python" {
+            candidates = try PythonFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
+        }
+        else {
+            for (offset, pair) in brackets.structuralPairs.enumerated() {
+                if offset & 255 == 0 {
+                    try Self.check(deadline)
+                }
+                guard allowed.contains(pair.opener) else {
+                    continue
+                }
+                let start = snapshot.text.lineNumber(at: pair.range.lower)
+                let end = snapshot.text.lineNumber(at: pair.range.upper - 1)
+                guard end > start else {
+                    continue
+                }
+                guard candidates.count < 65_536 else {
+                    throw NateError.message("折叠解析暂停：多行结构数量超过 65536 个。")
+                }
+                candidates.append(
+                    FoldRegion(
+                        range: pair.range,
+                        startLine: start,
+                        endLine: end,
+                        level: 0
+                    )
                 )
-            )
+            }
         }
         candidates.sort {
             if $0.startLine != $1.startLine {
