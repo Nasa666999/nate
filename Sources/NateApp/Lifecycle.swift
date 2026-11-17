@@ -46,10 +46,13 @@ extension ApplicationController {
         externalCommandTask?.cancel()
         mainWindow?.editor.finishComposition()
         let protectedDocuments = documents
+        // 先冻结所有现有正文，再等待外部动作，使最后确认的正文在等待期间保持不变。
         for document in protectedDocuments {
-            document.buffer.isEditingSuspended = true
+            document.setEditingSuspension(.applicationTermination, active: true)
         }
         searchTask?.cancel()
+        // 不等待原文件和进程退出才开始保护正文，两个持久化通道必须保持独立推进。
+        scheduleRecovery(force: true)
         Task {
             let deadline = ContinuousClock.now.advanced(by: .seconds(30))
             // 尚未发布的打开请求不拥有写入副作用，退出时保留请求文件而不等待系统读取。
@@ -57,9 +60,16 @@ extension ApplicationController {
             _ = await TaskBoundary.wait(
                 until: deadline,
                 while: {
-                    externalCommandTask != nil || searchTask != nil
+                    externalCommandTask != nil || searchTask != nil || !closingDocumentIDs.isEmpty
                 }
             )
+            // 既有关闭仍可能移除或恢复标签，成员集合未收束时不能确认最终退出索引。
+            guard closingDocumentIDs.isEmpty else {
+                SystemIntegration.alert("关闭流程尚未完成，已取消退出", "正文保持保护；请等待当前关闭返回，再重新退出。文件写入任务仍可从工具菜单查看。")
+                restoreAfterCancelledExit(protectedDocuments)
+                sender.reply(toApplicationShouldTerminate: false)
+                return
+            }
             var failures: [String] = []
             // 临时文档由最后一次统一恢复发布保护，避免逐标签重复写入整份工作区正文。
             for document in documents where document.url != nil {
@@ -73,12 +83,21 @@ extension ApplicationController {
             let unresolved = fileOperations.snapshots.filter {
                 $0.hasActivePublication
             }
-            let exitBlocked = !unresolved.isEmpty || externalCommandTask != nil
+            let pendingBindings = documents.filter {
+                $0.bindingChange
+            }
+            // 目标关联尚未确认时不能按旧路径退出恢复，否则未决另存结果可能被误当成仍可写回旧路径。
+            let exitBlocked = !unresolved.isEmpty || externalCommandTask != nil || !pendingBindings.isEmpty
             if exitBlocked {
-                let paths = unresolved.map(\.target.path).joined(separator: "\n")
+                let bindings = pendingBindings.map {
+                    $0.saveOperation?.target.path ?? $0.url?.path ?? $0.name
+                }
+                let paths = Array(Set(unresolved.map(\.target.path) + bindings)).sorted().joined(
+                    separator: "\n"
+                )
                 SystemIntegration.alert(
                     "系统动作尚未确认，已取消退出",
-                    paths + "\n已经进入的文件发布或进程启动尚未返回。正文继续保留，可从工具菜单查看文件写入任务。"
+                    paths + "\n已经进入的文件发布、目标关联或进程启动尚未确认。正文继续保留，可从工具菜单查看文件写入任务。"
                 )
                 restoreAfterCancelledExit(protectedDocuments)
                 sender.reply(toApplicationShouldTerminate: false)
@@ -92,7 +111,8 @@ extension ApplicationController {
                 if protected {
                     alert.addButton(withTitle: "保留恢复副本并退出")
                 }
-                guard protected && alert.runModal() == .alertSecondButtonReturn else {
+                let choice = alert.runModal()
+                guard protected && choice == .alertSecondButtonReturn else {
                     restoreAfterCancelledExit(protectedDocuments)
                     sender.reply(toApplicationShouldTerminate: false)
                     return
@@ -108,17 +128,22 @@ extension ApplicationController {
         return .terminateLater
     }
 
-    /// 业务作用：取消退出后恢复编辑和新动作入口，不恢复已经撤销的旧发布权限。
+    /// 业务作用：取消退出后只解除退出暂停并恢复新动作入口，不恢复旧发布权限。
     /// 参数说明:
     /// - protectedDocuments: 开始退出时暂停编辑的文档集合。
     /// 返回：原有保存周期继续推进，仍未返回的任务保持登记。
     func restoreAfterCancelledExit(_ protectedDocuments: [WorkspaceDocument]) {
         closing = false
         fileOperations.resumePublications()
-        for document in protectedDocuments where !document.closing {
-            document.buffer.isEditingSuspended = false
+        for document in protectedDocuments + documents {
+            document.setEditingSuspension(.applicationTermination, active: false)
         }
-        refreshUI()
+        if documents.isEmpty {
+            _ = newDocument()
+        }
+        else if let selected = active ?? documents.first {
+            activate(selected.buffer.id)
+        }
     }
 
     /// 业务作用：重新激活时重验外部文件，保存事件不能通过时间窗口忽略冲突。

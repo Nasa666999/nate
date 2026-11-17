@@ -7,8 +7,30 @@ struct RecoveryWorkspaceState: Sendable, Equatable {
     let activeID: UUID?
 }
 
+enum EditingSuspensionReason: Hashable {
+    case documentClosing
+    case applicationTermination
+    case monitoringPreparation
+}
+
 @MainActor
 final class WorkspaceDocument {
+    private var editingSuspensions: Set<EditingSuspensionReason> = []
+    /// 业务作用：冻结输入时显示仍持有保护的用户操作，不能让等待表现成无反馈的只读状态。
+    /// 参数说明: 无。
+    /// 返回：按退出、关闭、监视准备的顺序显示当前原因；没有暂停时为空。
+    var editingSuspensionStatus: String? {
+        if editingSuspensions.contains(.applicationTermination) {
+            return "正在确认退出"
+        }
+        if editingSuspensions.contains(.documentClosing) {
+            return "正在确认关闭"
+        }
+        if editingSuspensions.contains(.monitoringPreparation) {
+            return "保存后进入监视"
+        }
+        return nil
+    }
     let buffer: DocumentBuffer
     var url: URL?
     var name: String
@@ -97,6 +119,23 @@ final class WorkspaceDocument {
         format.codePage = encoding.codePage
         format.bom = encoding.bom
         try buffer.commit([], formatAfter: format, name: "转换编码")
+    }
+
+    /// 业务作用：关闭、退出和监视分别持有编辑暂停，任一流程结束都不能解除其它流程的保护。
+    /// 参数说明:
+    /// - reason: 当前流程持有的暂停原因。
+    /// - active: 是否仍持有本流程的保护。
+    /// 返回：内核只在全部暂停原因释放后重新接受正文事务，独立只读状态保持原语义。
+    func setEditingSuspension(_ reason: EditingSuspensionReason, active: Bool) {
+        if active {
+            // 在异步文件等待之前发布保护，正文事务不能观察到尚未冻结的中间窗口。
+            editingSuspensions.insert(reason)
+        }
+        else {
+            // 只释放本流程的原因，取消退出不能提前解除仍在进行的关闭或监视准备。
+            editingSuspensions.remove(reason)
+        }
+        buffer.isEditingSuspended = !editingSuspensions.isEmpty
     }
 
     /// 业务作用：在保存周期精确判断字节差异，而不是每次按键全文比较。

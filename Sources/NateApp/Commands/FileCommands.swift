@@ -325,7 +325,7 @@ extension ApplicationController {
     /// 业务作用：关闭最后视图前完成保存或可靠恢复，不销毁未保护内容。
     /// 参数说明:
     /// - id: 被关闭文档身份。
-    /// 返回：确认保护后从工作区移除并可靠更新恢复索引。
+    /// 返回：确认保护后移除文档并更新索引；失败保留正文，退出接管后不新增关闭请求。
     func closeDocument(_ id: UUID) async {
         guard
             let document = documents.first(where: {
@@ -334,18 +334,25 @@ extension ApplicationController {
         else {
             return
         }
-        guard !document.closing else {
+        // 退出已固定成员收束范围，只有此前登记的关闭可以继续，新请求不能扩展这个集合。
+        guard !closing, !document.closing else {
             return
         }
         if activeID == id {
             mainWindow?.editor.finishComposition()
         }
         document.closing = true
+        closingDocumentIDs.insert(id)
         document.originalBindingTask?.cancel()
-        document.buffer.isEditingSuspended = true
+        document.setEditingSuspension(.documentClosing, active: true)
         defer {
             document.closing = false
-            document.buffer.isEditingSuspended = false
+            closingDocumentIDs.remove(id)
+            if closing {
+                // 已移除文档的最后视图也可能尚未退场，退出完成前仍不允许它接收未纳入工作区的新输入。
+                document.setEditingSuspension(.applicationTermination, active: true)
+            }
+            document.setEditingSuspension(.documentClosing, active: false)
         }
         var archiveNeeded = document.url == nil && document.buffer.text.byteCount > 0
         if archiveNeeded {
@@ -406,6 +413,7 @@ extension ApplicationController {
                 return
             }
         }
+        // 此关闭已经登记，退出会等待它完成后再固定最终成员，不能提前丢弃用户已确认的关闭意图。
         let oldIndex =
             documents.firstIndex(where: {
                 $0 === document

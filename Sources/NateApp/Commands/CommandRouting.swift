@@ -328,6 +328,10 @@ extension ApplicationController {
     /// - action: 上下文命令。
     /// 返回：按该文档执行动作。
     func tabAction(_ id: UUID, _ action: String) {
+        // 退出期间允许任务观察，但标签动作不能另建关闭流程或修改已经固定的恢复元数据。
+        guard !closing else {
+            return
+        }
         guard
             let document = documents.first(where: {
                 $0.buffer.id == id

@@ -9,6 +9,10 @@ extension ApplicationController {
     /// - index: 当前展示结果的条目序号。
     /// 返回：打开对应文档并选中完整命中；过期时保留正文并提示。
     func navigateResult(_ index: Int) {
+        // 退出已固定活动文档与恢复视图，迟到导航不能在最终确认期间切换这份状态。
+        guard !closing else {
+            return
+        }
         guard resultNavigation.indices.contains(index) else {
             return
         }

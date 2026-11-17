@@ -61,6 +61,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var targetReservations: [String: UUID] = [:]
     var queryGeneration = UUID()
     var closing = false
+    var closingDocumentIDs: Set<UUID> = []
     var initialized = false
     var pendingURLs: [URL] = []
     var recentClosed: [ClosedTab] = []
@@ -328,6 +329,10 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     @discardableResult
     func newDocument() -> WorkspaceDocument {
         let document = WorkspaceDocument(name: "新文档 \(documents.count + 1)")
+        if closing {
+            // 已开始的关闭可能需要替代空标签，退出收束期间新标签同样不能重新开放正文输入。
+            document.setEditingSuspension(.applicationTermination, active: true)
+        }
         if !recoveryReady {
             document.recoveryError = "恢复索引尚未完成校验，现有记录保持原状。"
         }
@@ -339,8 +344,12 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// 业务作用：激活既有文档并同步当前语言和保存状态。
     /// 参数说明:
     /// - id: 稳定文档身份。
-    /// 返回：切换正文视口，原文档仍由调度器保护。
+    /// 返回：正常工作区中切换正文视口；退出收束期间拒绝新的活动身份。
     func activate(_ id: UUID) {
+        // 退出已经固定工作区保护集合，标签选择不能在最终索引发布期间改变活动身份。
+        guard !closing else {
+            return
+        }
         guard
             let document = documents.first(where: {
                 $0.buffer.id == id
@@ -437,11 +446,15 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             state = active.isDirty ? "待保存" : active.state
         }
         let protection = !recoveryReady ? "⚠ 恢复保护不可用 · " : !autosaveEnabled ? "自动保存已暂停 · " : ""
+        let suspension =
+            active.editingSuspensionStatus.map {
+                $0 + " │ "
+            } ?? ""
         let recoveryState =
             active.url != nil && recoveryReady && active.recoveryError == nil
             ? " · " + (active.recoveryRevision == active.buffer.revision ? "恢复正文已保存" : "恢复正文待保存") : ""
         window.status.stringValue =
-            "  \(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(protection)\(state)\(recoveryState)"
+            "  \(suspension)\(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(protection)\(state)\(recoveryState)"
         if window.isStructureVisible {
             requestStructure()
         }

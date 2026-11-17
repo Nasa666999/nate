@@ -83,6 +83,10 @@ extension ApplicationController {
                 }
                 return session
             }
+            // 会话读取期间退出可能已经接管工作区，旧载入不得再改变已冻结的视图与权限。
+            guard !closing else {
+                return
+            }
             var skipped: [String] = []
             for entry in session.documents {
                 guard entry.path.hasPrefix("/"), !entry.path.hasPrefix("//"), !entry.path.contains("://"),
@@ -92,6 +96,10 @@ extension ApplicationController {
                     continue
                 }
                 await openFile(URL(fileURLWithPath: entry.path))
+                // 文件等待返回后重新检查退出权威，不能把迟到会话设置发布到已经冻结的工作区。
+                guard !closing else {
+                    return
+                }
                 guard
                     let document = documents.first(where: {
                         $0.url?.path == entry.path

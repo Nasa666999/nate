@@ -21,9 +21,9 @@ extension ApplicationController {
 
     /// 业务作用：进入只读监视前保存当前正文，不能用磁盘更新覆盖尚未保护的本地输入。
     /// 参数说明: 无。
-    /// 返回：成功进入持续外部观察；退出恢复原编辑器只读设置。
+    /// 返回：角色仍有效时进入监视，停止后恢复原只读设置；等待期间目标或权威变化则保持原模式。
     func toggleMonitoring() async {
-        guard let document = active, document.url != nil, !document.closing,
+        guard !closing, let document = active, let target = document.url, !document.closing,
             !document.buffer.isEditingSuspended
         else {
             return
@@ -40,24 +40,29 @@ extension ApplicationController {
         }
         mainWindow?.editor.finishComposition()
         // 固定最终输入后收束写入，监视期间只允许显式磁盘载入改变缓冲区。
-        document.buffer.isEditingSuspended = true
+        let generation = document.targetGeneration
+        document.setEditingSuspension(.monitoringPreparation, active: true)
         defer {
-            if !document.closing && !closing {
-                document.buffer.isEditingSuspended = false
-            }
+            document.setEditingSuspension(.monitoringPreparation, active: false)
         }
         guard await flush(document) else {
             SystemIntegration.alert("未进入监视", document.failure ?? "当前内容尚未保存，请先处理保存状态。")
+            return
+        }
+        // 等待保存期间可能已经关闭、退出或改变目标，旧监视意图不能取得新路径的角色。
+        guard !document.closing, !closing, !document.bindingChange, document.url == target,
+            document.targetGeneration == generation,
+            documents.contains(where: {
+                $0 === document
+            })
+        else {
             return
         }
         document.readOnlyBeforeMonitoring = document.buffer.isReadOnly
         document.monitoring = true
         document.buffer.isReadOnly = true
         document.state = "监视中 · 等待外部更新"
-        guard !document.closing && !closing else {
-            return
-        }
-        document.buffer.isEditingSuspended = false
+        document.setEditingSuspension(.monitoringPreparation, active: false)
         await inspectExternalChanges()
         refreshUI()
     }

@@ -45,6 +45,9 @@ extension ApplicationController {
                             self.scheduleSave(document)
                         }
                     }
+                }
+                // 退出等待原文件或外部进程时，恢复通道仍独立保护冻结后的最新正文。
+                if self.autosaveEnabled || self.closing {
                     self.scheduleRecovery(force: self.initialRecoveryConfirmation)
                 }
                 self.refreshUI()
