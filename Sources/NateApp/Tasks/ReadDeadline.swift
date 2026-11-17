@@ -11,6 +11,7 @@ private struct ReadWaitState<Value: Sendable> {
     var continuation: CheckedContinuation<Value, any Error>?
     var result: Result<Value, any Error>?
     var finished = false
+    var abandoned = false
     var installed = false
     var timer: Task<Void, Never>?
 }
@@ -20,6 +21,11 @@ private final class ReadWait<Value: Sendable>: Sendable {
     var finished: Bool {
         state.withLock {
             $0.finished
+        }
+    }
+    var abandoned: Bool {
+        state.withLock {
+            $0.abandoned
         }
     }
 
@@ -47,14 +53,17 @@ private final class ReadWait<Value: Sendable>: Sendable {
     /// 业务作用：超时、取消和系统返回只能有一个结果恢复调用者，迟到读取不再发布标签。
     /// 参数说明:
     /// - result: 本次竞争提交的结果。
-    /// 返回：首次结果生效并释放等待者；其余结果丢弃。
-    func finish(_ result: Result<Value, any Error>) {
+    /// - abandoned: 是否由取消或超时主动停止等待。
+    /// 返回：首次结果生效并释放等待者时为真；其余结果丢弃并返回假。
+    @discardableResult
+    func finish(_ result: Result<Value, any Error>, abandoned: Bool = false) -> Bool {
         let taken = state.withLock {
-            value -> (CheckedContinuation<Value, any Error>?, Task<Void, Never>?) in
+            value -> (CheckedContinuation<Value, any Error>?, Task<Void, Never>?, Bool) in
             guard !value.finished else {
-                return (nil, nil)
+                return (nil, nil, false)
             }
             value.finished = true
+            value.abandoned = abandoned
             let continuation = value.continuation
             let timer = value.timer
             value.continuation = nil
@@ -62,10 +71,11 @@ private final class ReadWait<Value: Sendable>: Sendable {
             if !value.installed {
                 value.result = result
             }
-            return (continuation, timer)
+            return (continuation, timer, true)
         }
         taken.1?.cancel()
         taken.0?.resume(with: result)
+        return taken.2
     }
 
     /// 业务作用：读取已经结束时不留下无主计时任务，正常等待时登记唯一截止时间。
@@ -119,7 +129,7 @@ extension IOExecutor {
     /// 参数说明:
     /// - timeout: 等待上限；不表示操作系统调用已被强行终止。
     /// - body: 仅执行读取和不可变解析，不得包含磁盘发布。
-    /// 返回：读取结果、取消或明确超时，后台线程仍受队列并发上限约束。
+    /// 返回：读取结果、取消或明确超时，未返回线程仍计入替补与隔离预算。
     func read<Value: Sendable>(
         timeout: Duration = .seconds(30),
         _ body: @escaping @Sendable () throws -> Value
@@ -128,7 +138,9 @@ extension IOExecutor {
         let id = UUID()
         readCancellations.withLock {
             $0[id] = {
-                wait.finish(.failure(CancellationError()))
+                if wait.finish(.failure(CancellationError()), abandoned: true) {
+                    self.abandonRead(id, reason: CancellationError())
+                }
             }
         }
         defer {
@@ -151,23 +163,37 @@ extension IOExecutor {
                         catch {
                             return
                         }
-                        wait.finish(.failure(ReadDeadlineExceeded()))
+                        if wait.finish(.failure(ReadDeadlineExceeded()), abandoned: true) {
+                            self.abandonRead(id, reason: ReadDeadlineExceeded())
+                        }
                     }
                     wait.setTimer(timer)
-                    queue.addOperation {
-                        guard !wait.finished else {
-                            return
-                        }
-                        wait.finish(
-                            Result {
-                                try body()
+                    enqueue(
+                        id: id,
+                        operation: {
+                            guard !wait.finished else {
+                                return
                             }
-                        )
+                            wait.finish(
+                                Result {
+                                    try body()
+                                }
+                            )
+                        },
+                        reject: {
+                            wait.finish(.failure($0))
+                        }
+                    )
+                    // 取消可能先于队列登记到达，登记后复验才能撤去这段窗口中新出现的占用。
+                    if wait.abandoned {
+                        abandonRead(id, reason: CancellationError())
                     }
                 }
             },
             onCancel: {
-                wait.finish(.failure(CancellationError()))
+                if wait.finish(.failure(CancellationError()), abandoned: true) {
+                    self.abandonRead(id, reason: CancellationError())
+                }
             }
         )
     }

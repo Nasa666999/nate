@@ -31,6 +31,16 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：窗口反映全部在途请求及有限完成记录。
     func refreshFileTasks() {
+        let channels = [("原文件", fileIO), ("读取", readIO), ("恢复", recoveryIO), ("外部命令", commandIO)]
+        fileTasksWindow?.updateExecutionStatus(
+            channels.map {
+                name,
+                executor in
+                let value = executor.snapshot
+                return "\(name)：执行 \(value.running)，超时未返回 \(value.stalled)，排队 \(value.queued)"
+                    + (value.quarantined ? "（暂停新请求）" : "")
+            }.joined(separator: "；")
+        )
         fileTasksWindow?.update(
             fileOperations.snapshots.map {
                 operation in

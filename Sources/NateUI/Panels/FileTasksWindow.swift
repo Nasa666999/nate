@@ -58,7 +58,8 @@ public final class FileTasksWindow: NSWindowController, NSTableViewDataSource, N
     public var onCancel: ((UUID) -> Void)?
     public var onClearCompleted: (() -> Void)?
     private let table = NSTableView()
-    private let status = NSTextField(labelWithString: "")
+    private let status = NSTextField(labelWithString: "进行中 0 · 已完成 0")
+    private let execution = NSTextField(wrappingLabelWithString: "")
     private let detail = NSTextField(wrappingLabelWithString: "选择任务查看完整目标和失败原因。")
     private let cancel = NSButton(title: "撤销本次发布", target: nil, action: nil)
     private let clear = NSButton(title: "清除已完成记录", target: nil, action: nil)
@@ -113,7 +114,10 @@ public final class FileTasksWindow: NSWindowController, NSTableViewDataSource, N
         scroll.documentView = table
         detail.font = .systemFont(ofSize: 11)
         detail.maximumNumberOfLines = 3
-        for view in [heading, scroll, detail] {
+        execution.font = .systemFont(ofSize: 11)
+        execution.textColor = .secondaryLabelColor
+        execution.maximumNumberOfLines = 2
+        for view in [heading, execution, scroll, detail] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
@@ -121,7 +125,11 @@ public final class FileTasksWindow: NSWindowController, NSTableViewDataSource, N
             heading.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
             heading.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
             heading.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
-            scroll.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 10),
+            execution.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 6),
+            execution.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
+            execution.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
+            execution.heightAnchor.constraint(equalToConstant: 32),
+            scroll.topAnchor.constraint(equalTo: execution.bottomAnchor, constant: 6),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: detail.topAnchor, constant: -8),
@@ -204,6 +212,15 @@ public final class FileTasksWindow: NSWindowController, NSTableViewDataSource, N
         }.count
         status.stringValue = "进行中 \(active) · 已完成 \(rows.count - active)"
         updateSelection()
+    }
+
+    /// 业务作用：显示系统调用未返回和队列隔离情况，用户可区分文件失败与执行通道耗尽。
+    /// 参数说明:
+    /// - value: 应用根据各独立 I/O 通道生成的只读状态。
+    /// 返回：不重建任务行，仅更新执行通道说明。
+    public func updateExecutionStatus(_ value: String) {
+        execution.stringValue = value
+        execution.toolTip = value
     }
 
     /// 业务作用：仅在窗口可见时发出只读刷新意图，弱引用不会跨睡眠持有控制器。
