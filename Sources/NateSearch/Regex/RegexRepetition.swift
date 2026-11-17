@@ -1,64 +1,40 @@
 import Foundation
 import NateCore
 
-private enum RepeatFrame {
-    case visit(MatchState, Int, Bool)
-    case accept(MatchState)
-}
-
 extension CancellableMatcher {
-    /// 业务作用：按分支优先级深度优先展开重复，使贪婪、懒惰与占有匹配保留捕获顺序。
+    /// 业务作用：将重复的扩展与退出路径按贪婪或懒惰优先级压入回溯栈，不预先枚举全部结果。
     /// 参数说明:
-    /// - child: 单次重复的表达式。
-    /// - state: 重复开始前的输入位置与捕获。
-    /// - minimum: 必须成功的次数。
-    /// - maximum: 允许的最多次数。
-    /// - greedy: 是否先尝试更多次数。
-    /// - possessive: 是否禁止向外层提供重复的回退路径。
-    /// - depth: 外层执行树深度。
-    /// 返回：有优先级的结果；空匹配停止扩展，预算耗尽则整次失败。
-    mutating func repeatStates(
-        _ child: RegexNode,
-        _ state: MatchState,
-        minimum: Int,
-        maximum: Int,
-        greedy: Bool,
-        possessive: Bool,
-        depth: Int
-    ) throws -> [MatchState] {
-        var frames: [RepeatFrame] = [.visit(state, 0, true)]
-        var results: [MatchState] = []
-        while let frame = frames.popLast() {
-            try checkpoint()
-            switch frame {
-            case .accept(let accepted):
-                results.append(accepted)
-                if possessive {
-                    return results
+    /// - repetition: 当前次数、上下限、子表达式及扩展资格。
+    /// - path: 当前优先执行的路径，完成后继续其外层表达式。
+    /// - choices: 仅在当前路径失败时再尝试的候选。
+    /// 返回：必需次数不足时安排子表达式，否则保留有序退出；空成功不无限重复。
+    mutating func scheduleRepeat(_ repetition: RegexRepeat, path: inout RegexPath, choices: inout [RegexPath])
+        throws
+    {
+        let expand = repetition.canExpand && repetition.count < repetition.maximum
+        let accept = repetition.count >= repetition.minimum
+        if accept {
+            if expand {
+                if repetition.greedy {
+                    try fork([], from: path, into: &choices)
+                    try push(.repeated(repetition, path.state.position), onto: &path)
+                    try push(.node(repetition.child, repetition.depth + 1), onto: &path)
                 }
-            case .visit(let current, let count, let canExpand):
-                if !greedy, count >= minimum {
-                    results.append(current)
-                    if possessive {
-                        return results
-                    }
+                else {
+                    try fork(
+                        [
+                            .repeated(repetition, path.state.position),
+                            .node(repetition.child, repetition.depth + 1),
+                        ],
+                        from: path,
+                        into: &choices
+                    )
                 }
-                if greedy, count >= minimum {
-                    frames.append(.accept(current))
-                }
-                if canExpand, count < maximum {
-                    let successors = try run(child, current, depth: depth + 1)
-                    for successor in successors.reversed() {
-                        // 零长度成功仍可参与捕获，但达到必需次数后不再沿同一位置无限展开。
-                        let expand = successor.position != current.position || count + 1 < minimum
-                        frames.append(.visit(successor, count + 1, expand))
-                    }
-                }
-            }
-            guard frames.count + results.count <= 100_000 else {
-                throw NateError.message("重复匹配超过内存预算。")
             }
         }
-        return results
+        else {
+            try push(.repeated(repetition, path.state.position), onto: &path)
+            try push(.node(repetition.child, repetition.depth + 1), onto: &path)
+        }
     }
 }

@@ -88,9 +88,7 @@ public enum SearchEngine {
                 sensitive: options.caseSensitive,
                 dot: options.dotMatchesNewline
             )
-            if let state = try matcher.run(compiled.root, initial).first(where: {
-                $0.position <= end
-            }) {
+            if let state = try matcher.firstMatch(compiled.root, initial, end: end) {
                 if !allowEmpty && state.start == state.position {
                     position = max(position + 1, state.position + 1)
                     continue
