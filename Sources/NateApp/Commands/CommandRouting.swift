@@ -163,6 +163,9 @@ extension ApplicationController {
             searchNavigationGeneration = UUID()
             cancelCompletion()
             activeID = mainWindow?.editor.document.id
+            if findWindow?.page != .files {
+                _ = refreshSearchPresentation()
+            }
             refreshUI()
         case "complete", "completeWords", "completeLanguage", "signature": requestCompletion(id)
         case "typingAssistance": requestCompletion(automatic: true)

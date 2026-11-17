@@ -5,6 +5,8 @@ import NateSearch
 public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, NSWindowDelegate {
     public var onAction: ((String, SearchOptions, String, String) -> Void)?
     public var onDismiss: (() -> Void)?
+    public var onSelectionContextRequest: (() -> Void)?
+    public var presentationPreferences = SearchPresentationPreferences()
     public var onStateChange: ((SearchWindowState) -> Void)?
     public var onResetSavedState: ((SearchWindowState) -> Void)? {
         didSet {
@@ -223,7 +225,15 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         resetSavedState.target = self
         resetSavedState.action = #selector(resetSavedSettings)
         resetSavedState.isHidden = true
-        root.addArrangedSubview(NSStackView(views: [button("cancel", "取消任务"), swap, resetSavedState]))
+        let inputSettings = NSButton(
+            title: "搜索输入设置",
+            target: self,
+            action: #selector(showInputPreferences)
+        )
+        inputSettings.controlSize = .small
+        root.addArrangedSubview(
+            NSStackView(views: [button("cancel", "取消任务"), swap, inputSettings, resetSavedState])
+        )
         feedback.font = NSFont.systemFont(ofSize: 11)
         feedback.textColor = .secondaryLabelColor
         root.addArrangedSubview(feedback)
@@ -256,7 +266,22 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// - page: 菜单或快捷键请求的实际操作范围。
     /// 返回：对应页签可见，焦点进入查找内容；无目录时文件操作仍由执行入口明确拒绝。
     public func present(selection: String?, page: FindReplacePage) {
-        if let selection, !selection.isEmpty, selection.count <= 1024 {
+        let valid: Bool
+        do {
+            // 公共窗口入口也先验证配置，不能让无效上限进入字节预算算术或替换当前输入。
+            try presentationPreferences.validate()
+            valid = true
+        }
+        catch {
+            valid = false
+            feedback.stringValue = error.localizedDescription
+        }
+        if valid, presentationPreferences.fillFromSelection,
+            let selection, !selection.isEmpty,
+            selection.utf8.count <= presentationPreferences.fillLimit * 4,
+            selection.unicodeScalars.count <= presentationPreferences.fillLimit,
+            presentationPreferences.fillMultiline || !selection.utf8.contains(where: { $0 == 10 || $0 == 13 })
+        {
             query.stringValue = selection
         }
         selectPage(page, focus: false)
@@ -273,6 +298,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
             return
         }
         selectPage(FindReplacePage.allCases[tabs.selectedSegment], focus: true)
+        onSelectionContextRequest?()
     }
 
     /// 业务作用：统一菜单和页签的范围展示，隐藏控件不清除选项，也不重新授予后台请求执行权。

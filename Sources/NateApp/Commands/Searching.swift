@@ -35,6 +35,10 @@ extension ApplicationController {
                 [weak self] action, options, directory, filters in
                 self?.search(action, options: options, directory: directory, filters: filters)
             }
+            window.onSelectionContextRequest = {
+                [weak self] in
+                _ = self?.refreshSearchPresentation()
+            }
             window.onDismiss = {
                 [weak self] in
                 self?.mainWindow?.window?.makeKeyAndOrderFront(nil)
@@ -44,10 +48,7 @@ extension ApplicationController {
             }
             findWindow = window
         }
-        let selection = active?.buffer.selections.first.flatMap {
-            range in
-            range.range.count <= 4096 ? active?.buffer.text.text(in: range.range) : nil
-        }
+        let selection = refreshSearchPresentation(filling: true)
         findWindow?.present(selection: selection, page: inFiles ? .files : replacing ? .replace : .find)
         if let searchSettingsError {
             findWindow?.feedback.stringValue = searchSettingsError

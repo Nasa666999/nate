@@ -14,6 +14,7 @@ extension FindReplaceWindow {
         result.page = page
         result.stayAfterReplace = stayAfterReplace
         result.confirmsOpenReplacement = confirmsOpenReplacement
+        result.presentation = presentationPreferences
         return result
     }
 
@@ -29,6 +30,7 @@ extension FindReplaceWindow {
             restoringState = false
         }
         query.stringValue = state.options.query
+        presentationPreferences = state.presentation
         replacement.stringValue = state.options.replacement
         directory.stringValue = state.directory
         filters.stringValue = state.filters
