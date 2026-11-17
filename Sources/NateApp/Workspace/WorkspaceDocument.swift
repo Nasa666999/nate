@@ -2,6 +2,11 @@ import Foundation
 import NateCore
 import NateStorage
 
+struct RecoveryWorkspaceState: Sendable, Equatable {
+    let documentIDs: [UUID]
+    let activeID: UUID?
+}
+
 @MainActor
 final class WorkspaceDocument {
     let buffer: DocumentBuffer
@@ -117,7 +122,8 @@ final class WorkspaceDocument {
             selections: buffer.selections,
             bookmarks: buffer.bookmarks,
             readOnly: buffer.isReadOnly,
-            lineEnding: buffer.format.lineEnding
+            lineEnding: buffer.format.lineEnding,
+            pinned: pinned
         )
     }
 }

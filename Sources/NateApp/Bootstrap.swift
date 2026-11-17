@@ -54,6 +54,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var recoveryFailureCount = 0
     var nextRecoveryCollection = ContinuousClock.now
     var initialRecoveryConfirmation = true
+    var publishedRecoveryWorkspace: RecoveryWorkspaceState?
     var searchTask: Task<Void, Never>?
     var externalObservationTask: Task<Void, Never>?
     var externalStamps: [UUID: FileStamp] = [:]
@@ -203,6 +204,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 )
                 document.savedEncoding = record.encoding
                 document.language = record.language
+                document.pinned = record.pinned ?? false
                 document.buffer.selections = record.selections.filter {
                     document.buffer.text.isBoundary($0.anchor) && document.buffer.text.isBoundary($0.head)
                 }
@@ -225,6 +227,12 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 documents.append(document)
             }
             activeID = restored.active
+            publishedRecoveryWorkspace = RecoveryWorkspaceState(
+                documentIDs: documents.map {
+                    $0.buffer.id
+                },
+                activeID: restored.active
+            )
         }
         catch {
             SystemIntegration.alert("启动信息", error.localizedDescription)

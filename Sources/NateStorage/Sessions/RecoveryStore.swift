@@ -14,6 +14,7 @@ public struct RecoveryDocument: Sendable, Codable {
     public var bookmarks: Set<Int>
     public var readOnly: Bool
     public var lineEnding: LineEnding?
+    public var pinned: Bool?
 
     /// 业务作用：恢复进度使用完整元数据的原字节证据，正文由独立修订和内容清单绑定。
     /// 参数说明: 无。
@@ -42,6 +43,7 @@ public struct RecoveryDocument: Sendable, Codable {
         case bookmarks
         case readOnly
         case lineEnding
+        case pinned
     }
 
     /// 业务作用：按固定行号编码书签，避免集合遍历顺序导致相同恢复元数据生成不同清单。
@@ -62,6 +64,7 @@ public struct RecoveryDocument: Sendable, Codable {
         try values.encode(bookmarks.sorted(), forKey: .bookmarks)
         try values.encode(readOnly, forKey: .readOnly)
         try values.encodeIfPresent(lineEnding, forKey: .lineEnding)
+        try values.encodeIfPresent(pinned, forKey: .pinned)
     }
 
     /// 业务作用：固定已提交正文及恢复所需元数据，不包含输入法预编辑。
@@ -78,6 +81,7 @@ public struct RecoveryDocument: Sendable, Codable {
     /// - bookmarks: 书签行。
     /// - readOnly: 编辑器只读状态。
     /// - lineEnding: 新插入换行的规则，旧记录可为空。
+    /// - pinned: 标签固定状态；旧记录可为空并按未固定恢复。
     /// 返回：可校验、独立于原路径的恢复内容。
     public init(
         id: UUID,
@@ -91,7 +95,8 @@ public struct RecoveryDocument: Sendable, Codable {
         selections: [TextSelection],
         bookmarks: Set<Int>,
         readOnly: Bool,
-        lineEnding: LineEnding? = nil
+        lineEnding: LineEnding? = nil,
+        pinned: Bool? = nil
     ) {
         self.id = id
         self.revision = revision
@@ -105,6 +110,7 @@ public struct RecoveryDocument: Sendable, Codable {
         self.bookmarks = bookmarks
         self.readOnly = readOnly
         self.lineEnding = lineEnding
+        self.pinned = pinned
     }
 }
 

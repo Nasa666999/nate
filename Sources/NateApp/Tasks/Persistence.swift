@@ -248,8 +248,15 @@ extension ApplicationController {
             }
         )
         let oldReferences = captured.compactMap(\.recoveryReference)
+        let workspace = RecoveryWorkspaceState(
+            documentIDs: captured.map {
+                $0.buffer.id
+            },
+            activeID: activeID
+        )
         guard
             !changed.isEmpty || oldReferences.count != captured.count || force
+                || workspace != publishedRecoveryWorkspace
                 || captured.contains(where: {
                     $0.recoveryError != nil
                 })
@@ -261,10 +268,8 @@ extension ApplicationController {
             metadata.text = ""
             return (metadata, $0.buffer.text)
         }
-        let ids = captured.map {
-            $0.buffer.id
-        }
-        let selected = activeID
+        let ids = workspace.documentIDs
+        let selected = workspace.activeID
         let byteCounts = captured.map {
             $0.buffer.text.byteCount
         }
@@ -339,6 +344,8 @@ extension ApplicationController {
                 }) {
                     document.recoveryError = nil
                 }
+                // 回调只确认实际写出的工作区状态，等待期间的切换由下一周期继续发布。
+                self.publishedRecoveryWorkspace = workspace
                 self.lastRecoverySucceeded = true
                 self.recoveryFailureCount = 0
                 self.nextRecoveryRetry = .now

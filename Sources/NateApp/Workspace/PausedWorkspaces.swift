@@ -61,6 +61,7 @@ extension ApplicationController {
                     lineEnding: record.lineEnding ?? .lf
                 )
                 document.language = record.language
+                document.pinned = record.pinned ?? false
                 document.languageExplicit = true
                 document.buffer.bookmarks = record.bookmarks
                 document.buffer.selections = record.selections.filter {

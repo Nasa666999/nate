@@ -49,6 +49,7 @@ extension ApplicationController {
                 lineEnding: record.lineEnding ?? .lf
             )
             document.language = record.language
+            document.pinned = record.pinned ?? false
             document.languageExplicit = true
             document.buffer.selections = record.selections.filter {
                 document.buffer.text.isBoundary($0.anchor) && document.buffer.text.isBoundary($0.head)
