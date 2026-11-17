@@ -6,6 +6,11 @@ public struct BracketMatch: Sendable, Equatable {
     public let partner: Int?
 }
 
+public struct StructuralBracketPair: Sendable {
+    public let range: ByteRange
+    public let opener: UInt8
+}
+
 public struct BracketAnalysisLimits: Sendable {
     public var maximumBytes: Int
     public var maximumLineBytes: Int
@@ -40,6 +45,7 @@ private struct BracketClass: Hashable {
 public struct BracketIndex: Sendable {
     public let documentID: UUID
     public let revision: UInt64
+    public let structuralPairs: [StructuralBracketPair]
     private let entries: [Int: BracketMatch]
 
     /// 业务作用：在完整快照上按括号类型和当前词法样式分别配对，保留未匹配位置用于明确反馈。
@@ -66,6 +72,7 @@ public struct BracketIndex: Sendable {
         var user = UDLState()
         var stacks: [BracketClass: [Int]] = [:]
         var output: [Int: BracketMatch] = [:]
+        var pairs: [StructuralBracketPair] = []
         let deadline = ContinuousClock.now.advanced(by: limits.time)
         let plain = udl == nil ? SyntaxKind.text.rawValue : "udl:DEFAULT"
         for line in 0..<snapshot.text.lineCount {
@@ -98,9 +105,11 @@ public struct BracketIndex: Sendable {
                     tokenIndex += 1
                 }
                 var style = plain
+                var kind = SyntaxKind.text
                 if tokenIndex < ordered.count, ordered[tokenIndex].range.lower <= position {
                     let token = ordered[tokenIndex]
                     style = token.lexicalStyle
+                    kind = token.kind
                 }
                 let key = BracketClass(
                     opener: opener,
@@ -123,6 +132,14 @@ public struct BracketIndex: Sendable {
                         position: previous,
                         partner: position
                     )
+                    if kind != .comment && kind != .string {
+                        pairs.append(
+                            StructuralBracketPair(
+                                range: ByteRange(previous, position + 1),
+                                opener: opener
+                            )
+                        )
+                    }
                 }
                 else {
                     output[position] = BracketMatch(
@@ -136,6 +153,7 @@ public struct BracketIndex: Sendable {
         documentID = snapshot.id
         revision = snapshot.revision
         entries = output
+        structuralPairs = pairs
     }
 
     /// 业务作用：按光标前字符优先的编辑器习惯选择当前括号，字节位置不与 UTF-16 下标混用。

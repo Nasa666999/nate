@@ -126,6 +126,22 @@ extension ApplicationController: NSMenuItemValidation {
         ] {
             add(view, title, id)
         }
+        view.addItem(.separator())
+        for (title, id, key, shifted) in [
+            ("收起当前块", "foldCurrent", "[", false),
+            ("展开当前块", "unfoldCurrent", "]", false),
+            ("全部收起", "foldAll", "[", true),
+            ("全部展开", "unfoldAll", "]", true),
+        ] {
+            add(view, title, id, key: key)
+            view.items.last?.keyEquivalentModifierMask =
+                shifted ? [.command, .option, .shift] : [.command, .option]
+        }
+        let levels = NSMenu(title: "按层级收起")
+        for level in 1...8 {
+            add(levels, "第 \(level) 层", "foldLevel:\(level)")
+        }
+        attach(levels, to: view)
         attach(view, to: bar)
         let encoding = NSMenu(title: "编码")
         let convert = NSMenu(title: "转换为编码")
@@ -238,6 +254,14 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if let action = foldAction(for: id) {
+            guard !closing, let window = mainWindow, NSApp.keyWindow === window.window,
+                let editor = NSApp.keyWindow?.firstResponder as? EditorView, editor === window.editor
+            else {
+                return false
+            }
+            return editor.foldingAvailable(action)
         }
         if ["matchingBracket", "selectBracketPair", "selectInsideBracket"].contains(id) {
             guard !closing, let window = mainWindow, NSApp.keyWindow === window.window,

@@ -41,6 +41,14 @@ extension EditorView {
             onSelection?()
             return
         }
+        if point.x - visibleRect.minX >= gutterWidth - 19 && point.x - visibleRect.minX < gutterWidth {
+            dragAnchor = nil
+            dragColumn = nil
+            if let region = folds.index?.region(at: row), region.startLine == row {
+                performFold(.toggle, line: row)
+            }
+            return
+        }
         if point.x - visibleRect.minX < gutterWidth || event.clickCount >= 3 {
             let range = document.text.lineRange(row)
             viewSelections = [TextSelection(anchor: range.lower, head: range.upper)]
@@ -96,7 +104,7 @@ extension EditorView {
         if let startX = dragColumn {
             let a = document.text.lineNumber(at: anchor)
             let b = document.text.lineNumber(at: position)
-            viewSelections = (min(a, b)...max(a, b)).map {
+            viewSelections = projection.visibleLines(in: min(a, b)...max(a, b)).map {
                 line in
                 let y = projection.y(of: line) + 9
                 let lower = bytePosition(at: NSPoint(x: min(startX, point.x), y: y))

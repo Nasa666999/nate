@@ -141,7 +141,8 @@ final class LineLayout {
     /// - range: 本段落内的真实字节选区。
     /// 返回：可能包含多个方向和视觉行的呈现矩形。
     func selectionRects(_ range: ByteRange) -> [NSRect] {
-        guard let a = content.snapshot.text.utf16Offset(byte: range.lower),
+        guard !range.isEmpty, range.lower >= self.range.lower, range.upper <= self.range.upper,
+            let a = content.snapshot.text.utf16Offset(byte: range.lower),
             let b = content.snapshot.text.utf16Offset(byte: range.upper),
             let selected = NSTextRange(
                 location: EditorTextLocation(

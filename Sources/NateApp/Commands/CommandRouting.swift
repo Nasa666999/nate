@@ -56,6 +56,10 @@ extension ApplicationController {
             runTextTool(String(id.dropFirst(5)))
             return
         }
+        if let action = foldAction(for: id) {
+            mainWindow?.editor.performFold(action)
+            return
+        }
         switch id {
         case "matchingBracket": mainWindow?.editor.navigateBracket(.jump)
         case "selectBracketPair": mainWindow?.editor.navigateBracket(.selectPair)

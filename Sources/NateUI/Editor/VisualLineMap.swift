@@ -4,7 +4,8 @@ struct VisualLineMap {
     var count = 1
     var defaultHeight: CGFloat = 20
     var measured: [Int: CGFloat] = [:]
-    var hidden: Set<Int> = []
+    var measurementsChanged = false
+    var hidden = HiddenLineRanges()
 
     /// 业务作用：未访问行使用估计高度，只有视口中经过排版的行保留实际高度。
     /// 参数说明:
@@ -15,12 +16,7 @@ struct VisualLineMap {
         for (index, height) in measured where index < line && !hidden.contains(index) {
             value += height - defaultHeight
         }
-        value -=
-            CGFloat(
-                hidden.filter {
-                    $0 < line
-                }.count
-            ) * defaultHeight
+        value -= CGFloat(hidden.count(before: line)) * defaultHeight
         return value
     }
 
@@ -40,10 +36,40 @@ struct VisualLineMap {
                 upper = middle
             }
         }
-        while lower < count - 1 && hidden.contains(lower) {
-            lower += 1
+        return hidden.visibleAfterOrAt(lower, count: count)
+    }
+
+    /// 业务作用：绘制与矩形拖选只枚举可见真实行，跨过巨大折叠区不展开逐行循环。
+    /// 参数说明:
+    /// - range: 当前视口覆盖的真实行闭区间。
+    /// 返回：按文档顺序排列的可见行号。
+    func visibleLines(in range: ClosedRange<Int>) -> [Int] {
+        var output: [Int] = []
+        var line = hidden.visibleAfterOrAt(range.lowerBound, count: count)
+        while line >= range.lowerBound && line <= range.upperBound && line < count {
+            output.append(line)
+            guard line < count - 1 else {
+                break
+            }
+            let next = hidden.visibleAfterOrAt(line + 1, count: count)
+            guard next > line else {
+                break
+            }
+            line = next
         }
-        return lower
+        return output
+    }
+
+    /// 业务作用：上下键按可见行移动，不陷入折叠正文或错误命中其它逻辑行。
+    /// 参数说明:
+    /// - line: 当前真实行。
+    /// - direction: 向上为负，向下为正。
+    /// 返回：相邻可见行，文档边界保持当前位置。
+    func adjacentLine(to line: Int, direction: Int) -> Int {
+        if direction < 0 {
+            return hidden.visibleBeforeOrAt(max(0, line - 1))
+        }
+        return hidden.visibleAfterOrAt(min(count - 1, line + 1), count: count)
     }
 
     /// 业务作用：只在实际高度改变时调整滚动投影，正文位置保持不变。
@@ -54,10 +80,20 @@ struct VisualLineMap {
     mutating func measure(_ line: Int, height: CGFloat) {
         let height = max(defaultHeight, height)
         if abs(height - defaultHeight) < 0.5 {
-            measured.removeValue(forKey: line)
+            if measured.removeValue(forKey: line) != nil {
+                measurementsChanged = true
+            }
         }
-        else {
+        else if measured[line] != height {
+            measurementsChanged = true
             measured[line] = height
+            if measured.count > 2048,
+                let farthest = measured.keys.max(by: {
+                    abs($0 - line) < abs($1 - line)
+                })
+            {
+                measured.removeValue(forKey: farthest)
+            }
         }
     }
 }

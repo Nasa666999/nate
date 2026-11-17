@@ -462,13 +462,15 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         let recoveryState =
             active.url != nil && recoveryReady && active.recoveryError == nil
             ? " · " + (active.recoveryRevision == active.buffer.revision ? "恢复正文已保存" : "恢复正文待保存") : ""
-        let bracketState =
+        let structureState =
             window.editor.document.id == active.buffer.id
-            ? window.editor.bracketAnalysisStatus.map {
+            ? (window.editor.bracketAnalysisStatus ?? window.editor.foldingAnalysisStatus).map {
                 " · " + $0
             } ?? "" : ""
+        let folded = window.editor.foldedRegionCount
+        let foldState = folded > 0 ? " · 已收起 \(folded) 处" : ""
         window.status.stringValue =
-            "  \(suspension)\(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(protection)\(state)\(recoveryState)\(bracketState)"
+            "  \(suspension)\(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(protection)\(state)\(recoveryState)\(structureState)\(foldState)"
         if window.isStructureVisible {
             requestStructure()
         }

@@ -17,6 +17,28 @@ final class EditorTextLocation: NSObject, NSTextLocation {
         self.offset = offset
     }
 
+    /// 业务作用：让不同原生请求产生的同一文档位置具有一致相等语义，片段不能依赖对象地址识别坐标。
+    /// 参数说明:
+    /// - object: 待比较的系统位置对象。
+    /// 返回：仅同一文档、修订和 UTF-16 偏移相等时为真。
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? EditorTextLocation else {
+            return false
+        }
+        return documentID == other.documentID && revision == other.revision && offset == other.offset
+    }
+
+    /// 业务作用：原生布局的坐标缓存按业务位置分组，与相等判定保持一致。
+    /// 参数说明: 无。
+    /// 返回：包含文档身份、修订和偏移的哈希值。
+    override var hash: Int {
+        var hasher = Hasher()
+        hasher.combine(documentID)
+        hasher.combine(revision)
+        hasher.combine(offset)
+        return hasher.finalize()
+    }
+
     /// 业务作用：向 TextKit 提供同一快照内的逻辑排序。
     /// 参数说明:
     /// - location: 待比较位置。

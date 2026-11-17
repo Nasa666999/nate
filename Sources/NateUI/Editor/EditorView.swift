@@ -38,7 +38,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var onFocus: (() -> Void)?
     var observedRevision: UInt64 = 0
     var projection = VisualLineMap()
-    var lastLayoutWidth: CGFloat = 0
+    var layoutMetrics: EditorLayoutMetrics?
     public var language: LanguageDefinition? {
         didSet {
             updateLanguageResource()
@@ -46,6 +46,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     var languageResource: Data?
     let brackets = BracketViewState()
+    let folds = FoldViewState()
     public var bracketLimits = BracketAnalysisLimits() {
         didSet {
             invalidateBracketAnalysis()
@@ -87,7 +88,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var blinkTimer: Timer?
     var caretVisible = true
     var completionPanel: CompletionPanel?
-    var hiddenLines: Set<Int> = []
+    var hiddenLines = HiddenLineRanges()
     var lineHeight: CGFloat {
         ceil(font.ascender - font.descender + font.leading + 5)
     }
@@ -136,6 +137,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// - reveal: 是否显示当前光标；后台更新不抢视口。
     /// 返回：刷新呈现，不制造编辑或保存状态。
     public func refresh(reveal: Bool = false) {
+        synchronizeBracketContext()
         if window?.firstResponder === self || reveal {
             viewSelections = document.selections
         }
@@ -161,12 +163,23 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         layouts.removeAll()
         projection.count = displayTree.lineCount
         projection.defaultHeight = lineHeight
-        projection.hidden = hiddenLines
+        rebuildFoldVisibility()
+        gutterWidth = max(
+            62,
+            CGFloat(String(displayTree.lineCount).count) * max(6, font.pointSize * 0.65) + 42
+        )
         let viewport = enclosingScrollView?.contentSize ?? NSSize(width: 900, height: 600)
-        if !wrapLines || abs(lastLayoutWidth - viewport.width) > 0.5 {
+        let metrics = EditorLayoutMetrics(
+            font: font,
+            width: viewport.width,
+            gutter: gutterWidth,
+            wrapping: wrapLines,
+            rightToLeft: rtl
+        )
+        if !wrapLines || metrics != layoutMetrics {
             projection.measured.removeAll()
         }
-        lastLayoutWidth = viewport.width
+        layoutMetrics = metrics
         setFrameSize(
             NSSize(
                 width: wrapLines ? viewport.width : max(viewport.width, frame.width),
@@ -221,13 +234,20 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         NSColor.textBackgroundColor.setFill()
         dirtyRect.fill()
         let tree = displayTree
-        let first = projection.line(at: max(0, dirtyRect.minY - 8))
-        let last = min(tree.lineCount - 1, projection.line(at: dirtyRect.maxY) + 1)
+        let viewportAnchor = viewportAnchor()
+        projection.measurementsChanged = false
+        let drawing = dirtyRect.intersection(visibleRect)
+        guard !drawing.isNull else {
+            return
+        }
+        let first = projection.line(at: max(0, drawing.minY - 8))
+        let last = min(tree.lineCount - 1, projection.line(at: drawing.maxY) + 1)
         guard first <= last, let context = NSGraphicsContext.current?.cgContext else {
             return
         }
         let active = tree.lineNumber(at: min(viewSelections.first?.head ?? 0, tree.byteCount))
-        for line in first...last where !hiddenLines.contains(line) {
+        let visibleLines = projection.visibleLines(in: first...last)
+        for line in visibleLines {
             let layout = layoutLine(line)
             let y = projection.y(of: line) + 8
             if line == active {
@@ -284,9 +304,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             }
         }
         NSColor.windowBackgroundColor.setFill()
-        NSRect(x: visibleRect.minX, y: dirtyRect.minY, width: gutterWidth - 8, height: dirtyRect.height)
+        NSRect(x: visibleRect.minX, y: dirtyRect.minY, width: gutterWidth, height: dirtyRect.height)
             .fill()
-        for line in first...last where !hiddenLines.contains(line) {
+        for line in visibleLines {
             let number = NSAttributedString(
                 string: "\(line + 1)",
                 attributes: [
@@ -299,7 +319,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             )
             number.draw(
                 at: NSPoint(
-                    x: visibleRect.minX + gutterWidth - 16 - number.size().width,
+                    x: visibleRect.minX + gutterWidth - 25 - number.size().width,
                     y: projection.y(of: line) + 9
                 )
             )
@@ -317,12 +337,13 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             if document.modifiedLines.contains(line) {
                 NSColor.systemGreen.setFill()
                 NSRect(
-                    x: visibleRect.minX + gutterWidth - 10,
+                    x: visibleRect.minX + gutterWidth - 21,
                     y: projection.y(of: line) + 8,
                     width: 2,
                     height: lineHeight
                 ).fill()
             }
+            drawFoldMarker(line: line)
         }
         let viewport = enclosingScrollView?.contentSize ?? bounds.size
         let height = max(viewport.height, projection.y(of: tree.lineCount) + 60)
@@ -332,6 +353,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let width = wrapLines ? viewport.width : contentWidth
         if abs(frame.height - height) > 0.5 || abs(frame.width - width) > 0.5 {
             setFrameSize(NSSize(width: width, height: height))
+        }
+        if projection.measurementsChanged {
+            restoreViewportAnchor(viewportAnchor)
+            needsDisplay = true
         }
     }
 
@@ -366,8 +391,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
 
     /// 业务作用：主动导航时显示当前选区，后台保存不会调用此入口。
     /// 参数说明: 无。
-    /// 返回：只滚动视口，不移动正文光标。
+    /// 返回：展开遮挡范围并滚动视口，不移动正文光标。
     public func revealSelection() {
+        unfoldSelection()
         guard let selection = viewSelections.first else {
             return
         }
@@ -399,6 +425,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         dismissCompletion()
         // 焦点即使稍后返回同一光标，也不能重新执行此前尚未确认的导航意图。
         brackets.pending = nil
+        folds.pending = nil
         needsDisplay = true
         return super.resignFirstResponder()
     }
@@ -411,6 +438,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         observeBracketFocus()
         if window == nil {
             brackets.pending = nil
+            folds.pending = nil
             brackets.task?.cancel()
             syntaxTask?.cancel()
             dismissCompletion()

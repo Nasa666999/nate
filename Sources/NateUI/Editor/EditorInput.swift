@@ -64,10 +64,16 @@ extension EditorView {
         case "moveDown:": move(vertical: 1)
         case "moveUpAndModifySelection:": move(vertical: -1, extend: true)
         case "moveDownAndModifySelection:": move(vertical: 1, extend: true)
-        case "moveToBeginningOfLine:", "moveToBeginningOfParagraph:": move(edge: -1)
-        case "moveToEndOfLine:", "moveToEndOfParagraph:": move(edge: 1)
-        case "moveToBeginningOfLineAndModifySelection:": move(edge: -1, extend: true)
-        case "moveToEndOfLineAndModifySelection:": move(edge: 1, extend: true)
+        case "moveToBeginningOfLine:", "moveToBeginningOfParagraph:", "moveToLeftEndOfLine:":
+            move(edge: -1)
+        case "moveToEndOfLine:", "moveToEndOfParagraph:", "moveToRightEndOfLine:":
+            move(edge: 1)
+        case "moveToBeginningOfLineAndModifySelection:", "moveToLeftEndOfLineAndModifySelection:",
+            "moveToBeginningOfParagraphAndModifySelection:":
+            move(edge: -1, extend: true)
+        case "moveToEndOfLineAndModifySelection:", "moveToRightEndOfLineAndModifySelection:",
+            "moveToEndOfParagraphAndModifySelection:":
+            move(edge: 1, extend: true)
         case "moveToBeginningOfDocument:": setCaret(0)
         case "moveToEndOfDocument:": setCaret(document.text.byteCount)
         case "moveWordLeft:", "moveWordBackward:": moveWord(forward: false)
@@ -158,7 +164,7 @@ extension EditorView {
     /// 业务作用：保持原生字形坐标的行列移动和带方向选区。
     /// 参数说明:
     /// - horizontal: 逐字方向。
-    /// - vertical: 真实行方向。
+    /// - vertical: 可见行方向，跨过已收起的正文。
     /// - edge: 当前行首或行尾。
     /// - extend: 是否保留固定端。
     /// 返回：仅更新视图选区，不产生修改修订。
@@ -181,7 +187,7 @@ extension EditorView {
                 head = edge < 0 ? range.lower : range.upper
             }
             else {
-                let target = max(0, min(document.text.lineCount - 1, row + vertical))
+                let target = projection.adjacentLine(to: row, direction: vertical)
                 let units = document.text.utf16Offset(byte: head) ?? 0
                 let layout = layoutLine(row)
                 let p = layout.caret(at: units - layout.originUTF16)

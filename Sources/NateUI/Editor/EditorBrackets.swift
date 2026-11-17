@@ -71,6 +71,7 @@ extension EditorView {
             return
         }
         brackets.pending = nil
+        folds.pending = nil
     }
 
     /// 业务作用：保存状态刷新时同时保留括号分析的真实进度或预算边界。
@@ -136,6 +137,13 @@ extension EditorView {
         brackets.attempted = false
         brackets.failure = nil
         brackets.pending = nil
+        folds.context = nil
+        folds.index = nil
+        folds.collapsed.removeAll()
+        folds.pending = nil
+        folds.failure = nil
+        hiddenLines.removeAll()
+        projection.hidden = hiddenLines
         // 取消不能冒充后台已经停止，任务位在真正返回后才释放。
         brackets.task?.cancel()
         needsDisplay = true
@@ -154,6 +162,7 @@ extension EditorView {
             return
         }
         brackets.context = context
+        synchronizeFoldContext(context)
         brackets.index = nil
         brackets.attempted = false
         brackets.failure = nil
@@ -161,13 +170,15 @@ extension EditorView {
         brackets.task?.cancel()
     }
 
-    /// 业务作用：光标邻接括号或用户明确导航时才安排完整结构分析，后台任务不复制全文供界面使用。
+    /// 业务作用：当前语言需要折叠、光标邻接括号或用户明确导航时安排共享结构分析，不复制全文供界面使用。
     /// 参数说明: 无。
     /// 返回：每个视图最多有一个实际在途任务；取消后等待其返回，再按最新正文继续。
     func prepareBracketAnalysis() {
         synchronizeBracketContext()
+        let needsFolds = FoldIndex.supports(language: language, udl: userLanguage) && folds.index == nil
         guard composition == nil, window != nil, brackets.index == nil, brackets.task == nil,
-            !brackets.attempted, hasAdjacentBracket || brackets.pending != nil,
+            !brackets.attempted,
+            hasAdjacentBracket || brackets.pending != nil || needsFolds || folds.pending != nil,
             let context = brackets.context
         else {
             return
@@ -188,14 +199,37 @@ extension EditorView {
                     state.task = nil
                     state.taskID = nil
                     // 显式的新导航不能依赖窗口下一次重绘，旧分析真正返回后立即接续最新有效请求。
-                    if state.pending != nil {
+                    if state.pending != nil || self?.folds.pending != nil {
                         self?.prepareBracketAnalysis()
                     }
                     self?.needsDisplay = true
                 }
             }
             let worker = Task.detached(priority: .utility) {
-                try BracketIndex(snapshot: snapshot, language: language, udl: udl, limits: limits)
+                let brackets = try BracketIndex(
+                    snapshot: snapshot,
+                    language: language,
+                    udl: udl,
+                    limits: limits
+                )
+                var folds: FoldIndex?
+                var failure: String?
+                if FoldIndex.supports(language: language, udl: udl) {
+                    do {
+                        folds = try FoldIndex(snapshot: snapshot, brackets: brackets, language: language)
+                    }
+                    catch {
+                        if Task.isCancelled || error is CancellationError {
+                            throw error
+                        }
+                        failure = error.localizedDescription
+                    }
+                }
+                return EditorStructureResult(
+                    brackets: brackets,
+                    folds: folds,
+                    foldFailure: failure
+                )
             }
             do {
                 let result = try await withTaskCancellationHandler(
@@ -214,10 +248,11 @@ extension EditorView {
                 else {
                     return
                 }
-                state.index = result
+                state.index = result.brackets
+                self.publishFolds(result.folds, failure: result.foldFailure)
                 if let pending = state.pending {
                     state.pending = nil
-                    self.applyBracketNavigation(pending, index: result)
+                    self.applyBracketNavigation(pending, index: result.brackets)
                 }
                 self.needsDisplay = true
             }
@@ -235,6 +270,7 @@ extension EditorView {
                 }
                 else {
                     state.pending = nil
+                    self.folds.pending = nil
                     state.failure = error.localizedDescription
                     self.onStatus?(error.localizedDescription)
                 }
@@ -253,6 +289,7 @@ extension EditorView {
         }
         finishComposition()
         synchronizeBracketContext()
+        folds.pending = nil
         guard bracketNavigationAvailable(action) else {
             onStatus?("当前位置没有可用于该动作的完整括号。")
             return
