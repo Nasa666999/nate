@@ -447,6 +447,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         guard let active else {
             return
         }
+        // 新正文已提交，原目录打开不再拥有旧修订与原光标的发布资格。
+        directoryWorkspace?.cancelOpen()
         cancelCompletion()
         // 正文已经进入新修订，原增量快照和起点都不能继续发布。
         cancelIncrementalSearch(resetOrigin: true)

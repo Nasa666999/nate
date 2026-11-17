@@ -21,6 +21,7 @@ extension ApplicationController {
     /// 返回：完整当前引用进入唯一打开通道；候选、换面板、改定义、移动光标或退出使旧请求失效。
     func openProjectNode(_ id: UUID, panel index: Int) {
         cancelProjectOpen()
+        directoryWorkspace?.cancelOpen()
         // 隐藏面板和未确认输入都不拥有新文件的焦点交接权。
         guard !closing, projectPanelStates.indices.contains(index), let window = mainWindow,
             !window.projectPanels.isHidden, window.projectPanels.selectedIndex == index,
@@ -60,8 +61,14 @@ extension ApplicationController {
                 let revision = self.active?.buffer.revision
                 let selections = window.editor.viewSelections
                 let documentSelections = self.active?.buffer.selections
+                let query = self.findWindow?.inputIdentities
+                let keyWindow = NSApp.keyWindow
+                let modalWindow = NSApp.modalWindow
                 let permitted: @MainActor () -> Bool = {
-                    [weak self, weak window, weak origin = self.active?.buffer, weak editor = window.editor]
+                    [
+                        weak self, weak window, weak origin = self.active?.buffer,
+                        weak editor = window.editor, weak keyWindow, weak modalWindow
+                    ]
                     in
                     guard let self, let window, !self.closing, !Task.isCancelled,
                         self.projectOpenGeneration == request, state.generation == generation,
@@ -74,6 +81,8 @@ extension ApplicationController {
                         self.searchNavigationGeneration == movement,
                         self.active?.buffer === origin, origin?.revision == revision,
                         origin?.selections == documentSelections,
+                        self.findWindow?.inputIdentities == query,
+                        NSApp.keyWindow === keyWindow, NSApp.modalWindow === modalWindow,
                         window.editor === editor, editor?.viewSelections == selections,
                         !window.hasMarkedEditorInput, self.findWindow?.isEditingInput != true
                     else {

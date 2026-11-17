@@ -1,4 +1,6 @@
-import Foundation
+import AppKit
+import NateCore
+import NateSearch
 import NateStorage
 import NateUI
 
@@ -21,6 +23,8 @@ final class DirectoryWorkspaceController {
     private var records: [Data: WorkspaceDirectoryRecord] = [:]
     private var requests: [Data: (UUID, Task<Void, Never>)] = [:]
     private var monitor: Task<Void, Never>?
+    private(set) var openTask: Task<Void, Never>?
+    private var openGeneration = UUID()
 
     /// 业务作用：目录工作区单独持有读取任务和观察状态，不与会话、虚拟项目或结果面板共用列表。
     /// 参数说明:
@@ -34,30 +38,7 @@ final class DirectoryWorkspaceController {
             [weak self] path in self?.load(path)
         }
         window.directoryPanel.onOpen = {
-            [weak self] path in
-            // 关闭和退出已经撤销目录打开资格，失效行不能再引入新的文件读取。
-            guard let self, self.root != nil, self.application?.closing == false else {
-                return
-            }
-            let generation = self.generation
-            Task {
-                [weak self] in
-                guard let self, let application = self.application, !application.closing,
-                    self.generation == generation
-                else {
-                    return
-                }
-                // 文件打开也绑定原树，切根、关闭或移除条目后，迟到读取不能取得标签与焦点。
-                await application.openFile(
-                    URL(fileURLWithPath: path),
-                    permit: {
-                        [weak self] in
-                        self?.generation == generation && self?.application?.closing == false
-                            && self?.window === self?.application?.mainWindow
-                            && self?.window?.directoryPanel.containsPath(path) == true
-                    }
-                )
-            }
+            [weak self] path in self?.open(path)
         }
         window.directoryPanel.onRefresh = {
             [weak self] in self?.refresh()
@@ -65,6 +46,98 @@ final class DirectoryWorkspaceController {
         window.directoryPanel.onClose = {
             [weak self] in self?.stop()
         }
+    }
+
+    /// 业务作用：目录文件激活绑定原树、实际正文视图和光标，等待中的旧读取不能覆盖新输入意图。
+    /// 参数说明:
+    /// - path: 用户刚激活的当前树内文件路径。
+    /// 返回：登记一个当前打开任务，所有证据仍有效时才激活目标，旧读取和错误不改变新界面。
+    private func open(_ path: String) {
+        cancelOpen()
+        application?.cancelProjectOpen()
+        // 当前树、所属窗口和正文必须完整存在，候选或全文草稿仍持有输入上下文时不交接焦点。
+        guard root != nil, let application, !application.closing, let window,
+            application.mainWindow === window, window.directoryPanel.containsPath(path),
+            !window.directoryPanel.containsDirectory(path), !window.hasMarkedEditorInput,
+            application.findWindow?.isEditingInput != true
+        else {
+            return
+        }
+        let editor = window.editor
+        let buffer = editor.document
+        guard application.active?.buffer === buffer else {
+            return
+        }
+        let revision = buffer.revision
+        let selections = editor.viewSelections
+        let documentSelections = buffer.selections
+        let movement = application.searchNavigationGeneration
+        let query = application.findWindow?.inputIdentities
+        let rootGeneration = generation
+        let request = openGeneration
+        let responder = window.window?.firstResponder
+        let keyWindow = NSApp.keyWindow
+        let modalWindow = NSApp.modalWindow
+        openTask = Task {
+            [
+                weak self, weak application, weak window, weak editor, weak buffer, weak responder,
+                weak keyWindow, weak modalWindow
+            ] in
+            guard let self, let application, let window else {
+                return
+            }
+            defer {
+                if self.openGeneration == request {
+                    self.openTask = nil
+                }
+            }
+            let permitted: @MainActor () -> Bool = {
+                [
+                    weak self, weak application, weak window, weak editor, weak buffer, weak responder,
+                    weak keyWindow, weak modalWindow
+                ] in
+                guard let self, let application, let window, let editor, let buffer,
+                    !application.closing, !Task.isCancelled,
+                    self.generation == rootGeneration, self.openGeneration == request,
+                    self.root != nil, application.mainWindow === window,
+                    window.directoryPanel.containsPath(path), !window.directoryPanel.isHidden,
+                    window.editor === editor, editor.document === buffer,
+                    application.active?.buffer === buffer, buffer.revision == revision,
+                    editor.viewSelections == selections, buffer.selections == documentSelections,
+                    application.searchNavigationGeneration == movement,
+                    application.findWindow?.inputIdentities == query,
+                    application.findWindow?.isEditingInput != true,
+                    NSApp.keyWindow === keyWindow, NSApp.modalWindow === modalWindow,
+                    !window.hasMarkedEditorInput, window.window?.firstResponder === responder
+                else {
+                    return false
+                }
+                return true
+            }
+            let url = URL(
+                fileURLWithPath: path,
+                isDirectory: false
+            )
+            // 读取只取得后台正文，直到完整复验原输入证据之后才在同一执行域内发布焦点。
+            guard permitted(),
+                let opened = await application.openFile(url, activateOnOpen: false, permit: permitted),
+                permitted()
+            else {
+                return
+            }
+            application.activate(opened.buffer.id)
+            window.window?.makeFirstResponder(window.editor)
+        }
+    }
+
+    /// 业务作用：新目录激活或输入意图开始时撤销旧文件打开，旧任务不能清除新句柄或迟到夺取焦点。
+    /// 参数说明: 无。
+    /// 返回：请求身份先失效，随后取消等待并收回当前打开任务。
+    func cancelOpen() {
+        // 完成计算不等于仍有发布权，先换身份才能封住等待主执行域的旧结果。
+        openGeneration = UUID()
+        openTask?.cancel()
+        openTask = nil
     }
 
     /// 业务作用：用户选择新根后先撤销原树发布权，再建立独立根节点并读取首层。
@@ -278,6 +351,7 @@ final class DirectoryWorkspaceController {
     func pause() {
         // 请求身份先失效，随后才取消线程等待，已返回但等待主执行域的清单同样不能发布。
         generation = UUID()
+        cancelOpen()
         monitor?.cancel()
         monitor = nil
         for request in requests.values {

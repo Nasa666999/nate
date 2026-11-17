@@ -2,6 +2,16 @@ import AppKit
 import NateSearch
 
 extension FindReplaceWindow {
+    /// 业务作用：窗口外的文件导航通过轻量输入身份识别新查询意图，不保留或比较完整搜索原文。
+    /// 参数说明: 无。
+    /// 返回：查找、替换、目录及过滤字段的当前运行期身份，顺序固定，不产生持久化副作用。
+    public var inputIdentities: [UUID] {
+        [
+            query.navigationIdentity, replacement.navigationIdentity, directory.navigationIdentity,
+            filters.navigationIdentity,
+        ]
+    }
+
     /// 业务作用：原生短字段与完整输入摘要按同一方向规则执行查找，Shift 只临时反向。
     /// 参数说明:
     /// - reversing: 是否临时反转已保存的查找方向。

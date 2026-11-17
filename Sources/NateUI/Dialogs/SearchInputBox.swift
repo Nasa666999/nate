@@ -10,6 +10,12 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     private var raw = ""
     private var confirmedRaw = ""
     private var inputGeneration = UUID()
+    /// 业务作用：为原生导航复验提供完整输入身份，长表达式不必为焦点保护反复比较全部字节。
+    /// 参数说明: 无。
+    /// 返回：当前原始输入的运行期身份，赋值、原生文本变化或结束编辑时更新，不表示任何持久配置格式。
+    public var navigationIdentity: UUID {
+        inputGeneration
+    }
     private var editor: SearchExpressionEditor?
     private var reportedEditing = false
     public weak var delegate: (any NSTextFieldDelegate)?

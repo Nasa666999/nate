@@ -10,6 +10,7 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：请求身份先失效，再取消计算并收回句柄；正文、查询原文和历史不变。
     func suspendSearchForInput() {
+        directoryWorkspace?.cancelOpen()
         cancelProjectOpen()
         // 先撤销发布资格再通知底层取消，已完成但仍等待主执行域的旧结果也必须失效。
         cancelIncrementalSearch(resetOrigin: true)
@@ -30,6 +31,9 @@ extension ApplicationController {
     /// - inFiles: 是否显示目录与过滤条件，进入跨文件范围。
     /// 返回：复用查找条件，保持既有历史。
     func presentFind(replacing: Bool, inFiles: Bool = false) {
+        // 查找界面接管新的输入意图，原目录读取不能在随后等待结束时抢回正文焦点。
+        directoryWorkspace?.cancelOpen()
+        cancelProjectOpen()
         // 完整查找窗口重新接管用户意图，旧增量请求不能在打开窗口后移动正文光标。
         cancelIncrementalSearch()
         // 当前草稿和候选仍由原输入上下文持有，重复快捷键不能改填另一份查询或结束候选。
