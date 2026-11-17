@@ -25,6 +25,12 @@ extension ApplicationController {
         }
         let root = URL(fileURLWithPath: directory, isDirectory: true)
         let generation = queryGeneration
+        let authorities = Dictionary(
+            uniqueKeysWithValues: documents.map {
+                document in
+                (document.buffer.id, SearchDocumentAuthority(document))
+            }
+        )
         let opened: [String: DocumentSnapshot] = Dictionary(
             uniqueKeysWithValues: documents.compactMap {
                 guard let url = $0.url else {
@@ -125,7 +131,8 @@ extension ApplicationController {
                     }
                     return (plans, failures)
                 }
-                guard generation == self.queryGeneration else {
+                try Task.checkCancellation()
+                guard !self.closing, generation == self.queryGeneration else {
                     return
                 }
                 guard self.findWindow?.options == requested else {
@@ -134,6 +141,9 @@ extension ApplicationController {
                 }
                 var output: [String] = []
                 var navigation: [ResultNavigation] = []
+                var completedFiles = 0
+                var completedHits = 0
+                var unconfirmedFiles = 0
                 if replacing {
                     let alert = NSAlert()
                     alert.messageText = "文件中替换：\(plans.count) 个文件"
@@ -147,16 +157,24 @@ extension ApplicationController {
                     }
                 }
                 for plan in plans {
-                    if Task.isCancelled {
+                    if Task.isCancelled || self.closing || generation != self.queryGeneration {
                         output.append("已取消；以上为已完成清单。")
                         break
                     }
                     if replacing {
                         do {
-                            if let document = self.documents.first(where: {
-                                $0.buffer.id == plan.snapshot.id
-                            }
-                            ) {
+                            if let original = opened[plan.loaded.baseline.resolvedPath] {
+                                // 原计划属于打开缓冲区时，关闭、重新打开或改绑都不能降级成直接覆盖磁盘。
+                                guard
+                                    let document = self.documents.first(where: {
+                                        candidate in
+                                        candidate.buffer.id == original.id
+                                    }),
+                                    authorities[original.id]?.matches(document, requireTarget: true) == true,
+                                    !self.closing
+                                else {
+                                    throw NateError.message("原缓冲区已关闭、改变或重新绑定，请重新生成替换计划。")
+                                }
                                 if let prepared = plan.prepared {
                                     try document.buffer.commit(prepared)
                                 }
@@ -220,9 +238,12 @@ extension ApplicationController {
                                 }
                             }
                             output.append("成功 · \(plan.url.path) · \(plan.result.hits.count) 处")
+                            completedFiles += 1
+                            completedHits += plan.result.hits.count
                         }
                         catch {
                             output.append("失败 · \(plan.url.path) · \(error.localizedDescription)")
+                            unconfirmedFiles += 1
                         }
                     }
                     else {
@@ -250,6 +271,10 @@ extension ApplicationController {
                         }
                     }
                 }
+                // 新查询已经接管结果区域；旧请求的实际文件阶段仍保存在文件任务中，不能覆盖新查询的界面。
+                guard generation == self.queryGeneration else {
+                    return
+                }
                 self.resultNavigation = navigation
                 output.append(
                     contentsOf: failures.map {
@@ -257,15 +282,29 @@ extension ApplicationController {
                     }
                 )
                 self.mainWindow?.showResults(output.joined(separator: "\n"), navigable: !replacing)
-                self.findWindow?.feedback.stringValue =
-                    Task.isCancelled
-                    ? "已取消；以上为实际完成清单。"
-                    : "完成 · \(plans.count) 个命中文件，\(plans.reduce(0) { $0 + $1.result.hits.count }) 处。"
+                if replacing {
+                    let notStarted = plans.count - completedFiles - unconfirmedFiles
+                    self.findWindow?.feedback.stringValue =
+                        (Task.isCancelled ? "已取消 · " : "处理结束 · ")
+                        + "已确认完成 \(completedFiles) 个文件、\(completedHits) 处；\(unconfirmedFiles) 个文件未确认完成。"
+                        + "未开始 \(notStarted) 个文件。"
+                        + "逐文件状态及发布后错误见结果与文件任务。"
+                }
+                else {
+                    self.findWindow?.feedback.stringValue =
+                        Task.isCancelled
+                        ? "已取消；以上为实际完成清单。"
+                        : "完成 · \(plans.count) 个命中文件，\(plans.reduce(0) { $0 + $1.result.hits.count }) 处。"
+                }
                 self.mainWindow?.editor.refresh()
                 self.refreshUI()
             }
             catch {
-                self.findWindow?.feedback.stringValue = error.localizedDescription
+                if generation == self.queryGeneration {
+                    self.findWindow?.feedback.stringValue =
+                        error is CancellationError
+                        ? "已取消，未发布新的替换计划。" : error.localizedDescription
+                }
             }
         }
     }

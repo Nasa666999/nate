@@ -50,10 +50,14 @@ extension ApplicationController {
         afterReplacement: Bool = false
     ) {
         searchTask?.cancel()
-        queryGeneration = UUID()
-        let generation = queryGeneration
         if action == "cancel" {
             findWindow?.feedback.stringValue = "正在取消；已发布的文件修改会保留实际完成清单。"
+            return
+        }
+        queryGeneration = UUID()
+        let generation = queryGeneration
+        // 退出收束已经撤销新的正文发布权，后台搜索入口不能重新授予它。
+        guard !closing else {
             return
         }
         if action == "files" || action == "replaceFiles" {
@@ -88,6 +92,12 @@ extension ApplicationController {
             }
         }
         let targets = ["open", "replaceOpen"].contains(action) ? documents : [active]
+        let authorities = Dictionary(
+            uniqueKeysWithValues: targets.map {
+                document in
+                (document.buffer.id, SearchDocumentAuthority(document))
+            }
+        )
         let captured: [(DocumentSnapshot, ResolvedSearchScope)]
         do {
             captured = try targets.map {
@@ -142,20 +152,36 @@ extension ApplicationController {
                         worker.cancel()
                     }
                 )
-                guard generation == self.queryGeneration, self.findWindow?.options == options else {
+                try Task.checkCancellation()
+                guard !self.closing, generation == self.queryGeneration, self.findWindow?.options == options
+                else {
                     return
+                }
+                var resolved: [UUID: WorkspaceDocument] = [:]
+                // 多文档动作先复验完整集合，再开始同步发布，避免后一个目标失效时前一个已经被改写。
+                for (snapshot, _, _, _) in batches {
+                    guard
+                        let document = self.documents.first(where: {
+                            candidate in
+                            candidate.buffer.id == snapshot.id
+                        }), authorities[snapshot.id]?.matches(document) == true
+                    else {
+                        throw NateError.staleRevision
+                    }
+                    if action.hasPrefix("replace"), !document.buffer.isReadOnly {
+                        guard !document.buffer.isEditingSuspended, document.buffer.revision < UInt64.max
+                        else {
+                            throw NateError.message("目标文档正在完成保护动作或修订已达到上限，未开始本轮替换。")
+                        }
+                    }
+                    resolved[snapshot.id] = document
                 }
                 var count = 0
                 var skipped = 0
                 var output: [String] = []
                 var navigation: [ResultNavigation] = []
                 for (snapshot, result, edits, prepared) in batches {
-                    guard
-                        let document = self.documents.first(where: {
-                            $0.buffer.id == snapshot.id
-                        }),
-                        document.buffer.revision == snapshot.revision
-                    else {
+                    guard let document = resolved[snapshot.id] else {
                         throw NateError.staleRevision
                     }
                     if action == "replaceAll" || action == "replaceOpen" {
