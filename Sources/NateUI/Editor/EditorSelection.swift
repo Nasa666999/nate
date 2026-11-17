@@ -20,10 +20,10 @@ extension EditorView {
         return min(layout.range.upper, tree.byteOffset(utf16: units) ?? layout.range.lower)
     }
 
-    /// 业务作用：分别处理书签、整行选择、多光标和普通文本拖选。
+    /// 业务作用：分别处理书签、整行选择、完整 Unicode 单词、多光标和普通文本拖选。
     /// 参数说明:
     /// - event: 鼠标按下事件。
-    /// 返回：建立确定的拖选锚点，边栏不会意外修改正文。
+    /// 返回：建立确定的拖选锚点，边栏不修改正文，单词超出 262144 个标量时保留光标并明确反馈。
     public override func mouseDown(with event: NSEvent) {
         finishComposition()
         window?.makeFirstResponder(self)
@@ -49,31 +49,29 @@ extension EditorView {
             }
             return
         }
+        var wordNotice: String?
         if point.x - visibleRect.minX < gutterWidth || event.clickCount >= 3 {
             let range = document.text.lineRange(row)
             viewSelections = [TextSelection(anchor: range.lower, head: range.upper)]
         }
         else if event.clickCount == 2 {
-            let range = document.text.lineRange(row, includeEnding: false)
-            let text = document.text.text(in: range)
-            var offset = range.lower
-            var lower = position
-            var upper = position
-            for word in text.split(
-                omittingEmptySubsequences: false,
-                whereSeparator: {
-                    !$0.isLetter && !$0.isNumber && $0 != "_"
-                }
-            ) {
-                let count = word.utf8.count
-                if position >= offset && position <= offset + count {
-                    lower = offset
-                    upper = offset + count
-                    break
-                }
-                offset += count + 1
+            let range: ByteRange
+            // 分隔符也可能占多个字节，直接沿标量边界找整词，不复制整行或按一个字节推算词首。
+            switch document.text.wordSelection(at: position, maximumScalars: 262_144) {
+            case .word(let word):
+                range = word
+            case .noWord:
+                range = ByteRange(position, position)
+            case .exceedsLimit:
+                range = ByteRange(position, position)
+                wordNotice = "单词超过 262144 个 Unicode 标量，未截断选择；可直接拖选需要的正文范围。"
             }
-            viewSelections = [TextSelection(anchor: lower, head: upper)]
+            viewSelections = [
+                TextSelection(
+                    anchor: range.lower,
+                    head: range.upper
+                )
+            ]
         }
         else if event.modifierFlags.contains(.command) {
             viewSelections.append(TextSelection(anchor: position, head: position))
@@ -88,6 +86,10 @@ extension EditorView {
         dragColumn = event.modifierFlags.contains(.option) ? point.x : nil
         needsDisplay = true
         onSelection?()
+        // 选区变化回调会刷新状态栏，先发布实际选区，再显示未能完成整词选择的原因。
+        if let wordNotice {
+            onStatus?(wordNotice)
+        }
     }
 
     /// 业务作用：在边缘持续滚动拖选，Option 拖动建立按视觉列的矩形目标。
