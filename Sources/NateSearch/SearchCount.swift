@@ -18,7 +18,7 @@ extension SearchEngine {
         }
     ) throws -> Int {
         try Task.checkCancellation()
-        // 失权请求先于全文派生投影被拒绝，计数也不能继续消耗原文档的内存。
+        // 失权请求先于正文读取被拒绝，计数也不能继续占用原文档或建立派生缓存。
         guard permit() else {
             throw CancellationError()
         }
@@ -26,7 +26,7 @@ extension SearchEngine {
         var count = 0
         _ = try find(
             in: snapshot,
-            input: Array(snapshot.text.text().utf16),
+            input: SearchInput(snapshot.text),
             options: options,
             scope: scope,
             firstOnly: false,

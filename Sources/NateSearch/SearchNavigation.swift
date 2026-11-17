@@ -26,7 +26,7 @@ extension SearchEngine {
         }
         var effective = options
         effective.selectionOnly = false
-        let input = Array(snapshot.text.text().utf16)
+        let input = SearchInput(snapshot.text)
         let origin = previous ? selected.location : selected.location + selected.length
         let scope =
             previous ? ByteRange(0, selection.lower) : ByteRange(selection.upper, snapshot.text.byteCount)
@@ -93,7 +93,7 @@ extension SearchEngine {
         effective.selectionOnly = false
         let result = try find(
             in: snapshot,
-            input: Array(snapshot.text.text().utf16),
+            input: SearchInput(snapshot.text),
             options: effective,
             scope: ByteRange(selection.lower, snapshot.text.byteCount),
             firstOnly: true,

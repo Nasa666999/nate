@@ -14,7 +14,7 @@ struct MatchState {
 }
 
 struct CancellableMatcher {
-    let input: [UInt16]
+    let input: SearchInput
     let compiled: CompiledRegex
     let limit: Int
     let deadline: ContinuousClock.Instant

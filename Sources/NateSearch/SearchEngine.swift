@@ -20,14 +20,14 @@ public enum SearchEngine {
         }
     ) throws -> SearchResult {
         try Task.checkCancellation()
-        // 原请求撤销后不再建立全文派生投影，避免迟到工作继续增加快照的内存占用。
+        // 原请求撤销后不再读取正文或建立派生缓存，避免迟到工作继续占用原文档。
         guard permit() else {
             throw CancellationError()
         }
         try options.validateInput()
         return try find(
             in: snapshot,
-            input: Array(snapshot.text.text().utf16),
+            input: SearchInput(snapshot.text),
             options: options,
             scope: scope,
             firstOnly: false,
@@ -37,10 +37,10 @@ public enum SearchEngine {
         )
     }
 
-    /// 业务作用：复用固定正文的 UTF-16 投影执行多条结构规则，避免每个名称层级复制全文。
+    /// 业务作用：在固定正文的有界 UTF-16 读取器上执行规则，局部匹配不复制全文。
     /// 参数说明:
     /// - snapshot: 已提交正文快照。
-    /// - input: 与快照一致的 UTF-16 投影。
+    /// - input: 与快照一致、由本轮执行独占的有界 UTF-16 读取器。
     /// - options: 当前表达式与预算。
     /// - scope: 本条规则可消费的字节范围。
     /// - firstOnly: 是否在第一个完整命中后结束。
@@ -53,7 +53,7 @@ public enum SearchEngine {
     /// 返回：普通调用提供绑定原文身份的命中列表；同步枚举调用的列表为空，数量由接收者累计，错误不返回部分执行结果。
     static func find(
         in snapshot: DocumentSnapshot,
-        input: [UInt16],
+        input: SearchInput,
         options: SearchOptions,
         scope: ByteRange?,
         firstOnly: Bool,
@@ -67,7 +67,7 @@ public enum SearchEngine {
         onHit: ((NSRange) throws -> Void)? = nil
     ) throws -> SearchResult {
         try Task.checkCancellation()
-        // 共享投影调用也可能来自独立队列，不能因跳过外层入口而跳过权限门禁。
+        // 固定正文调用也可能来自独立队列，不能因跳过外层入口而跳过权限门禁。
         guard permit() else {
             throw CancellationError()
         }

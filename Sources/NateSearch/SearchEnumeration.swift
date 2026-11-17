@@ -24,10 +24,10 @@ public struct SearchMatchContext: Sendable {
 enum RegexProgress {
     /// 业务作用：被拒绝的空匹配越过当前标量的剩余部分或完整 CRLF，避免在代理项及行尾序列内部重复定位。
     /// 参数说明:
-    /// - input: 完整正文的 UTF-16 投影。
+    /// - input: 完整正文的有界 UTF-16 读取器。
     /// - position: 当前空匹配的原始 UTF-16 位置。
     /// 返回：严格前进的位置；原终点之后的值表示本轮已结束。
-    static func next(_ input: [UInt16], after position: Int) -> Int {
+    static func next(_ input: SearchInput, after position: Int) -> Int {
         if position + 1 < input.count {
             let first = input[position]
             let second = input[position + 1]

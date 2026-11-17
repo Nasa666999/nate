@@ -5,7 +5,7 @@ enum LiteralMatcher {
     /// 业务作用：普通与扩展模式使用线性匹配，长日志不消耗正则回溯预算。
     /// 参数说明:
     /// - snapshot: 不可变正文。
-    /// - input: 对应 UTF-16 单元。
+    /// - input: 对应固定正文的有界 UTF-16 读取器。
     /// - range: 当前搜索范围。
     /// - options: 大小写、全词与结果预算。
     /// - firstOnly: 是否在首个完整命中后停止。
@@ -15,7 +15,7 @@ enum LiteralMatcher {
     /// 返回：普通调用提供不交叠的字面命中；同步枚举调用不保留列表，取消与超时都终止整个调用。
     static func find(
         snapshot: DocumentSnapshot,
-        input: [UInt16],
+        input: SearchInput,
         range: NSRange,
         options: SearchOptions,
         firstOnly: Bool = false,

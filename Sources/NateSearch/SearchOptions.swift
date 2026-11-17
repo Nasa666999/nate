@@ -28,7 +28,7 @@ public struct SearchOptions: Sendable, Codable, Equatable {
     /// 返回：普通搜索默认选项。
     public init() {}
 
-    /// 业务作用：在任何正文投影之前校验完整查找输入，普通、扩展和正则使用相同 UTF-8 容量合同。
+    /// 业务作用：在读取正文之前校验完整查找输入，普通、扩展和正则使用相同 UTF-8 容量合同。
     /// 参数说明: 无。
     /// 返回：非空且不超过 1 MiB 时允许继续，超限明确失败而不截断表达式。
     func validateInput() throws {
