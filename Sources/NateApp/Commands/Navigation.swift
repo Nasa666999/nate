@@ -25,7 +25,10 @@ extension ApplicationController {
         guard target.documentID != nil || target.url != nil else {
             return
         }
-        mainWindow?.editor.finishComposition()
+        // 定位意图不能借焦点转交提交正文候选，也不能绕过搜索字段中尚未确认的草稿。
+        guard mainWindow?.hasMarkedEditorInput != true, findWindow?.isEditingInput != true else {
+            return
+        }
         let request = resultNavigationGeneration
         let query = queryGeneration
         let selectionGeneration = searchNavigationGeneration
