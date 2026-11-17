@@ -112,8 +112,8 @@ extension ApplicationController {
         }
         let catalog = codecs
         mainWindow?.editor.finishComposition()
-        if let task = document.saveTask {
-            _ = await task.value
+        guard await waitForOriginalSave(document) else {
+            return
         }
         guard let destination = SystemIntegration.chooseSave(name: document.name) else {
             return
@@ -147,28 +147,47 @@ extension ApplicationController {
         }
         // 只读切换撤销尚未发布的显式保存，替换已完成时仍确认实际保存点。
         let permit = CancellationToken()
+        let request = fileOperations.begin(
+            title: copy ? "保存副本" : "另存为",
+            target: destination,
+            documentID: snapshot.id,
+            revision: snapshot.revision,
+            targetGeneration: document.targetGeneration,
+            permission: permit
+        )
         document.savePermit = permit
+        document.saveOperation = request
         defer {
             if document.savePermit === permit {
                 document.savePermit = nil
             }
+            if document.saveOperation?.id == request.id {
+                document.saveOperation = nil
+            }
         }
         do {
             let result = try await fileIO.run {
-                let expected =
-                    FileManager.default.fileExists(atPath: destination.path)
-                    ? try self.fileAccess.baseline(destination) : nil
-                let data = try encoding.encode(snapshot.text.text(), catalog: catalog)
-                return try self.fileAccess.save(
-                    data,
-                    to: destination,
-                    expected: expected,
-                    replacing: true,
-                    permit: {
-                        !permit.isCancelled
-                    },
-                    authority: permit
-                )
+                try self.fileOperations.perform(request) {
+                    request.observe(.checkingBaseline)
+                    let expected =
+                        FileManager.default.fileExists(atPath: destination.path)
+                        ? try self.fileAccess.baseline(
+                            destination,
+                            permit: {
+                                !permit.isCancelled
+                            }
+                        ) : nil
+                    request.observe(.preparingBytes)
+                    let data = try encoding.encode(snapshot.text.text(), catalog: catalog)
+                    return try self.fileOperations.write(
+                        using: self.fileAccess,
+                        request: request,
+                        data,
+                        to: destination,
+                        expected: expected,
+                        replacing: true
+                    )
+                }
             }
             if !copy {
                 document.targetGeneration += 1
@@ -203,9 +222,18 @@ extension ApplicationController {
             _ = await flushRecovery()
         }
         catch is CancellationError {
+            fileOperations.complete(request, error: CancellationError())
             mainWindow?.status.stringValue = "保存请求已取消，当前正文与原关联保持可用。"
         }
         catch {
+            fileOperations.complete(request, error: error)
+            if request.snapshot.requiresReconciliation
+                && document.url?.resolvingSymlinksInPath().standardizedFileURL == resolved
+            {
+                // 原路径可能已经替换，未取得确认的基线不能继续作为自动覆盖依据。
+                document.conflict = true
+                document.failure = error.localizedDescription
+            }
             SystemIntegration.alert("保存失败", error.localizedDescription)
         }
     }
@@ -229,8 +257,8 @@ extension ApplicationController {
         }
         let snapshot = document.buffer.snapshot
         let monitoring = document.monitoring
-        if let task = document.saveTask {
-            _ = await task.value
+        guard await waitForOriginalSave(document) else {
+            return
         }
         guard await flushRecovery() else {
             return
@@ -341,6 +369,12 @@ extension ApplicationController {
         }
         let saved = await flush(document)
         if !saved {
+            document.savePermit?.cancel()
+            // 发布系统调用尚未返回时不能移除文档后重新打开同一路径建立另一个写入者。
+            guard document.savePermit?.hasActivePublication != true else {
+                SystemIntegration.alert("关闭仍需等待", "目标发布已经进入系统调用；请在文件写入任务中查看实际结果，正文保持打开。")
+                return
+            }
             let alert = NSAlert()
             alert.messageText = "尚未保存到原文件"
             alert.informativeText = document.failure ?? "恢复内容尚未可靠保存。"

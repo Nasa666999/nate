@@ -101,7 +101,13 @@ extension ApplicationController {
                         let expected =
                             FileManager.default.fileExists(atPath: url.path)
                             ? try self.fileAccess.baseline(url) : nil
-                        _ = try self.fileAccess.save(data, to: url, expected: expected, replacing: true)
+                        _ = try self.fileOperations.save(
+                            using: self.fileAccess,
+                            data,
+                            to: url,
+                            expected: expected,
+                            replacing: true
+                        )
                     }
                 }
                 catch {

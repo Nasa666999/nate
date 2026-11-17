@@ -35,6 +35,7 @@ final class WorkspaceDocument {
     var conflict = false
     var saveTask: Task<Bool, Never>?
     var savePermit: CancellationToken?
+    var saveOperation: FileOperationRequest?
     var recoveryReference: RecoveryReference?
     var recoveryRevision: UInt64?
     var recoveryError: String?

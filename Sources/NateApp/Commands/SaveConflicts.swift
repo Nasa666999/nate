@@ -81,8 +81,8 @@ extension ApplicationController {
         defer {
             document.bindingChange = false
         }
-        if let task = document.saveTask {
-            _ = await task.value
+        guard await waitForOriginalSave(document) else {
+            return
         }
         // 恢复落盘与在途写入均可挂起，授权只属于用户刚刚审阅的正文。
         guard document.buffer.revision == revision, document.url == url,
@@ -95,23 +95,35 @@ extension ApplicationController {
         let encoding = document.encoding
         let catalog = codecs
         let permit = CancellationToken()
+        let request = fileOperations.begin(
+            title: "确认冲突写回",
+            target: url,
+            documentID: snapshot.id,
+            revision: snapshot.revision,
+            targetGeneration: document.targetGeneration,
+            permission: permit
+        )
         document.savePermit = permit
+        document.saveOperation = request
         defer {
             if document.savePermit === permit {
                 document.savePermit = nil
             }
+            if document.saveOperation?.id == request.id {
+                document.saveOperation = nil
+            }
         }
         do {
             let result = try await fileIO.run {
-                try self.fileAccess.save(
-                    encoding.encode(snapshot.text.text(), catalog: catalog),
-                    to: url,
-                    expected: expected,
-                    permit: {
-                        !permit.isCancelled
-                    },
-                    authority: permit
-                )
+                try self.fileOperations.perform(request) {
+                    try self.fileOperations.write(
+                        using: self.fileAccess,
+                        request: request,
+                        encoding.encode(snapshot.text.text(), catalog: catalog),
+                        to: url,
+                        expected: expected
+                    )
+                }
             }
             document.baseline = result
             document.savedText = snapshot.text
@@ -124,10 +136,12 @@ extension ApplicationController {
             refreshUI()
         }
         catch is CancellationError {
+            fileOperations.complete(request, error: CancellationError())
             document.state = "本次写回已取消"
             refreshUI()
         }
         catch {
+            fileOperations.complete(request, error: error)
             document.failure = error.localizedDescription
             refreshUI()
         }

@@ -9,6 +9,7 @@ import NateUI
 @MainActor
 final class ApplicationController: NSObject, NSApplicationDelegate {
     nonisolated let fileAccess = CoordinatedFileAccess(coordinator: WorkspaceFileCoordinator())
+    nonisolated let fileOperations = FileOperationLedger()
     var documents: [WorkspaceDocument] = []
     var activeID: UUID?
     var active: WorkspaceDocument? {
@@ -31,6 +32,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var userLanguageBaselines: [String: DiskBaseline] = [:]
     var publishingResources = false
     var findWindow: FindReplaceWindow?
+    var fileTasksWindow: FileTasksWindow?
     let fileIO = IOExecutor(name: "nate.files", concurrency: 2)
     let readIO = IOExecutor(name: "nate.reads", concurrency: 2)
     let recoveryIO = IOExecutor(name: "nate.recovery", concurrency: 1)
@@ -47,6 +49,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var applicationSupport: URL?
     var autosaveTask: Task<Void, Never>?
     var recoveryTask: Task<Bool, Never>?
+    var lastRecoverySucceeded = false
     var searchTask: Task<Void, Never>?
     var externalObservationTask: Task<Void, Never>?
     var externalStamps: [UUID: FileStamp] = [:]
@@ -406,14 +409,18 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                     "；原文件：" + $0
                 } ?? "")
         }
+        else if let operation = active.saveOperation?.snapshot, operation.finished == nil {
+            state = fileTaskStatus(operation) + " · " + fileTaskStage(operation.stage)
+        }
         else if let failure = active.failure {
             state = (active.recoveryRevision == active.buffer.revision ? "恢复副本已保存；原文件：" : "⚠ 原文件：") + failure
         }
         else {
             state = active.isDirty ? "待保存" : active.state
         }
+        let protection = !recoveryReady ? "⚠ 恢复保护不可用 · " : !autosaveEnabled ? "自动保存已暂停 · " : ""
         window.status.stringValue =
-            "  \(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(state)"
+            "  \(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(protection)\(state)"
         if window.isStructureVisible {
             requestStructure()
         }

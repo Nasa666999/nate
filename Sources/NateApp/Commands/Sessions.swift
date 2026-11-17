@@ -44,7 +44,13 @@ extension ApplicationController {
                 let data = try JSONEncoder().encode(SessionFile(documents: entries))
                 let expected =
                     FileManager.default.fileExists(atPath: url.path) ? try self.fileAccess.baseline(url) : nil
-                _ = try self.fileAccess.save(data, to: url, expected: expected, replacing: true)
+                _ = try self.fileOperations.save(
+                    using: self.fileAccess,
+                    data,
+                    to: url,
+                    expected: expected,
+                    replacing: true
+                )
             }
             SystemIntegration.alert(
                 "会话已保存",

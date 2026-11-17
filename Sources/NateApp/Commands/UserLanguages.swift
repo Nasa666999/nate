@@ -127,7 +127,12 @@ extension ApplicationController {
         let expected = userLanguageBaselines[destination.path]
         let baseline = try await fileIO.run {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            return try self.fileAccess.save(data, to: destination, expected: expected)
+            return try self.fileOperations.save(
+                using: self.fileAccess,
+                data,
+                to: destination,
+                expected: expected
+            )
         }
         // 持久化成功后才一次发布完整注册表，旧后台语法任务由资源变化失效。
         for id in replacedIDs {
@@ -199,7 +204,13 @@ extension ApplicationController {
                     let expected =
                         FileManager.default.fileExists(atPath: url.path)
                         ? try self.fileAccess.baseline(url) : nil
-                    _ = try self.fileAccess.save(data, to: url, expected: expected, replacing: true)
+                    _ = try self.fileOperations.save(
+                        using: self.fileAccess,
+                        data,
+                        to: url,
+                        expected: expected,
+                        replacing: true
+                    )
                 }
             }
             catch {

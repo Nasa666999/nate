@@ -51,22 +51,39 @@ extension ApplicationController {
         }
         searchTask?.cancel()
         Task {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(30))
             // 尚未发布的打开请求不拥有写入副作用，退出时保留请求文件而不等待系统读取。
             instanceRequestTask?.cancel()
-            if let task = externalCommandTask {
-                await task.value
-            }
-            if let task = searchTask {
-                await task.value
-            }
+            _ = await TaskBoundary.wait(
+                until: deadline,
+                while: {
+                    externalCommandTask != nil || searchTask != nil
+                }
+            )
             var failures: [String] = []
             // 临时文档由最后一次统一恢复发布保护，避免逐标签重复写入整份工作区正文。
             for document in documents where document.url != nil {
-                if !(await flush(document)) {
+                if !(await flush(document, deadline: deadline)) {
                     failures.append(document.name)
                 }
             }
+            // 原路径用尽等待预算后，恢复目录仍取得独立等待机会，不让失联磁盘剥夺保护副本。
             let protected = await flushRecovery()
+            fileOperations.suspendPublications()
+            let unresolved = fileOperations.snapshots.filter {
+                $0.hasActivePublication
+            }
+            let exitBlocked = !unresolved.isEmpty || externalCommandTask != nil
+            if exitBlocked {
+                let paths = unresolved.map(\.target.path).joined(separator: "\n")
+                SystemIntegration.alert(
+                    "系统动作尚未确认，已取消退出",
+                    paths + "\n已经进入的文件发布或进程启动尚未返回。正文继续保留，可从工具菜单查看文件写入任务。"
+                )
+                restoreAfterCancelledExit(protectedDocuments)
+                sender.reply(toApplicationShouldTerminate: false)
+                return
+            }
             if !failures.isEmpty || !protected {
                 let alert = NSAlert()
                 alert.messageText = protected ? "恢复副本已保存，部分原文件未保存" : "恢复内容尚未全部落盘"
@@ -76,10 +93,7 @@ extension ApplicationController {
                     alert.addButton(withTitle: "保留恢复副本并退出")
                 }
                 guard protected && alert.runModal() == .alertSecondButtonReturn else {
-                    closing = false
-                    for document in protectedDocuments where !document.closing {
-                        document.buffer.isEditingSuspended = false
-                    }
+                    restoreAfterCancelledExit(protectedDocuments)
                     sender.reply(toApplicationShouldTerminate: false)
                     return
                 }
@@ -92,6 +106,19 @@ extension ApplicationController {
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+
+    /// 业务作用：取消退出后恢复编辑和新动作入口，不恢复已经撤销的旧发布权限。
+    /// 参数说明:
+    /// - protectedDocuments: 开始退出时暂停编辑的文档集合。
+    /// 返回：原有保存周期继续推进，仍未返回的任务保持登记。
+    func restoreAfterCancelledExit(_ protectedDocuments: [WorkspaceDocument]) {
+        closing = false
+        fileOperations.resumePublications()
+        for document in protectedDocuments where !document.closing {
+            document.buffer.isEditingSuspended = false
+        }
+        refreshUI()
     }
 
     /// 业务作用：重新激活时重验外部文件，保存事件不能通过时间窗口忽略冲突。

@@ -47,6 +47,7 @@ extension ApplicationController {
                     }
                     self.scheduleRecovery()
                 }
+                self.refreshUI()
                 next = next.advanced(by: .seconds(1))
                 if next < clock.now {
                     next = clock.now.advanced(by: .seconds(1))
@@ -74,29 +75,42 @@ extension ApplicationController {
         let executor = fileIO
         let catalog = codecs
         let permit = CancellationToken()
+        let request = fileOperations.begin(
+            title: "保存原文件",
+            target: url,
+            documentID: snapshot.id,
+            revision: snapshot.revision,
+            targetGeneration: generation,
+            permission: permit
+        )
         document.savePermit = permit
+        document.saveOperation = request
         document.saveTask = Task {
             [weak self, weak document] in
             guard let self, let document else {
+                self?.fileOperations.complete(request, error: CancellationError())
                 return false
             }
             defer {
                 document.saveTask = nil
                 document.savePermit = nil
+                if document.saveOperation?.id == request.id {
+                    document.saveOperation = nil
+                }
                 self.refreshUI()
             }
             do {
                 let result = try await executor.run {
-                    let bytes = try encoding.encode(snapshot.text.text(), catalog: catalog)
-                    return try self.fileAccess.save(
-                        bytes,
-                        to: url,
-                        expected: baseline,
-                        permit: {
-                            !permit.isCancelled
-                        },
-                        authority: permit
-                    )
+                    try self.fileOperations.perform(request) {
+                        let bytes = try encoding.encode(snapshot.text.text(), catalog: catalog)
+                        return try self.fileOperations.write(
+                            using: self.fileAccess,
+                            request: request,
+                            bytes,
+                            to: url,
+                            expected: baseline
+                        )
+                    }
                 }
                 // 旧生命周期和旧路径代次不得清除新文档的修改或错误。
                 guard
@@ -119,11 +133,13 @@ extension ApplicationController {
                 return true
             }
             catch is CancellationError {
+                self.fileOperations.complete(request, error: CancellationError())
                 document.state = "原文件保存已取消 · 正文保留"
                 document.evaluateDirty()
                 return false
             }
             catch {
+                self.fileOperations.complete(request, error: error)
                 guard document.targetGeneration == generation else {
                     return false
                 }
@@ -132,6 +148,7 @@ extension ApplicationController {
                 document.dirtyHint = true
                 document.conflict =
                     error.localizedDescription.contains("冲突") || error.localizedDescription.contains("外部变化")
+                    || request.snapshot.requiresReconciliation
                 document.retryCount = min(6, document.retryCount + 1)
                 document.nextRetry = .now.advanced(by: .seconds(1 << document.retryCount))
                 return false
@@ -143,29 +160,41 @@ extension ApplicationController {
     /// 业务作用：主动保存等待最后修订落盘，不能把较早快照成功当作当前成功。
     /// 参数说明:
     /// - document: 需要收束原路径通道的文档。
+    /// - deadline: 可选的整个关闭或退出动作共用截止时间。
     /// 返回：当前正文与实际磁盘保存点相同时为真；失败保留文档。
-    func flush(_ document: WorkspaceDocument) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
-        while document.bindingChange {
-            guard ContinuousClock.now < deadline else {
-                document.failure = "文件目标操作仍在进行，文档保持打开。"
-                return false
-            }
-            try? await Task.sleep(for: .milliseconds(50))
+    func flush(_ document: WorkspaceDocument, deadline: ContinuousClock.Instant? = nil) async -> Bool {
+        let deadline = deadline ?? .now.advanced(by: .seconds(30))
+        guard
+            await TaskBoundary.wait(
+                until: deadline,
+                while: {
+                    document.bindingChange
+                }
+            )
+        else {
+            document.savePermit?.cancel()
+            document.failure = "文件目标操作仍在进行，已停止等待；可在文件写入任务中查看实际状态。"
+            return false
         }
-        if let task = document.saveTask {
-            _ = await task.value
+        guard await waitForOriginalSave(document, until: deadline) else {
+            return false
         }
         document.evaluateDirty()
         if !document.isDirty {
             return true
         }
         guard document.url != nil else {
-            return await flushRecovery()
+            return await flushRecovery(deadline: deadline)
         }
         for _ in 0..<4 {
+            guard ContinuousClock.now < deadline else {
+                break
+            }
             scheduleSave(document)
-            guard let task = document.saveTask, await task.value else {
+            guard document.saveTask != nil, await waitForOriginalSave(document, until: deadline) else {
+                return false
+            }
+            guard document.failure == nil else {
                 return false
             }
             document.evaluateDirty()
@@ -175,6 +204,27 @@ extension ApplicationController {
         }
         document.failure = "保存期间正文持续变化，请停止输入后重试关闭。"
         return false
+    }
+
+    /// 业务作用：等待同一原目标的真实写入返回，超时先撤销未使用权限而不释放在途写入位置。
+    /// 参数说明:
+    /// - document: 仍持有在途请求的文档。
+    /// - deadline: 用户动作的共用截止时间。
+    /// 返回：通道真正空闲时为真；超时保留任务、正文及目标预约。
+    func waitForOriginalSave(_ document: WorkspaceDocument, until deadline: ContinuousClock.Instant? = nil)
+        async -> Bool
+    {
+        let ended = await TaskBoundary.wait(until: deadline ?? .now.advanced(by: .seconds(30))) {
+            document.saveTask != nil
+        }
+        guard ended else {
+            // 撤销与发布门禁同步决定顺序；已经进入系统发布的请求仍须等待真实结果。
+            document.savePermit?.cancel()
+            document.failure = "原文件操作仍未返回，已停止等待并撤销尚未使用的发布权；正文继续保留。"
+            refreshUI()
+            return false
+        }
+        return true
     }
 
     /// 业务作用：原路径与恢复目录使用独立 I/O 通道，原文件失败不阻断保护副本。
@@ -209,6 +259,7 @@ extension ApplicationController {
         }
         let selected = activeID
         let executor = recoveryIO
+        lastRecoverySucceeded = false
         recoveryTask = Task {
             [weak self] in
             guard let self else {
@@ -257,6 +308,7 @@ extension ApplicationController {
                         document.dirtyHint = false
                     }
                 }
+                self.lastRecoverySucceeded = true
                 self.refreshUI()
                 // 两份有效索引及关闭保留清单之外的快照不再承担恢复责任。
                 do {
@@ -280,16 +332,36 @@ extension ApplicationController {
     }
 
     /// 业务作用：关闭、退出或会话保存前立即确认独立恢复通道。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - deadline: 可选的整个用户动作共用截止时间。
     /// 返回：当前工作区索引可靠发布后为真。
-    func flushRecovery() async -> Bool {
+    func flushRecovery(deadline: ContinuousClock.Instant? = nil) async -> Bool {
+        let deadline = deadline ?? .now.advanced(by: .seconds(30))
         guard recoveryReady else {
             return false
         }
-        if let task = recoveryTask {
-            _ = await task.value
+        guard
+            await TaskBoundary.wait(
+                until: deadline,
+                while: {
+                    recoveryTask != nil
+                }
+            )
+        else {
+            mainWindow?.status.stringValue = "恢复目录仍未返回，当前文档保持打开；未确认的内容不能作为关闭依据。"
+            return false
         }
         scheduleRecovery(force: true)
-        return await recoveryTask?.value ?? false
+        guard recoveryTask != nil,
+            await TaskBoundary.wait(
+                until: deadline,
+                while: {
+                    recoveryTask != nil
+                }
+            )
+        else {
+            return false
+        }
+        return lastRecoverySucceeded
     }
 }

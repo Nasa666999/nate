@@ -1,6 +1,7 @@
 import Foundation
 
 public enum FileSaveStage: Sendable, Equatable {
+    case queued
     case preparingBytes
     case waitingForAccess
     case checkingBaseline

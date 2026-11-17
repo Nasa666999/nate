@@ -10,6 +10,13 @@ extension ApplicationController {
     /// - id: 稳定动作标识及必要的资源标识。
     /// 返回：执行动作或明确反馈实际失败。
     func route(_ id: String) {
+        // 退出已固定保护集合，期间只允许观察和撤销，不再增加正文或路径副作用。
+        guard
+            !closing
+                || ["fileTasks", "cancelReads", "cancelExternalCommand", "lastExternalOutput"].contains(id)
+        else {
+            return
+        }
         if id.hasPrefix("edit:"), let command = TextCommand(rawValue: String(id.dropFirst(5))) {
             edit(command)
             return
@@ -152,6 +159,7 @@ extension ApplicationController {
         case "completePath": requestPathCompletion()
         case "cancelReads": readIO.cancelReads()
         case "cancelExternalCommand": externalCommandTask?.cancel()
+        case "fileTasks": showFileTasks()
         case "lastExternalOutput":
             if let output = lastExternalOutput {
                 mainWindow?.showResults(output)

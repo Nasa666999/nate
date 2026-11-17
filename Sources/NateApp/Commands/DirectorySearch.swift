@@ -193,7 +193,8 @@ extension ApplicationController {
                                     // 原字节副本先完成持久化，当前目标才可取得自己的单次发布权。
                                     try token.withChild {
                                         request in
-                                        _ = try self.fileAccess.save(
+                                        _ = try self.fileOperations.save(
+                                            using: self.fileAccess,
                                             plan.loaded.originalBytes,
                                             to: backup,
                                             expected: nil,
@@ -205,7 +206,8 @@ extension ApplicationController {
                                     }
                                     try token.withChild {
                                         request in
-                                        _ = try self.fileAccess.save(
+                                        _ = try self.fileOperations.save(
+                                            using: self.fileAccess,
                                             data,
                                             to: plan.url,
                                             expected: plan.loaded.baseline,

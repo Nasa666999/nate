@@ -283,22 +283,91 @@ extension ApplicationController {
         defer {
             active.bindingChange = false
         }
-        if let task = active.saveTask {
-            _ = await task.value
+        guard await waitForOriginalSave(active) else {
+            return
         }
         let destination = oldURL.deletingLastPathComponent().appendingPathComponent(name)
+        let sourceKey = oldURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let destinationKey = destination.resolvingSymlinksInPath().standardizedFileURL.path
+        guard sourceKey != destinationKey else {
+            return
+        }
+        guard
+            !documents.contains(where: {
+                $0 !== active && $0.url?.resolvingSymlinksInPath().standardizedFileURL.path == destinationKey
+            })
+        else {
+            SystemIntegration.alert("目标已打开", "同一目标不能建立两个原文件写入者。")
+            return
+        }
+        let owner = UUID()
+        guard reserveTarget(sourceKey, owner: owner) else {
+            return
+        }
+        defer {
+            releaseTarget(sourceKey, owner: owner)
+        }
+        guard reserveTarget(destinationKey, owner: owner) else {
+            return
+        }
+        defer {
+            releaseTarget(destinationKey, owner: owner)
+        }
         let baseline = active.baseline
+        let request = fileOperations.begin(
+            title: "重命名文件",
+            target: destination,
+            documentID: active.buffer.id,
+            revision: active.buffer.revision,
+            targetGeneration: active.targetGeneration
+        )
+        active.savePermit = request.permission
+        active.saveOperation = request
+        defer {
+            if active.saveOperation?.id == request.id {
+                active.saveOperation = nil
+                active.savePermit = nil
+            }
+        }
         do {
             let result = try await fileIO.run {
-                try self.fileAccess.withMove(from: oldURL, to: destination) {
-                    source,
-                    target in
-                    // 协调访问不替代原磁盘证据，目标身份变化时必须停止路径副作用。
-                    guard try FileStorage.baseline(source) == baseline else {
-                        throw NateError.message("重命名前原文件已变化。")
+                try self.fileOperations.perform(request) {
+                    request.observe(.waitingForAccess)
+                    return try self.fileAccess.withMove(
+                        from: oldURL,
+                        to: destination,
+                        permit: {
+                            !request.permission.isCancelled
+                        }
+                    ) {
+                        source,
+                        target in
+                        request.observe(.checkingBaseline)
+                        // 协调访问不替代原磁盘证据，目标身份变化时必须停止路径副作用。
+                        guard
+                            try FileStorage.baseline(
+                                source,
+                                permit: {
+                                    !request.permission.isCancelled
+                                }
+                            ) == baseline
+                        else {
+                            throw NateError.message("重命名前原文件已变化。")
+                        }
+                        request.observe(.publishing)
+                        try request.permission.withPublication {
+                            try FileManager.default.moveItem(at: source, to: target)
+                        }
+                        request.observe(.confirmingSavedFile)
+                        let result = try FileStorage.baseline(target)
+                        // 移动后的文件必须仍是原内容和身份，否则不能把新路径发布为可信保存点。
+                        guard result.device == baseline?.device, result.inode == baseline?.inode,
+                            result.digest == baseline?.digest
+                        else {
+                            throw NateError.message("重命名后的目标内容或身份已经变化，请核验目标。")
+                        }
+                        return result
                     }
-                    try FileManager.default.moveItem(at: source, to: target)
-                    return try FileStorage.baseline(target)
                 }
             }
             active.targetGeneration += 1
@@ -308,6 +377,11 @@ extension ApplicationController {
             refreshUI()
         }
         catch {
+            fileOperations.complete(request, error: error)
+            if request.snapshot.requiresReconciliation {
+                active.conflict = true
+                active.failure = error.localizedDescription
+            }
             SystemIntegration.alert("重命名", error.localizedDescription)
         }
     }
@@ -334,19 +408,63 @@ extension ApplicationController {
         defer {
             active.bindingChange = false
         }
-        if let task = active.saveTask {
-            _ = await task.value
+        guard await waitForOriginalSave(active) else {
+            return
+        }
+        let targetKey = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let owner = UUID()
+        guard reserveTarget(targetKey, owner: owner) else {
+            return
+        }
+        defer {
+            releaseTarget(targetKey, owner: owner)
         }
         let expected = active.baseline
+        let request = fileOperations.begin(
+            title: "移到废纸篓",
+            target: url,
+            documentID: active.buffer.id,
+            revision: active.buffer.revision,
+            targetGeneration: active.targetGeneration
+        )
+        active.savePermit = request.permission
+        active.saveOperation = request
+        defer {
+            if active.saveOperation?.id == request.id {
+                active.saveOperation = nil
+                active.savePermit = nil
+            }
+        }
         do {
             try await fileIO.run {
-                try self.fileAccess.withWrite(at: url, intent: .deleting) {
-                    target in
-                    // 删除仅针对刚确认的原文件，不能因系统协调成功而绕过内容复验。
-                    guard try FileStorage.baseline(target) == expected else {
-                        throw NateError.message("移到废纸篓前原文件已经变化，请重新检查。")
+                try self.fileOperations.perform(request) {
+                    request.observe(.waitingForAccess)
+                    try self.fileAccess.withWrite(
+                        at: url,
+                        intent: .deleting,
+                        permit: {
+                            !request.permission.isCancelled
+                        }
+                    ) {
+                        target in
+                        request.observe(.checkingBaseline)
+                        // 删除仅针对刚确认的原文件，不能因系统协调成功而绕过内容复验。
+                        guard
+                            try FileStorage.baseline(
+                                target,
+                                permit: {
+                                    !request.permission.isCancelled
+                                }
+                            ) == expected
+                        else {
+                            throw NateError.message("移到废纸篓前原文件已经变化，请重新检查。")
+                        }
+                        request.observe(.publishing)
+                        try request.permission.withPublication {
+                            try FileManager.default.trashItem(at: target, resultingItemURL: nil)
+                        }
+                        request.observe(.published)
                     }
-                    try FileManager.default.trashItem(at: target, resultingItemURL: nil)
                 }
             }
             active.targetGeneration += 1
@@ -359,6 +477,11 @@ extension ApplicationController {
             _ = await flushRecovery()
         }
         catch {
+            fileOperations.complete(request, error: error)
+            if request.snapshot.requiresReconciliation {
+                active.conflict = true
+                active.failure = error.localizedDescription
+            }
             SystemIntegration.alert("无法移到废纸篓", error.localizedDescription)
         }
     }
