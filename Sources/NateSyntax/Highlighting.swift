@@ -38,6 +38,8 @@ public struct SyntaxToken: Sendable {
 public struct SyntaxState: Sendable, Equatable {
     public var blockEnd = ""
     public var quote: UInt8?
+    public var diagnostic: String?
+    var python = PythonLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -101,6 +103,9 @@ public enum SyntaxEngine {
         keywords: Set<String>,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
+        if language.id == "python" {
+            return PythonLexing.highlight(text, base: base, keywords: keywords, state: &state)
+        }
         if ["normal", "nfo"].contains(language.id) {
             return []
         }

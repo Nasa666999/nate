@@ -9,7 +9,7 @@ import WebKit
 extension ApplicationController {
     /// 业务作用：打印使用独立正文与样式快照，不触碰活动编辑器的布局和历史。
     /// 参数说明: 无。
-    /// 返回：由系统打印面板处理分页、页码、份数、方向和 PDF 输出。
+    /// 返回：完整样式可用时交给系统处理分页和输出；失败显示原因，不启动打印。
     func printDocument() {
         mainWindow?.editor.finishComposition()
         guard let active else {
@@ -19,7 +19,13 @@ extension ApplicationController {
         let width = max(100, info.paperSize.width - info.leftMargin - info.rightMargin)
         let view = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 100))
         view.isRichText = true
-        view.textStorage?.setAttributedString(styledSnapshot(active))
+        do {
+            view.textStorage?.setAttributedString(try styledSnapshot(active))
+        }
+        catch {
+            SystemIntegration.alert("无法生成打印内容", error.localizedDescription)
+            return
+        }
         view.isHorizontallyResizable = false
         view.isVerticallyResizable = true
         view.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
@@ -38,8 +44,8 @@ extension ApplicationController {
     /// 业务作用：为打印和富文本导出独立建立固定样式，不保存为原文件。
     /// 参数说明:
     /// - document: 要读取的文档。
-    /// 返回：只读的带颜色快照。
-    func styledSnapshot(_ document: WorkspaceDocument) -> NSAttributedString {
+    /// 返回：完整样式成功时提供只读快照；词法预算失效时拒绝生成部分样式输出。
+    func styledSnapshot(_ document: WorkspaceDocument) throws -> NSAttributedString {
         let tree = document.buffer.text
         let value = NSMutableAttributedString(
             string: tree.text(),
@@ -67,9 +73,16 @@ extension ApplicationController {
                     case .comment: color = .secondaryLabelColor
                     case .string: color = .systemGreen
                     case .number: color = .systemBlue
-                    default: color = .systemTeal
+                    case .text: color = .textColor
+                    case .punctuation: color = .secondaryLabelColor
+                    case .heading: color = .systemBlue
+                    case .tag: color = .systemTeal
                     }
                     value.addAttribute(.foregroundColor, value: color, range: ns)
+                }
+                if let diagnostic = state.diagnostic {
+                    // 不完整词法状态不能冒充可交付样式，打印和导出在任何外部写入前停止。
+                    throw NateError.message(diagnostic)
                 }
             }
         }
@@ -87,7 +100,7 @@ extension ApplicationController {
             return
         }
         do {
-            let styled = styledSnapshot(active)
+            let styled = try styledSnapshot(active)
             let data = try styled.data(
                 from: NSRange(location: 0, length: styled.length),
                 documentAttributes: [

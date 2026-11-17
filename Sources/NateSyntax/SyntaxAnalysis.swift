@@ -40,6 +40,7 @@ public struct SyntaxAnalysis: Sendable {
         let scanner = SyntaxScanner(language: language)
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         var consumed = 0
+        var retainedTokens = 0
         for line in startLine..<min(snapshot.text.lineCount, visible.upperBound) {
             try Task.checkCancellation()
             guard ContinuousClock.now < deadline, consumed <= 64 * 1024 * 1024 else {
@@ -47,18 +48,28 @@ public struct SyntaxAnalysis: Sendable {
             }
             if line % 128 == 0 {
                 checkpoints[line] = udl == nil ? .native(native) : .user(user)
+                if checkpoints.count > 4096 {
+                    checkpoints.removeValue(forKey: line - 4095 * 128)
+                }
             }
             let range = snapshot.text.lineRange(line)
             consumed += range.count
             guard range.count <= 1_048_576 else {
-                continue
+                throw NateError.message("当前高亮暂停：单行超过 1 MB，无法确认后续词法状态。")
             }
             let text = snapshot.text.text(in: range)
             let tokens =
                 udl.map {
                     UDLLexer.highlight(text, base: range.lower, definition: $0, state: &user)
                 } ?? scanner.highlight(text, base: range.lower, state: &native)
+            if let diagnostic = native.diagnostic {
+                throw NateError.message(diagnostic)
+            }
             if visible.contains(line) {
+                guard tokens.count <= 262_144 - retainedTokens else {
+                    throw NateError.message("当前高亮暂停：视口词法片段超过 262144 个。")
+                }
+                retainedTokens += tokens.count
                 output[line] = tokens
             }
         }

@@ -20,6 +20,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 syntaxDocument = nil
                 syntaxCache = [:]
                 syntaxCheckpoints = [:]
+                syntaxFailure = nil
+                syntaxFailedLines = nil
                 invalidateBracketAnalysis()
             }
             viewSelections = document.selections
@@ -68,6 +70,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var syntaxRevision: UInt64 = 0
     var syntaxCache: [Int: [SyntaxToken]] = [:]
     var syntaxCheckpoints: [Int: LexicalState] = [:]
+    var syntaxFailure: String?
+    var syntaxFailedLines: Range<Int>?
     public var onChange: (() -> Void)?
     public var onSelection: (() -> Void)?
     public var onCommand: ((String) -> Void)?

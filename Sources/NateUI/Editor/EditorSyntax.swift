@@ -3,6 +3,21 @@ import NateCore
 import NateSyntax
 
 extension EditorView {
+    /// 业务作用：在当前视口保留语法计算的等待或容量边界，不让周期保存刷新掩盖失败原因。
+    /// 参数说明: 无。
+    /// 返回：仅当前文档修订和视口适用的语法状态，其它情况为空。
+    public var syntaxAnalysisStatus: String? {
+        guard syntaxDocument == document.id, syntaxRevision == document.revision, composition == nil else {
+            return nil
+        }
+        let first = projection.line(at: max(0, visibleRect.minY - 8))
+        let last = projection.line(at: visibleRect.maxY)
+        if let lines = syntaxFailedLines, lines.lowerBound <= last, lines.upperBound > first {
+            return syntaxFailure
+        }
+        return syntaxTask != nil && syntaxCache[first] == nil ? "正在解析语法" : nil
+    }
+
     /// 业务作用：以语言定义的精确编码字节识别资源变化，同标识的新规则不能复用旧高亮或括号结果。
     /// 参数说明: 无。
     /// 返回：资源实际变化时撤销旧分析；重复装配同一定义不重启后台任务。
@@ -40,6 +55,8 @@ extension EditorView {
         {
             syntaxTask?.cancel()
             syntaxGeneration = UUID()
+            syntaxFailure = nil
+            syntaxFailedLines = nil
             if syntaxDocument == document.id, syntaxLanguage == resource,
                 syntaxRevision < UInt64.max,
                 syntaxRevision + 1 == document.revision,
@@ -64,11 +81,16 @@ extension EditorView {
         if let tokens = syntaxCache[line] {
             return tokens
         }
+        // 同一视口已经缺少完整词法证据时，重绘不能不断重新执行相同的超预算任务。
+        if syntaxFailedLines?.contains(line) == true {
+            return []
+        }
         guard syntaxTask == nil else {
             return []
         }
-        let first = min(line, projection.line(at: max(0, visibleRect.minY - 8)))
-        let visible = first..<min(document.text.lineCount, max(line + 1, first + 256))
+        let viewportFirst = projection.line(at: max(0, visibleRect.minY - 8))
+        let first = line >= viewportFirst && line - viewportFirst < 256 ? viewportFirst : line
+        let visible = first..<(first + min(256, document.text.lineCount - first))
         let start =
             syntaxCheckpoints.keys.filter {
                 $0 <= first
@@ -78,6 +100,8 @@ extension EditorView {
         let udl = userLanguage
         let generation = syntaxGeneration
         let identity = UUID()
+        syntaxFailure = nil
+        syntaxFailedLines = nil
         syntaxTaskID = identity
         syntaxTask = Task {
             [weak self] in
@@ -121,6 +145,21 @@ extension EditorView {
                     _,
                     latest in latest
                 }
+                if self.syntaxCheckpoints.count > 4096 {
+                    var keep = Set(
+                        self.syntaxCheckpoints.keys.sorted {
+                            abs($0 - first) < abs($1 - first)
+                        }.prefix(4095)
+                    )
+                    if let earliest = self.syntaxCheckpoints.keys.min() {
+                        keep.insert(earliest)
+                    }
+                    self.syntaxCheckpoints = self.syntaxCheckpoints.filter {
+                        keep.contains($0.key)
+                    }
+                }
+                self.syntaxFailure = nil
+                self.syntaxFailedLines = nil
                 self.layouts.removeAll()
                 self.needsDisplay = true
             }
@@ -129,7 +168,8 @@ extension EditorView {
                     return
                 }
                 if !Task.isCancelled && !(error is CancellationError) {
-                    self.syntaxCache[line] = []
+                    self.syntaxFailure = error.localizedDescription
+                    self.syntaxFailedLines = visible
                     self.onStatus?(error.localizedDescription)
                 }
             }
@@ -147,6 +187,8 @@ extension EditorView {
         syntaxLanguage = ""
         syntaxCache = [:]
         syntaxCheckpoints = [:]
+        syntaxFailure = nil
+        syntaxFailedLines = nil
         refresh()
     }
 }

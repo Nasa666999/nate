@@ -86,6 +86,10 @@ public struct BracketIndex: Sendable {
                 udl.map {
                     UDLLexer.highlight(text, base: range.lower, definition: $0, state: &user)
                 } ?? scanner?.highlight(text, base: range.lower, state: &native) ?? []
+            if let diagnostic = native.diagnostic {
+                // 词法状态失去完整证据时不能把余下字符串或表达式当成可导航结构。
+                throw NateError.message(diagnostic)
+            }
             let ordered = tokens.sorted {
                 $0.range.lower < $1.range.lower
             }
