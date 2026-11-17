@@ -39,9 +39,9 @@ extension EditorView {
         if syntaxDocument != document.id || syntaxLanguage != resource || syntaxRevision != document.revision
         {
             syntaxTask?.cancel()
-            syntaxTask = nil
             syntaxGeneration = UUID()
             if syntaxDocument == document.id, syntaxLanguage == resource,
+                syntaxRevision < UInt64.max,
                 syntaxRevision + 1 == document.revision,
                 let changed = document.lastEdits.map(\.range.lower).min()
             {
@@ -77,8 +77,19 @@ extension EditorView {
         let snapshot = document.snapshot
         let udl = userLanguage
         let generation = syntaxGeneration
+        let identity = UUID()
+        syntaxTaskID = identity
         syntaxTask = Task {
             [weak self] in
+            defer {
+                if let self, self.syntaxTaskID == identity {
+                    // 取消只撤销结果资格，实际解析返回后才能允许下一个任务取得唯一任务位。
+                    self.syntaxTask = nil
+                    self.syntaxTaskID = nil
+                    self.layouts.removeAll()
+                    self.needsDisplay = true
+                }
+            }
             let worker = Task.detached(priority: .utility) {
                 try SyntaxAnalysis.analyze(
                     snapshot: snapshot,
@@ -98,6 +109,8 @@ extension EditorView {
                         worker.cancel()
                     }
                 )
+                try Task.checkCancellation()
+                // 正文相同仍可能属于新的文档绑定或规则代次，旧结果不能重新取得呈现资格。
                 guard let self, self.syntaxGeneration == generation, self.document.id == snapshot.id,
                     self.document.revision == snapshot.revision
                 else {
@@ -109,16 +122,14 @@ extension EditorView {
                     latest in latest
                 }
                 self.layouts.removeAll()
-                self.syntaxTask = nil
                 self.needsDisplay = true
             }
             catch {
                 guard let self, self.syntaxGeneration == generation else {
                     return
                 }
-                self.syntaxTask = nil
-                self.syntaxCache[line] = []
-                if !(error is CancellationError) {
+                if !Task.isCancelled && !(error is CancellationError) {
+                    self.syntaxCache[line] = []
                     self.onStatus?(error.localizedDescription)
                 }
             }
@@ -132,7 +143,6 @@ extension EditorView {
     public func invalidateSyntax() {
         invalidateBracketAnalysis()
         syntaxTask?.cancel()
-        syntaxTask = nil
         syntaxGeneration = UUID()
         syntaxLanguage = ""
         syntaxCache = [:]

@@ -6,12 +6,26 @@ import NateSyntax
 public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var document: DocumentBuffer {
         didSet {
+            if oldValue !== document {
+                // 文档生命周期改变后，旧候选和拖选不能沿用相同修订号写入另一个正文。
+                composition = nil
+                inputContext?.discardMarkedText()
+                dismissCompletion()
+                dragAnchor = nil
+                dragColumn = nil
+                layouts.removeAll()
+                hiddenLines.removeAll()
+                syntaxTask?.cancel()
+                syntaxGeneration = UUID()
+                syntaxDocument = nil
+                syntaxCache = [:]
+                syntaxCheckpoints = [:]
+                invalidateBracketAnalysis()
+            }
             viewSelections = document.selections
             observedRevision = document.revision
             projection.measured.removeAll()
-            if oldValue !== document {
-                invalidateBracketAnalysis()
-            }
+            refresh()
         }
     }
     public var viewSelections = [TextSelection(anchor: 0, head: 0)] {
@@ -46,6 +60,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var onStatus: ((String) -> Void)?
     var syntaxTask: Task<Void, Never>?
+    var syntaxTaskID: UUID?
     var syntaxGeneration = UUID()
     var syntaxDocument: UUID?
     var syntaxLanguage = ""
@@ -398,7 +413,6 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             brackets.pending = nil
             brackets.task?.cancel()
             syntaxTask?.cancel()
-            syntaxTask = nil
             dismissCompletion()
         }
     }
