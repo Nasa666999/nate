@@ -9,8 +9,11 @@ extension ApplicationController {
     /// - index: 当前展示结果的条目序号。
     /// 返回：打开对应文档并选中完整命中；过期时保留正文并提示。
     func navigateResult(_ index: Int) {
+        resultNavigationTask?.cancel()
+        resultNavigationTask = nil
+        resultNavigationGeneration = UUID()
         // 退出已固定活动文档与恢复视图，迟到导航不能在最终确认期间切换这份状态。
-        guard !closing else {
+        guard !closing, mainWindow != nil else {
             return
         }
         guard resultNavigation.indices.contains(index) else {
@@ -20,21 +23,60 @@ extension ApplicationController {
         guard target.documentID != nil || target.url != nil else {
             return
         }
-        Task {
-            if let id = target.documentID,
-                let document = documents.first(where: {
-                    $0.buffer.id == id
-                })
-            {
-                guard target.revision == nil || document.buffer.revision == target.revision else {
-                    SystemIntegration.alert("结果已过期", "文档在搜索后已改变，请重新搜索后定位。")
+        mainWindow?.editor.finishComposition()
+        let request = resultNavigationGeneration
+        let query = queryGeneration
+        let selectionGeneration = searchNavigationGeneration
+        let revision = active?.buffer.revision
+        let selections = mainWindow?.editor.viewSelections
+        let documentSelections = active?.buffer.selections
+        let presentation = mainWindow?.resultGeneration
+        // 请求绑定原窗口和原光标证据；系统读取期间用户改选区、换视图或换结果后不能继续取得焦点。
+        let permitted: @MainActor () -> Bool = {
+            [weak self, weak origin = active?.buffer, weak editor = mainWindow?.editor] in
+            guard let self, !self.closing, !Task.isCancelled,
+                self.resultNavigationGeneration == request, self.queryGeneration == query,
+                self.searchNavigationGeneration == selectionGeneration,
+                self.mainWindow?.resultGeneration == presentation,
+                self.active?.buffer === origin, self.mainWindow?.editor === editor,
+                origin?.revision == revision, editor?.viewSelections == selections,
+                origin?.selections == documentSelections, editor?.hasMarkedText() != true
+            else {
+                return false
+            }
+            return true
+        }
+        resultNavigationTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            defer {
+                if request == self.resultNavigationGeneration {
+                    self.resultNavigationTask = nil
+                }
+            }
+            guard permitted() else {
+                return
+            }
+            let destination: WorkspaceDocument
+            if let id = target.documentID {
+                // 稳定 UUID 可能来自恢复重开，只有生成结果时的真实文档对象仍在工作区才可使用原偏移。
+                guard
+                    let document = self.documents.first(where: {
+                        candidate in
+                        candidate.buffer.id == id
+                    }),
+                    target.authority?.matches(document) == true,
+                    target.revision == document.buffer.revision
+                else {
+                    self.mainWindow?.status.stringValue = "结果已过期：原文档已关闭、重开或改变，请重新搜索。"
                     return
                 }
-                activate(id)
+                destination = document
             }
             else if let url = target.url {
                 if let expected = target.diskBaseline {
-                    let current = try? await readIO.readCancellable {
+                    let current = try? await self.readIO.readCancellable {
                         token in
                         try self.fileAccess.baseline(
                             url,
@@ -43,29 +85,54 @@ extension ApplicationController {
                             }
                         )
                     }
+                    guard permitted() else {
+                        return
+                    }
                     guard current == expected else {
-                        SystemIntegration.alert("磁盘结果已过期", "文件在搜索后已经变化，请重新搜索。")
+                        self.mainWindow?.status.stringValue = "磁盘结果已过期：文件在搜索后已经变化，请重新搜索。"
                         return
                     }
                 }
-                await openFile(url)
+                guard let document = await self.openFile(url, activateOnOpen: false, permit: permitted),
+                    permitted()
+                else {
+                    return
+                }
                 if let expected = target.diskBaseline {
-                    active?.evaluateDirty()
-                    guard active?.baseline == expected, active?.isDirty == false else {
-                        SystemIntegration.alert("结果来自磁盘快照", "当前缓冲区与磁盘快照不同，请重新搜索缓冲区或重新载入后定位。")
+                    document.evaluateDirty()
+                    guard document.baseline == expected, !document.isDirty,
+                        target.diskEncoding == nil || document.encoding == target.diskEncoding
+                    else {
+                        self.mainWindow?.status.stringValue = "文件编码或正文与搜索时不同，请重新搜索当前缓冲区。"
                         return
                     }
                 }
+                destination = document
             }
-            guard let active, active.buffer.text.isBoundary(target.range.lower),
-                active.buffer.text.isBoundary(target.range.upper)
             else {
                 return
             }
-            active.buffer.selections = [TextSelection(anchor: target.range.lower, head: target.range.upper)]
-            mainWindow?.editor.refresh(reveal: true)
-            mainWindow?.window?.makeFirstResponder(mainWindow?.editor)
-            refreshUI()
+            // 等待期间出现的新预编辑属于用户的新输入，不能由迟到导航主动提交或丢弃。
+            guard permitted() else {
+                return
+            }
+            guard destination.buffer.text.isBoundary(target.range.lower),
+                destination.buffer.text.isBoundary(target.range.upper)
+            else {
+                self.mainWindow?.status.stringValue = "结果范围无法无损定位，请重新搜索。"
+                return
+            }
+            // 全部异步证据复验完毕后在同一执行域内激活并发布选区，不再跨越可重入边界。
+            self.activate(destination.buffer.id)
+            destination.buffer.selections = [
+                TextSelection(
+                    anchor: target.range.lower,
+                    head: target.range.upper
+                )
+            ]
+            self.mainWindow?.editor.refresh(reveal: true)
+            self.mainWindow?.window?.makeFirstResponder(self.mainWindow?.editor)
+            self.refreshUI()
         }
     }
 

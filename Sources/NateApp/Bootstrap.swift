@@ -82,6 +82,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var previousTextForMacro = PieceTree()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
+    var resultNavigationTask: Task<Void, Never>?
+    var resultNavigationGeneration = UUID()
     var recentFiles: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: "recentFiles") ?? []

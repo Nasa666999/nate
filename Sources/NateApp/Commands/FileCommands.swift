@@ -8,19 +8,43 @@ extension ApplicationController {
     /// 参数说明:
     /// - url: Finder、对话框或 CLI 提供的路径。
     /// - explicitEncoding: 用户选择的重新解释代码页。
+    /// - activateOnOpen: 是否在读取完成后立即激活；异步结果导航可先建立后台标签再复验自己的焦点权限。
+    /// - permit: 主执行域中的发布权限，失效时不添加标签、改变焦点或发布迟到错误。
     /// 返回：实际打开的文档；失败返回空，不误用先前的活动标签。
     @discardableResult
-    func openFile(_ url: URL, explicitEncoding: TextEncoding? = nil) async -> WorkspaceDocument? {
-        guard !closing else {
-            return nil
+    func openFile(
+        _ url: URL,
+        explicitEncoding: TextEncoding? = nil,
+        activateOnOpen: Bool = true,
+        permit: @MainActor () -> Bool = {
+            true
         }
-        if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-            await showFolder(url)
+    ) async -> WorkspaceDocument? {
+        // 打开请求的调用权也可能被后来的导航撤销，读取前不能先改变原视图。
+        guard !closing, !Task.isCancelled, permit() else {
             return nil
         }
         let catalog = codecs
         mainWindow?.status.stringValue = "正在读取 · " + url.lastPathComponent + " · 可在工具菜单取消读取"
         do {
+            // 类型探测也可能等待外置盘或系统授权，必须使用有界读取通道而不阻塞主事件循环。
+            let directory = try await readIO.readCancellable {
+                token in
+                try token.check()
+                let value = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                try token.check()
+                return value
+            }
+            // 类型证据返回时原导航可能已经撤销，目录和文件都先复验调用权再进入后续流程。
+            guard !closing, !Task.isCancelled, permit() else {
+                return nil
+            }
+            if directory {
+                if activateOnOpen {
+                    await showFolder(url)
+                }
+                return nil
+            }
             let loaded = try await readIO.readCancellable {
                 token in
                 try self.fileAccess.load(
@@ -32,8 +56,8 @@ extension ApplicationController {
                     }
                 )
             }
-            // 退出开始后不再发布迟到的新标签，原文件并未被打开动作修改。
-            guard !closing else {
+            // 系统读取完成不代表原调用仍有发布权，失效请求不得添加标签或切换活动文档。
+            guard !closing, !Task.isCancelled, permit() else {
                 return nil
             }
             if let existing = documents.first(where: {
@@ -41,7 +65,9 @@ extension ApplicationController {
                     || $0.baseline?.resolvedPath == loaded.baseline.resolvedPath
                     || $0.url?.standardizedFileURL == loaded.url.standardizedFileURL
             }) {
-                activate(existing.buffer.id)
+                if activateOnOpen {
+                    activate(existing.buffer.id)
+                }
                 return existing
             }
             // 保存或批量替换还未发布绑定时，不能从旧磁盘快照建立另一个写入者。
@@ -72,26 +98,36 @@ extension ApplicationController {
                 + recentFiles.filter {
                     $0 != url.path
                 }
-            activate(document.buffer.id)
+            if activateOnOpen {
+                activate(document.buffer.id)
+            }
+            else {
+                refreshUI()
+            }
             buildMenus()
             return document
         }
-        catch is CancellationError {
-            return nil
-        }
-        catch is ReadDeadlineExceeded {
-            mainWindow?.showResults("读取未完成：" + url.path + "\n" + ReadDeadlineExceeded().localizedDescription)
-        }
-        catch let error as FileDecodingFailure {
-            if explicitEncoding == nil {
+        catch {
+            if error is CancellationError {
+                return nil
+            }
+            // 迟到错误同样需要原调用权，不能用旧读取的提示覆盖新窗口或新查询。
+            guard !closing, !Task.isCancelled, permit() else {
+                return nil
+            }
+            if !activateOnOpen {
+                mainWindow?.status.stringValue = "无法打开结果文件：" + error.localizedDescription
+                return nil
+            }
+            if error is ReadDeadlineExceeded {
+                mainWindow?.showResults("读取未完成：" + url.path + "\n" + error.localizedDescription)
+            }
+            else if error is FileDecodingFailure, explicitEncoding == nil {
                 await offerDecode(url, reason: error.localizedDescription)
             }
             else {
                 SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
             }
-        }
-        catch {
-            SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
         }
         return nil
     }

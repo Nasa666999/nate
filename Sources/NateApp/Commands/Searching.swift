@@ -50,6 +50,7 @@ extension ApplicationController {
         afterReplacement: Bool = false
     ) {
         searchTask?.cancel()
+        resultNavigationTask?.cancel()
         if action == "cancel" {
             findWindow?.feedback.stringValue =
                 searchTask == nil
@@ -230,7 +231,8 @@ extension ApplicationController {
                                         documentID: document.buffer.id,
                                         revision: snapshot.revision,
                                         url: document.url,
-                                        range: range
+                                        range: range,
+                                        authority: authorities[snapshot.id]
                                     )
                                 )
                             }
@@ -267,4 +269,6 @@ struct ResultNavigation {
     var url: URL?
     var range: ByteRange
     var diskBaseline: NateStorage.DiskBaseline? = nil
+    var diskEncoding: NateStorage.TextEncoding? = nil
+    var authority: SearchDocumentAuthority? = nil
 }

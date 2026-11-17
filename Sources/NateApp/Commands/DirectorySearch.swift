@@ -268,6 +268,8 @@ extension ApplicationController {
                         }
                     }
                     else {
+                        let fromDisk =
+                            options.ignoreOpenBuffers || opened[plan.loaded.baseline.resolvedPath] == nil
                         for hit in plan.result.hits {
                             guard let range = hit.range else {
                                 continue
@@ -278,15 +280,15 @@ extension ApplicationController {
                             )
                             navigation.append(
                                 ResultNavigation(
-                                    documentID: options.ignoreOpenBuffers
+                                    documentID: fromDisk
                                         ? nil : opened[plan.loaded.baseline.resolvedPath]?.id,
-                                    revision: options.ignoreOpenBuffers
+                                    revision: fromDisk
                                         ? nil : opened[plan.loaded.baseline.resolvedPath]?.revision,
                                     url: plan.url,
                                     range: range,
-                                    diskBaseline: options.ignoreOpenBuffers
-                                        || opened[plan.loaded.baseline.resolvedPath] == nil
-                                        ? plan.loaded.baseline : nil
+                                    diskBaseline: fromDisk ? plan.loaded.baseline : nil,
+                                    diskEncoding: fromDisk ? plan.loaded.encoding : nil,
+                                    authority: fromDisk ? nil : authorities[plan.snapshot.id]
                                 )
                             )
                         }

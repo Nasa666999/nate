@@ -51,6 +51,7 @@ extension ApplicationController {
             document.setEditingSuspension(.applicationTermination, active: true)
         }
         searchTask?.cancel()
+        resultNavigationTask?.cancel()
         // 不等待原文件和进程退出才开始保护正文，两个持久化通道必须保持独立推进。
         scheduleRecovery(force: true)
         Task {
@@ -123,6 +124,7 @@ extension ApplicationController {
             externalObservationTask?.cancel()
             instanceRequestTask?.cancel()
             searchTask?.cancel()
+            resultNavigationTask?.cancel()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
