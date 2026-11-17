@@ -228,7 +228,7 @@ extension ApplicationController {
                     continue
                 }
                 let current = try await readIO.read {
-                    try FileStorage.baseline(url)
+                    try self.fileAccess.baseline(url)
                 }
                 guard document.saveTask == nil, !document.bindingChange, document.baseline == expected,
                     document.url == url,
@@ -290,11 +290,16 @@ extension ApplicationController {
         let baseline = active.baseline
         do {
             let result = try await fileIO.run {
-                guard try FileStorage.baseline(oldURL) == baseline else {
-                    throw NateError.message("重命名前原文件已变化。")
+                try self.fileAccess.withMove(from: oldURL, to: destination) {
+                    source,
+                    target in
+                    // 协调访问不替代原磁盘证据，目标身份变化时必须停止路径副作用。
+                    guard try FileStorage.baseline(source) == baseline else {
+                        throw NateError.message("重命名前原文件已变化。")
+                    }
+                    try FileManager.default.moveItem(at: source, to: target)
+                    return try FileStorage.baseline(target)
                 }
-                try FileManager.default.moveItem(at: oldURL, to: destination)
-                return try FileStorage.baseline(destination)
             }
             active.targetGeneration += 1
             active.url = destination
@@ -335,10 +340,14 @@ extension ApplicationController {
         let expected = active.baseline
         do {
             try await fileIO.run {
-                guard try FileStorage.baseline(url) == expected else {
-                    throw NateError.message("移到废纸篓前原文件已经变化，请重新检查。")
+                try self.fileAccess.withWrite(at: url, intent: .deleting) {
+                    target in
+                    // 删除仅针对刚确认的原文件，不能因系统协调成功而绕过内容复验。
+                    guard try FileStorage.baseline(target) == expected else {
+                        throw NateError.message("移到废纸篓前原文件已经变化，请重新检查。")
+                    }
+                    try FileManager.default.trashItem(at: target, resultingItemURL: nil)
                 }
-                try FileManager.default.trashItem(at: url, resultingItemURL: nil)
             }
             active.targetGeneration += 1
             active.url = nil

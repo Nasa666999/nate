@@ -30,8 +30,14 @@ extension ApplicationController {
             }
             else if let url = target.url {
                 if let expected = target.diskBaseline {
-                    let current = try? await fileIO.run {
-                        try FileStorage.baseline(url)
+                    let current = try? await readIO.readCancellable {
+                        token in
+                        try self.fileAccess.baseline(
+                            url,
+                            permit: {
+                                !token.isCancelled
+                            }
+                        )
                     }
                     guard current == expected else {
                         SystemIntegration.alert("磁盘结果已过期", "文件在搜索后已经变化，请重新搜索。")
@@ -116,11 +122,27 @@ extension ApplicationController {
         }
         else if choice == .alertSecondButtonReturn {
             do {
-                let display = try await fileIO.run {
-                    let data = try Data(contentsOf: url, options: .mappedIfSafe)
-                    let bytes = [UInt8](data.prefix(4_194_304))
+                let display = try await readIO.readCancellable {
+                    token in
+                    let sample = try self.fileAccess.withRead(
+                        at: url,
+                        permit: {
+                            !token.isCancelled
+                        }
+                    ) {
+                        target in
+                        try FileStorage.readSample(
+                            target,
+                            maximumBytes: 4_194_304,
+                            permit: {
+                                !token.isCancelled
+                            }
+                        )
+                    }
+                    let bytes = [UInt8](sample.data)
                     var lines: [String] = []
                     for i in stride(from: 0, to: bytes.count, by: 16) {
+                        try token.check()
                         let segment = bytes[i..<min(i + 16, bytes.count)]
                         lines.append(
                             String(format: "%08X  ", i)
@@ -129,7 +151,7 @@ extension ApplicationController {
                                 }.joined(separator: " ")
                         )
                     }
-                    return "文件 \(data.count) 字节。只读显示前 \(bytes.count) 字节；原文件不会作为此视图的保存目标。\n"
+                    return "文件 \(sample.totalByteCount) 字节。只读显示前 \(bytes.count) 字节；原文件不会作为此视图的保存目标。\n"
                         + lines.joined(separator: "\n")
                 }
                 let document = WorkspaceDocument(name: url.lastPathComponent + " · 字节视图", text: display)

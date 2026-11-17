@@ -28,8 +28,14 @@ extension ApplicationController {
             refreshUI()
             return
         }
-        let expected = try? await fileIO.run {
-            try FileStorage.baseline(url)
+        let expected = try? await readIO.readCancellable {
+            token in
+            try self.fileAccess.baseline(
+                url,
+                permit: {
+                    !token.isCancelled
+                }
+            )
         }
         let revision = document.buffer.revision
         let alert = NSAlert()
@@ -97,7 +103,7 @@ extension ApplicationController {
         }
         do {
             let result = try await fileIO.run {
-                try FileStorage.save(
+                try self.fileAccess.save(
                     encoding.encode(snapshot.text.text(), catalog: catalog),
                     to: url,
                     expected: expected,
@@ -139,8 +145,16 @@ extension ApplicationController {
         let encoding = document.encoding
         let catalog = codecs
         do {
-            let output = try await fileIO.run {
-                let external = try FileStorage.load(url, encoding: encoding, catalog: catalog)
+            let output = try await readIO.readCancellable {
+                token in
+                let external = try self.fileAccess.load(
+                    url,
+                    encoding: encoding,
+                    catalog: catalog,
+                    permit: {
+                        !token.isCancelled
+                    }
+                )
                 let original = TextTransforms.lines(base.text()).map(\.body)
                 let current = TextTransforms.lines(local.text.text()).map(\.body)
                 let disk = TextTransforms.lines(external.text).map(\.body)

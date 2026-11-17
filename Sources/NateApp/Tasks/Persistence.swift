@@ -88,7 +88,7 @@ extension ApplicationController {
             do {
                 let result = try await executor.run {
                     let bytes = try encoding.encode(snapshot.text.text(), catalog: catalog)
-                    return try FileStorage.save(
+                    return try self.fileAccess.save(
                         bytes,
                         to: url,
                         expected: baseline,

@@ -100,8 +100,8 @@ extension ApplicationController {
                     try await fileIO.run {
                         let expected =
                             FileManager.default.fileExists(atPath: url.path)
-                            ? try NateStorage.FileStorage.baseline(url) : nil
-                        _ = try NateStorage.FileStorage.save(data, to: url, expected: expected)
+                            ? try self.fileAccess.baseline(url) : nil
+                        _ = try self.fileAccess.save(data, to: url, expected: expected, replacing: true)
                     }
                 }
                 catch {
@@ -198,8 +198,14 @@ extension ApplicationController {
         let snapshot = active.buffer.snapshot
         Task {
             do {
-                let result = try await fileIO.run {
-                    let external = try NateStorage.FileStorage.load(url)
+                let result = try await readIO.readCancellable {
+                    token in
+                    let external = try self.fileAccess.load(
+                        url,
+                        permit: {
+                            !token.isCancelled
+                        }
+                    )
                     let before = TextTransforms.lines(snapshot.text.text()).map(\.body)
                     let after = TextTransforms.lines(external.text).map(\.body)
                     guard before.count + after.count <= 100_000 else {

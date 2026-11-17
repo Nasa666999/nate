@@ -76,8 +76,9 @@ extension ApplicationController {
                 try await fileIO.run {
                     let data = try JSONEncoder().encode(actions)
                     let expected =
-                        FileManager.default.fileExists(atPath: url.path) ? try FileStorage.baseline(url) : nil
-                    _ = try FileStorage.save(data, to: url, expected: expected)
+                        FileManager.default.fileExists(atPath: url.path)
+                        ? try self.fileAccess.baseline(url) : nil
+                    _ = try self.fileAccess.save(data, to: url, expected: expected, replacing: true)
                 }
             }
             catch {
@@ -95,11 +96,15 @@ extension ApplicationController {
         }
         Task {
             do {
-                let actions = try await fileIO.run {
-                    let data = try Data(contentsOf: url)
-                    guard data.count <= 8_388_608 else {
-                        throw NateError.message("宏配置超过 8 MB。")
-                    }
+                let actions = try await readIO.readCancellable {
+                    token in
+                    let data = try self.fileAccess.readData(
+                        url,
+                        maximumBytes: 8_388_608,
+                        permit: {
+                            !token.isCancelled
+                        }
+                    ).data
                     let actions = try JSONDecoder().decode([MacroAction].self, from: data)
                     guard actions.count <= 10_000 else {
                         throw NateError.message("宏动作超过 10000 项。")

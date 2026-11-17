@@ -21,8 +21,16 @@ extension ApplicationController {
         let catalog = codecs
         mainWindow?.status.stringValue = "正在读取 · " + url.lastPathComponent + " · 可在工具菜单取消读取"
         do {
-            let loaded = try await readIO.read {
-                try FileStorage.load(url, encoding: explicitEncoding, catalog: catalog)
+            let loaded = try await readIO.readCancellable {
+                token in
+                try self.fileAccess.load(
+                    url,
+                    encoding: explicitEncoding,
+                    catalog: catalog,
+                    permit: {
+                        !token.isCancelled
+                    }
+                )
             }
             // 退出开始后不再发布迟到的新标签，原文件并未被打开动作修改。
             guard !closing else {
@@ -149,12 +157,13 @@ extension ApplicationController {
             let result = try await fileIO.run {
                 let expected =
                     FileManager.default.fileExists(atPath: destination.path)
-                    ? try FileStorage.baseline(destination) : nil
+                    ? try self.fileAccess.baseline(destination) : nil
                 let data = try encoding.encode(snapshot.text.text(), catalog: catalog)
-                return try FileStorage.save(
+                return try self.fileAccess.save(
                     data,
                     to: destination,
                     expected: expected,
+                    replacing: true,
                     permit: {
                         !permit.isCancelled
                     }
@@ -226,8 +235,16 @@ extension ApplicationController {
             return
         }
         do {
-            let (loaded, prepared) = try await readIO.read {
-                let loaded = try FileStorage.load(url, encoding: encoding, catalog: catalog)
+            let (loaded, prepared) = try await readIO.readCancellable {
+                token in
+                let loaded = try self.fileAccess.load(
+                    url,
+                    encoding: encoding,
+                    catalog: catalog,
+                    permit: {
+                        !token.isCancelled
+                    }
+                )
                 let format = DocumentFormat(
                     codePage: loaded.encoding.codePage,
                     bom: loaded.encoding.bom,

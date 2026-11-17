@@ -43,8 +43,8 @@ extension ApplicationController {
             try await fileIO.run {
                 let data = try JSONEncoder().encode(SessionFile(documents: entries))
                 let expected =
-                    FileManager.default.fileExists(atPath: url.path) ? try FileStorage.baseline(url) : nil
-                _ = try FileStorage.save(data, to: url, expected: expected)
+                    FileManager.default.fileExists(atPath: url.path) ? try self.fileAccess.baseline(url) : nil
+                _ = try self.fileAccess.save(data, to: url, expected: expected, replacing: true)
             }
             SystemIntegration.alert(
                 "会话已保存",
@@ -62,11 +62,15 @@ extension ApplicationController {
     /// 返回：逐项打开有效文件，部分失败按实际清单显示。
     func loadSession(_ url: URL) async {
         do {
-            let session = try await fileIO.run {
-                let data = try Data(contentsOf: url)
-                guard data.count <= 8_388_608 else {
-                    throw NateError.message("会话清单超过 8 MB。")
-                }
+            let session = try await readIO.readCancellable {
+                token in
+                let data = try self.fileAccess.readData(
+                    url,
+                    maximumBytes: 8_388_608,
+                    permit: {
+                        !token.isCancelled
+                    }
+                ).data
                 let session = try JSONDecoder().decode(SessionFile.self, from: data)
                 guard session.format == 1, session.documents.count <= 10_000 else {
                     throw NateError.message("会话格式或文档数量不受支持。")

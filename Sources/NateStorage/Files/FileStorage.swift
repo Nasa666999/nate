@@ -32,96 +32,64 @@ public enum FileStorage {
     /// 业务作用：记录真实身份与全部字节证据，同大小改写不能绕过冲突检测。
     /// 参数说明:
     /// - url: 用户目标路径。
+    /// - permit: 完整证据读取的请求权限。
     /// 返回：真实目标、文件身份和内容摘要。
-    public static func baseline(_ url: URL) throws -> DiskBaseline {
-        let resolved = url.resolvingSymlinksInPath().standardizedFileURL
-        let descriptor = Darwin.open(resolved.path, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW)
-        guard descriptor >= 0 else {
-            throw posix("无法读取原文件身份")
+    public static func baseline(
+        _ url: URL,
+        permit: @Sendable () -> Bool = {
+            true
         }
-        defer {
-            Darwin.close(descriptor)
-        }
-        var metadata = stat()
-        guard fstat(descriptor, &metadata) == 0 else {
-            throw posix("无法读取原文件身份")
-        }
-        guard metadata.st_mode & S_IFMT == S_IFREG else {
-            throw NateError.message("只能将普通文件作为编辑和保存目标。")
-        }
-        var hasher = SHA256()
-        var remaining = metadata.st_size
-        var block = [UInt8](repeating: 0, count: 262_144)
-        while remaining > 0 {
-            let read = try block.withUnsafeMutableBytes {
-                bytes -> Int in
-                let amount = Darwin.read(
-                    descriptor,
-                    bytes.baseAddress,
-                    min(bytes.count, Int(min(remaining, Int64(bytes.count))))
-                )
-                if amount < 0 && errno == EINTR {
-                    return -1
-                }
-                guard amount > 0 else {
-                    throw posix("原文件读取未完成")
-                }
-                hasher.update(bufferPointer: UnsafeRawBufferPointer(rebasing: bytes[..<amount]))
-                return amount
-            }
-            if read > 0 {
-                remaining -= Int64(read)
-            }
-        }
-        var after = stat()
-        var path = stat()
-        // 摘要只证明这个描述符的固定内容，路径换文件或读取中改写都必须拒绝。
-        guard fstat(descriptor, &after) == 0, stat(resolved.path, &path) == 0,
-            sameObservation(metadata, after), sameObservation(after, path)
-        else {
-            throw NateError.message("获取磁盘证据期间文件发生变化。")
-        }
-        return DiskBaseline(
-            device: UInt64(UInt32(bitPattern: metadata.st_dev)),
-            inode: metadata.st_ino,
-            digest: hasher.finalize().map {
-                String(format: "%02x", $0)
-            }.joined(),
-            resolvedPath: resolved.path
-        )
+    ) throws -> DiskBaseline {
+        try readEvidence(url, collectBytes: false, maximumBytes: Int.max, permit: permit).baseline
     }
 
-    /// 业务作用：读取前后复验文件，防止将多个外部修订拼为同一缓冲区。
+    /// 业务作用：固定描述符读取并复验路径，防止将多个外部修订拼为同一缓冲区。
     /// 参数说明:
     /// - url: 待打开文件。
     /// - encoding: 可选的用户指定解释方式。
     /// - catalog: 注入的严格代码页映射。
+    /// - permit: 等待与读取期间有效的请求权限。
     /// 返回：正文、原始字节与可靠基线；读取中变化时失败。
-    public static func load(_ url: URL, encoding: TextEncoding? = nil, catalog: LegacyCodecCatalog? = nil)
+    public static func load(
+        _ url: URL,
+        encoding: TextEncoding? = nil,
+        catalog: LegacyCodecCatalog? = nil,
+        permit: @Sendable () -> Bool = {
+            true
+        }
+    )
         throws -> LoadedFile
     {
-        let first = try baseline(url)
-        let data = try Data(contentsOf: URL(fileURLWithPath: first.resolvedPath))
-        let second = try baseline(url)
-        guard first == second, digest(data) == first.digest else {
-            throw NateError.message("读取期间文件发生变化，请重试。")
-        }
+        let bytes = try readData(url, permit: permit)
+        let data = bytes.data
+        let baseline = bytes.baseline
         let decoded: (String, TextEncoding, Bool)
+        guard permit() else {
+            throw CancellationError()
+        }
         do {
             decoded = try TextEncoding.detect(data, explicit: encoding, catalog: catalog)
         }
         catch {
             throw FileDecodingFailure(reason: error.localizedDescription)
         }
+        guard permit() else {
+            throw CancellationError()
+        }
+        let tree = PieceTree(decoded.0)
+        let ending = LineEnding.detect(decoded.0)
+        guard permit() else {
+            throw CancellationError()
+        }
         return LoadedFile(
             url: url.standardizedFileURL,
             text: decoded.0,
-            tree: PieceTree(decoded.0),
+            tree: tree,
             encoding: decoded.1,
-            baseline: second,
+            baseline: baseline,
             originalBytes: data,
             inferred: decoded.2,
-            lineEnding: LineEnding.detect(decoded.0)
+            lineEnding: ending
         )
     }
 
@@ -149,7 +117,7 @@ public enum FileStorage {
             } ?? url.standardizedFileURL
         // 符号链接仅写确认过的目标；删除或换目标都必须先重新授权。
         if let expected {
-            guard try baseline(url) == expected else {
+            guard try baseline(url, permit: permit) == expected else {
                 throw NateError.message("外部冲突：磁盘身份或内容已经改变，自动保存已暂停。")
             }
             var metadata = stat()
@@ -184,10 +152,13 @@ public enum FileStorage {
             raw in
             var written = 0
             while written < raw.count {
+                guard permit() else {
+                    throw CancellationError()
+                }
                 guard let base = raw.baseAddress else {
                     break
                 }
-                let amount = Darwin.write(fd, base.advanced(by: written), raw.count - written)
+                let amount = Darwin.write(fd, base.advanced(by: written), min(262_144, raw.count - written))
                 if amount < 0 && errno == EINTR {
                     continue
                 }
@@ -210,10 +181,13 @@ public enum FileStorage {
                 throw posix("无法保留文件元数据")
             }
         }
+        guard permit() else {
+            throw CancellationError()
+        }
         try synchronize(fd)
         // 最后一次复验尽量缩小外部非协作写入的竞争窗口。
         if let expected {
-            guard try baseline(url) == expected else {
+            guard try baseline(url, permit: permit) == expected else {
                 throw NateError.message("发布前检测到外部变化，保留本地正文并停止覆盖。")
             }
         }

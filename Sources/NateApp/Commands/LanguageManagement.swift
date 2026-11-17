@@ -86,10 +86,14 @@ extension ApplicationController {
                 }
                 let expected = userLanguageBaselines[source.path]
                 try await fileIO.run {
-                    guard try FileStorage.baseline(source) == expected else {
-                        throw NateError.message("UDL 文件已被外部改变，请重新载入。")
+                    try self.fileAccess.withWrite(at: source, intent: .deleting) {
+                        target in
+                        // 用户定义资源仍须匹配导入时的原证据，避免删除外部程序的新内容。
+                        guard try FileStorage.baseline(target) == expected else {
+                            throw NateError.message("UDL 文件已被外部改变，请重新载入。")
+                        }
+                        try FileManager.default.trashItem(at: target, resultingItemURL: nil)
                     }
-                    try FileManager.default.trashItem(at: source, resultingItemURL: nil)
                 }
                 userLanguages.removeValue(forKey: definition.id)
                 userLanguageSources.removeValue(forKey: definition.id)

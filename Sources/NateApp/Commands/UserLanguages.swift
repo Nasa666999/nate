@@ -14,7 +14,8 @@ extension ApplicationController {
         let bundled = SystemIntegration.resourceDirectory().appendingPathComponent("udl")
         let custom = recovery?.directory.deletingLastPathComponent().appendingPathComponent("UDL")
         do {
-            let loaded = try await fileIO.run {
+            let loaded = try await readIO.readCancellable {
+                token in
                 var output: [(UDLDefinition, URL?, DiskBaseline?)] = []
                 var errors: [String] = []
                 for directory in [bundled, custom].compactMap({
@@ -30,14 +31,33 @@ extension ApplicationController {
                     for url in urls.sorted(by: {
                         $0.path < $1.path
                     }) where url.pathExtension == "xml" {
+                        try token.check()
                         do {
-                            let data = try Data(contentsOf: url)
-                            let definitions = try UDLImporter.parse(data)
                             let owned = directory == custom
-                            let baseline = owned ? try FileStorage.baseline(url) : nil
+                            let bytes =
+                                owned
+                                ? try self.fileAccess.readData(
+                                    url,
+                                    maximumBytes: 8_388_608,
+                                    permit: {
+                                        !token.isCancelled
+                                    }
+                                )
+                                : try FileStorage.readData(
+                                    url,
+                                    maximumBytes: 8_388_608,
+                                    permit: {
+                                        !token.isCancelled
+                                    }
+                                )
+                            let definitions = try UDLImporter.parse(bytes.data)
+                            let baseline = owned ? bytes.baseline : nil
                             for definition in definitions {
                                 output.append((definition, owned ? url : nil, baseline))
                             }
+                        }
+                        catch is CancellationError {
+                            throw CancellationError()
                         }
                         catch {
                             errors.append(url.lastPathComponent + "：" + error.localizedDescription)
@@ -107,7 +127,7 @@ extension ApplicationController {
         let expected = userLanguageBaselines[destination.path]
         let baseline = try await fileIO.run {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            return try FileStorage.save(data, to: destination, expected: expected)
+            return try self.fileAccess.save(data, to: destination, expected: expected)
         }
         // 持久化成功后才一次发布完整注册表，旧后台语法任务由资源变化失效。
         for id in replacedIDs {
@@ -139,8 +159,16 @@ extension ApplicationController {
         }
         Task {
             do {
-                let data = try await fileIO.run {
-                    try Data(contentsOf: url)
+                let data = try await readIO.readCancellable {
+                    token in
+                    try self.fileAccess.readData(
+                        url,
+                        maximumBytes: 8_388_608,
+                        permit: {
+                            !token.isCancelled
+                        }
+                    )
+                    .data
                 }
                 try await persistUDL(data, replacing: nil)
                 let messages = try UDLImporter.parse(data).flatMap(\.diagnostics)
@@ -169,8 +197,9 @@ extension ApplicationController {
             do {
                 try await fileIO.run {
                     let expected =
-                        FileManager.default.fileExists(atPath: url.path) ? try FileStorage.baseline(url) : nil
-                    _ = try FileStorage.save(data, to: url, expected: expected)
+                        FileManager.default.fileExists(atPath: url.path)
+                        ? try self.fileAccess.baseline(url) : nil
+                    _ = try self.fileAccess.save(data, to: url, expected: expected, replacing: true)
                 }
             }
             catch {

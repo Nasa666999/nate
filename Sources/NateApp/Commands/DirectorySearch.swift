@@ -77,7 +77,13 @@ extension ApplicationController {
                             continue
                         }
                         do {
-                            let loaded = try FileStorage.load(url, catalog: catalog)
+                            let loaded = try self.fileAccess.load(
+                                url,
+                                catalog: catalog,
+                                permit: {
+                                    !token.isCancelled
+                                }
+                            )
                             let identity = "\(loaded.baseline.device):\(loaded.baseline.inode)"
                             if !identities.insert(identity).inserted {
                                 continue
@@ -184,12 +190,12 @@ extension ApplicationController {
                                     let backup = plan.url.deletingLastPathComponent().appendingPathComponent(
                                         plan.url.lastPathComponent + "." + UUID().uuidString + ".nate-backup"
                                     )
-                                    _ = try FileStorage.save(
+                                    _ = try self.fileAccess.save(
                                         plan.loaded.originalBytes,
                                         to: backup,
                                         expected: nil
                                     )
-                                    _ = try FileStorage.save(
+                                    _ = try self.fileAccess.save(
                                         data,
                                         to: plan.url,
                                         expected: plan.loaded.baseline,

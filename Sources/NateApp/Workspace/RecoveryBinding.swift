@@ -29,8 +29,16 @@ extension ApplicationController {
                 }
             }
             do {
-                let loaded = try await executor.read {
-                    try FileStorage.load(URL(fileURLWithPath: path), encoding: encoding, catalog: catalog)
+                let loaded = try await executor.readCancellable {
+                    token in
+                    try self.fileAccess.load(
+                        URL(fileURLWithPath: path),
+                        encoding: encoding,
+                        catalog: catalog,
+                        permit: {
+                            !token.isCancelled
+                        }
+                    )
                 }
                 // 用户另存为、关闭或新一轮核验后，旧路径证据不得重新接管保存目标。
                 guard !self.closing, !document.closing, document.url == nil,

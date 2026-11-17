@@ -8,6 +8,7 @@ import NateUI
 
 @MainActor
 final class ApplicationController: NSObject, NSApplicationDelegate {
+    nonisolated let fileAccess = CoordinatedFileAccess(coordinator: WorkspaceFileCoordinator())
     var documents: [WorkspaceDocument] = []
     var activeID: UUID?
     var active: WorkspaceDocument? {
