@@ -63,6 +63,7 @@ private final class CoordinationWait: @unchecked Sendable {
             return false
         }
         if cancel {
+            // 系统等待尚未授权文件动作，撤销它可阻止失效请求取得新的协调回调。
             coordinator.cancel()
         }
     }
@@ -81,6 +82,7 @@ private final class CoordinationWait: @unchecked Sendable {
             if value.phase == .waiting, value.stop == nil, ContinuousClock.now >= deadline {
                 value.stop = .expired
             }
+            // 授权回调可能与取消或截止同时到达，停止原因已发布时不能进入访问阶段。
             guard value.stop == nil else {
                 return false
             }

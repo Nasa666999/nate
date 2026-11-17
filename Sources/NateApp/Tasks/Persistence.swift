@@ -94,7 +94,8 @@ extension ApplicationController {
                         expected: baseline,
                         permit: {
                             !permit.isCancelled
-                        }
+                        },
+                        authority: permit
                     )
                 }
                 // 旧生命周期和旧路径代次不得清除新文档的修改或错误。

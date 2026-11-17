@@ -166,7 +166,8 @@ extension ApplicationController {
                     replacing: true,
                     permit: {
                         !permit.isCancelled
-                    }
+                    },
+                    authority: permit
                 )
             }
             if !copy {

@@ -109,7 +109,8 @@ extension ApplicationController {
                     expected: expected,
                     permit: {
                         !permit.isCancelled
-                    }
+                    },
+                    authority: permit
                 )
             }
             document.baseline = result

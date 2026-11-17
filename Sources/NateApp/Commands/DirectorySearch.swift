@@ -190,19 +190,31 @@ extension ApplicationController {
                                     let backup = plan.url.deletingLastPathComponent().appendingPathComponent(
                                         plan.url.lastPathComponent + "." + UUID().uuidString + ".nate-backup"
                                     )
-                                    _ = try self.fileAccess.save(
-                                        plan.loaded.originalBytes,
-                                        to: backup,
-                                        expected: nil
-                                    )
-                                    _ = try self.fileAccess.save(
-                                        data,
-                                        to: plan.url,
-                                        expected: plan.loaded.baseline,
-                                        permit: {
-                                            !token.isCancelled
-                                        }
-                                    )
+                                    // 原字节副本先完成持久化，当前目标才可取得自己的单次发布权。
+                                    try token.withChild {
+                                        request in
+                                        _ = try self.fileAccess.save(
+                                            plan.loaded.originalBytes,
+                                            to: backup,
+                                            expected: nil,
+                                            permit: {
+                                                !request.isCancelled
+                                            },
+                                            authority: request
+                                        )
+                                    }
+                                    try token.withChild {
+                                        request in
+                                        _ = try self.fileAccess.save(
+                                            data,
+                                            to: plan.url,
+                                            expected: plan.loaded.baseline,
+                                            permit: {
+                                                !request.isCancelled
+                                            },
+                                            authority: request
+                                        )
+                                    }
                                 }
                             }
                             output.append("成功 · \(plan.url.path) · \(plan.result.hits.count) 处")

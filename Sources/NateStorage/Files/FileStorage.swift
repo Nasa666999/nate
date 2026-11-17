@@ -99,6 +99,8 @@ public enum FileStorage {
     /// - url: 用户确认的目标。
     /// - expected: 已有文件必须匹配的基线；新建目标必须不存在。
     /// - permit: 发布前仍必须有效的请求权限。
+    /// - authority: 单次发布权，防止取消与原子替换之间出现不确定的授权顺序。
+    /// - observe: 实际执行阶段的只读观察入口。
     /// 返回：写入、同步与替换完成后的真实基线。
     public static func save(
         _ data: Data,
@@ -106,15 +108,22 @@ public enum FileStorage {
         expected: DiskBaseline?,
         permit: @Sendable () -> Bool = {
             true
+        },
+        authority: (any FilePublicationAuthority)? = nil,
+        observe: FileSaveObservation = {
+            _ in
         }
     ) throws -> DiskBaseline {
         guard permit() else {
             throw CancellationError()
         }
+        observe(.checkingBaseline)
         let target =
             expected.map {
                 URL(fileURLWithPath: $0.resolvedPath)
             } ?? url.standardizedFileURL
+        let publishedPath = target.resolvingSymlinksInPath().standardizedFileURL.path
+        let expectedDigest = digest(data)
         // 符号链接仅写确认过的目标；删除或换目标都必须先重新授权。
         if let expected {
             guard try baseline(url, permit: permit) == expected else {
@@ -141,6 +150,7 @@ public enum FileStorage {
         guard fd >= 0 else {
             throw posix("无法创建同目录临时文件")
         }
+        observe(.writingTemporary)
         var published = false
         defer {
             Darwin.close(fd)
@@ -169,6 +179,7 @@ public enum FileStorage {
             }
         }
         if expected != nil {
+            observe(.preservingMetadata)
             var metadata = stat()
             guard stat(target.path, &metadata) == 0 else {
                 throw posix("无法读取原文件权限")
@@ -184,8 +195,10 @@ public enum FileStorage {
         guard permit() else {
             throw CancellationError()
         }
+        observe(.synchronizingFile)
         try synchronize(fd)
         // 最后一次复验尽量缩小外部非协作写入的竞争窗口。
+        observe(.revalidatingBaseline)
         if let expected {
             guard try baseline(url, permit: permit) == expected else {
                 throw NateError.message("发布前检测到外部变化，保留本地正文并停止覆盖。")
@@ -201,10 +214,18 @@ public enum FileStorage {
         guard permit() else {
             throw CancellationError()
         }
-        guard renamex_np(temporary.path, target.path, flags) == 0 else {
-            throw posix("无法发布文件替换")
+        // 发布权只使用一次；取得权威后即使收到取消，也必须继续确认实际替换和同步结果。
+        if let authority {
+            try authority.publish {
+                try publishReplacement(temporary, to: target, flags: flags, observe: observe)
+            }
+        }
+        else {
+            try publishReplacement(temporary, to: target, flags: flags, observe: observe)
         }
         published = true
+        observe(.published)
+        observe(.synchronizingDirectory)
         let directory = Darwin.open(target.deletingLastPathComponent().path, O_RDONLY | O_CLOEXEC)
         guard directory >= 0 else {
             throw NateError.message("内容已替换，但无法确认目录同步。")
@@ -215,7 +236,39 @@ public enum FileStorage {
         guard fsync(directory) == 0 else {
             throw NateError.message("内容已替换，但目录同步失败，请检查磁盘实际状态。")
         }
-        return try baseline(url)
+        observe(.confirmingSavedFile)
+        let result = try baseline(url)
+        var publishedMetadata = stat()
+        // 写后证据必须属于本次替换的描述符与固定字节，否则不能把外部正文冒认为本次保存点。
+        guard fstat(fd, &publishedMetadata) == 0,
+            result.device == UInt64(UInt32(bitPattern: publishedMetadata.st_dev)),
+            result.inode == publishedMetadata.st_ino,
+            result.resolvedPath == publishedPath,
+            result.digest == expectedDigest
+        else {
+            throw NateError.message("内容已发布，但确认时检测到外部变化；本地正文保留，原文件保存尚未确认。")
+        }
+        return result
+    }
+
+    /// 业务作用：取得发布权后只执行一次原子替换，阶段观察不会把待执行动作保存到同步范围外。
+    /// 参数说明:
+    /// - temporary: 已完成编码与强同步的同目录临时文件。
+    /// - target: 已复验的原目标。
+    /// - flags: 新建目标的排他发布规则。
+    /// - observe: 实际阶段观察入口。
+    /// 返回：原子替换成功；失败保留实际错误，由调用方处理临时文件和未确认状态。
+    static func publishReplacement(
+        _ temporary: URL,
+        to target: URL,
+        flags: UInt32,
+        observe: FileSaveObservation
+    ) throws {
+        // 完整且已同步的内容在此一次切换为目标，后续只确认持久化而不再更改正文。
+        observe(.publishing)
+        guard renamex_np(temporary.path, target.path, flags) == 0 else {
+            throw posix("无法发布文件替换")
+        }
     }
 
     /// 业务作用：在发布前请求文件系统与驱动器完成同步，不能静默降低保证。

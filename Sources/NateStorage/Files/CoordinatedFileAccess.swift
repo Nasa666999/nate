@@ -147,6 +147,8 @@ public struct CoordinatedFileAccess: Sendable {
     /// - expected: 必须仍匹配的磁盘证据。
     /// - replacing: 是否以另一个文档替换目标，而非更新同一文档内容。
     /// - permit: 发布前必须有效的动作权限。
+    /// - authority: 单次发布权。
+    /// - observe: 协调与持久化阶段的实际观察入口。
     /// 返回：文件和目录同步后确认的真实保存点。
     public func save(
         _ data: Data,
@@ -155,12 +157,24 @@ public struct CoordinatedFileAccess: Sendable {
         replacing: Bool = false,
         permit: @escaping @Sendable () -> Bool = {
             true
+        },
+        authority: (any FilePublicationAuthority)? = nil,
+        observe: FileSaveObservation = {
+            _ in
         }
     ) throws -> DiskBaseline {
-        try coordinator.write(at: url, intent: replacing ? .replacing : .updating, permit: permit) {
+        observe(.waitingForAccess)
+        return try coordinator.write(at: url, intent: replacing ? .replacing : .updating, permit: permit) {
             coordinated in
             try validate(coordinated, requested: url, permit: permit)
-            return try FileStorage.save(data, to: url, expected: expected, permit: permit)
+            return try FileStorage.save(
+                data,
+                to: url,
+                expected: expected,
+                permit: permit,
+                authority: authority,
+                observe: observe
+            )
         }
     }
 
@@ -217,6 +231,7 @@ public struct CoordinatedFileAccess: Sendable {
     /// - permit: 当前请求权限。
     /// 返回：目标身份路径仍一致时继续，取消或改向均在副作用前拒绝。
     func validate(_ coordinated: URL, requested: URL, permit: @Sendable () -> Bool) throws {
+        // 等待期间可能已经失去请求权限，系统回调本身不能授权迟到的文件动作。
         guard permit() else {
             throw CancellationError()
         }
