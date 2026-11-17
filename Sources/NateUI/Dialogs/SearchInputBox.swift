@@ -6,11 +6,13 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     private let edit = NSButton(title: "编辑全文", target: nil, action: nil)
     private let history = NSPopUpButton(frame: .zero, pullsDown: true)
     private var values: [String] = []
+    private var historyIDs: [UUID] = []
     private var raw = ""
     private var inputGeneration = UUID()
     private var editor: SearchExpressionEditor?
     public weak var delegate: (any NSTextFieldDelegate)?
     public var onFeedback: ((String) -> Void)?
+    public var onHistoryChange: (([String]) -> Void)?
     public var placeholderString: String? {
         get {
             field.placeholderString
@@ -87,6 +89,7 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     /// 返回：空历史列表，当前表达式不变。
     public func removeAllItems() {
         values.removeAll()
+        historyIDs.removeAll()
         history.removeAllItems()
         history.addItem(withTitle: "历史")
     }
@@ -97,8 +100,19 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     /// 返回：每项只展示短标签，选择后仍使用完整历史值。
     public func addItems(withObjectValues items: [String]) {
         for value in items {
-            let index = values.count
             values.append(value)
+            historyIDs.append(UUID())
+        }
+        rebuildHistory()
+    }
+
+    /// 业务作用：按稳定条目身份重建可删除的历史菜单，长表达式只参与存储，不参与原生菜单布局。
+    /// 参数说明: 无。
+    /// 返回：使用、逐项删除与清空入口完整，旧菜单引用不能作用于重排后的另一条历史。
+    private func rebuildHistory() {
+        history.removeAllItems()
+        history.addItem(withTitle: "历史")
+        for (index, value) in values.enumerated() {
             var prefix = ""
             for scalar in value.unicodeScalars {
                 guard prefix.utf8.count + scalar.utf8.count <= 180 else {
@@ -118,6 +132,24 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
             item?.target = self
             item?.action = #selector(selectHistory(_:))
             item?.tag = index
+            item?.representedObject = historyIDs[index]
+            let menu = NSMenu()
+            for (title, action) in [
+                ("使用完整内容", #selector(selectHistory(_:))),
+                ("删除此项", #selector(deleteHistory(_:))),
+            ] {
+                let actionItem = NSMenuItem(title: title, action: action, keyEquivalent: "")
+                actionItem.target = self
+                actionItem.representedObject = historyIDs[index]
+                menu.addItem(actionItem)
+            }
+            item?.submenu = menu
+        }
+        if !values.isEmpty {
+            history.menu?.addItem(.separator())
+            let clear = NSMenuItem(title: "清空此输入历史", action: #selector(clearHistory), keyEquivalent: "")
+            clear.target = self
+            history.menu?.addItem(clear)
         }
     }
 
@@ -189,13 +221,35 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
 
     /// 业务作用：选择历史时恢复完整表达式，短菜单标签不能成为查询原文。
     /// 参数说明:
-    /// - sender: 携带完整历史索引的菜单项。
+    /// - sender: 携带稳定历史身份的菜单项。
     /// 返回：当前完整输入切换到选定历史。
     @objc private func selectHistory(_ sender: NSMenuItem) {
-        guard values.indices.contains(sender.tag) else {
+        guard let id = sender.representedObject as? UUID, let index = historyIDs.firstIndex(of: id) else {
             return
         }
-        stringValue = values[sender.tag]
+        stringValue = values[index]
+    }
+
+    /// 业务作用：仅删除用户指向的稳定历史项，不把重排后的同序号条目当作原目标。
+    /// 参数说明:
+    /// - sender: 携带条目身份的删除菜单项。
+    /// 返回：对应历史移除并通知窗口；当前输入、正文和其它历史不变，失效条目不执行。
+    @objc private func deleteHistory(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID, let index = historyIDs.firstIndex(of: id) else {
+            return
+        }
+        values.remove(at: index)
+        historyIDs.remove(at: index)
+        rebuildHistory()
+        onHistoryChange?(values)
+    }
+
+    /// 业务作用：显式清空此输入的历史，仍保留当前完整表达式供用户继续编辑或执行。
+    /// 参数说明: 无。
+    /// 返回：菜单历史清空并通知窗口，不删除当前输入或任何文件。
+    @objc private func clearHistory() {
+        removeAllItems()
+        onHistoryChange?(values)
     }
 
     /// 业务作用：用有固定视口的多行编辑器处理完整输入，取消保留原值，确认后才发布新表达式。

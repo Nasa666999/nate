@@ -8,8 +8,8 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
     public let feedback = NSTextField(wrappingLabelWithString: "输入查找内容。普通模式按字面查找，扩展模式解释反斜杠转义。")
     let query = SearchInputBox(frame: .zero)
     let replacement = SearchInputBox(frame: .zero)
-    let directory = NSTextField()
-    let filters = NSTextField(string: "*.*")
+    let directory = SearchInputBox(frame: .zero)
+    let filters = SearchInputBox(frame: .zero)
     let mode = NSPopUpButton()
     let caseSensitive = NSButton(checkboxWithTitle: "区分大小写", target: nil, action: nil)
     let wholeWord = NSButton(checkboxWithTitle: "全词匹配", target: nil, action: nil)
@@ -25,6 +25,8 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
     let confirmOpen = NSButton(checkboxWithTitle: "替换所有打开文档前确认", target: nil, action: nil)
     var queryHistory: [String] = []
     var replaceHistory: [String] = []
+    var directoryHistory: [String] = []
+    var filterHistory: [String] = []
     public private(set) var page: FindReplacePage = .find
     let tabs = NSSegmentedControl(
         labels: FindReplacePage.allCases.map(\.rawValue),
@@ -114,13 +116,31 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         root.addArrangedSubview(tabs)
         query.placeholderString = "查找内容（可粘贴换行、Tab 和 NUL）"
         replacement.placeholderString = "替换为（留空表示删除）"
-        query.delegate = self
-        replacement.delegate = self
-        for input in [query, replacement] {
+        directory.placeholderString = "明确的搜索根目录"
+        filters.placeholderString = "包含、排除及目录模式"
+        filters.stringValue = "*.*"
+        for input in [query, replacement, directory, filters] {
+            input.delegate = self
             input.onFeedback = {
                 [weak self] message in
                 self?.feedback.stringValue = message
             }
+        }
+        query.onHistoryChange = {
+            [weak self] values in
+            self?.queryHistory = values
+        }
+        replacement.onHistoryChange = {
+            [weak self] values in
+            self?.replaceHistory = values
+        }
+        directory.onHistoryChange = {
+            [weak self] values in
+            self?.directoryHistory = values
+        }
+        filters.onHistoryChange = {
+            [weak self] values in
+            self?.filterHistory = values
         }
         let grid = NSGridView(views: [
             [NSTextField(labelWithString: "查找内容"), query],
@@ -308,25 +328,42 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         guard let id = sender.identifier?.rawValue else {
             return
         }
-        queryHistory = Array(
-            ([query.stringValue]
-                + queryHistory.filter {
-                    !$0.utf8.elementsEqual(query.stringValue.utf8)
-                }).prefix(30)
-        )
-        replaceHistory = Array(
-            ([replacement.stringValue]
-                + replaceHistory.filter {
-                    !$0.utf8.elementsEqual(replacement.stringValue.utf8)
-                }).prefix(30)
-        )
-        query.removeAllItems()
-        query.addItems(withObjectValues: queryHistory)
-        replacement.removeAllItems()
-        replacement.addItems(withObjectValues: replaceHistory)
-        feedback.stringValue =
-            "正在执行… · 查找 \(query.stringValue.utf8.count) 字节，替换 \(replacement.stringValue.utf8.count) 字节"
+        submit(id)
+    }
+
+    /// 业务作用：按钮和键盘使用同一请求入口，完整历史更新不改变实际执行文本，取消不增加历史。
+    /// 参数说明:
+    /// - id: 已确定方向和范围的动作标识。
+    /// 返回：四类完整输入按最近使用顺序保留最多 30 项，再调用应用的后台协调入口。
+    func submit(_ id: String) {
+        if id != "cancel" {
+            remember(query, history: &queryHistory)
+            remember(replacement, history: &replaceHistory)
+            if id == "files" || id == "replaceFiles" {
+                remember(directory, history: &directoryHistory)
+                remember(filters, history: &filterHistory)
+            }
+            feedback.stringValue =
+                "正在执行… · 查找 \(query.stringValue.utf8.count) 字节，替换 \(replacement.stringValue.utf8.count) 字节"
+        }
         onAction?(id, options, directory.stringValue, filters.stringValue)
+    }
+
+    /// 业务作用：以完整原文去重并重建单一输入的历史，显示短标签不参与历史身份比较。
+    /// 参数说明:
+    /// - input: 持有完整输入的控件。
+    /// - history: 对应字段的最近使用历史。
+    /// 返回：最近输入置顶，规范等价但字节不同的输入各自保留，超过 30 项移除最旧记录。
+    func remember(_ input: SearchInputBox, history: inout [String]) {
+        let value = input.stringValue
+        history = Array(
+            ([value]
+                + history.filter {
+                    !$0.utf8.elementsEqual(value.utf8)
+                }).prefix(30)
+        )
+        input.removeAllItems()
+        input.addItems(withObjectValues: history)
     }
 
     /// 业务作用：Enter 只执行方向查找，Esc 返回正文，候选确认由文本控件优先处理。
@@ -352,7 +389,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
                 previous.toggle()
             }
-            onAction?(previous ? "previous" : "next", options, directory.stringValue, filters.stringValue)
+            submit(previous ? "previous" : "next")
             return true
         }
         return false
