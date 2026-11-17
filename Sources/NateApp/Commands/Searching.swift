@@ -125,7 +125,9 @@ extension ApplicationController {
                         let result = try SearchEngine.find(
                             in: snapshot,
                             options: scope.options,
-                            scope: scope.range
+                            scope: scope.range,
+                            enumeration: ["next", "previous", "replaceOne"].contains(action)
+                                ? .navigation : .batch
                         )
                         let edits =
                             action.hasPrefix("replace")

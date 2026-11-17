@@ -34,6 +34,7 @@ public struct SearchHit: Sendable {
     public let range: ByteRange?
     public let captures: [Int: NSRange]
     public let names: [String: Int]
+    public let context: SearchMatchContext?
 
     /// 业务作用：保留正则字符单位与无损修改范围的差异。
     /// 参数说明:
@@ -41,17 +42,20 @@ public struct SearchHit: Sendable {
     /// - range: 可无损转换的内核范围。
     /// - captures: 已参与的捕获，未参与组不登记。
     /// - names: 命名捕获索引。
+    /// - context: 本轮搜索实际允许读取的替换前后文，为空时采用原始完整正文。
     /// 返回：只读命中证据。
     public init(
         utf16Range: NSRange,
         range: ByteRange?,
         captures: [Int: NSRange] = [:],
-        names: [String: Int] = [:]
+        names: [String: Int] = [:],
+        context: SearchMatchContext? = nil
     ) {
         self.utf16Range = utf16Range
         self.range = range
         self.captures = captures
         self.names = names
+        self.context = context
     }
 }
 

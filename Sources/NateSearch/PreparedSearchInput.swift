@@ -14,10 +14,10 @@ public struct PreparedSearchInput: Sendable {
         input = Array(snapshot.text.text().utf16)
     }
 
-    /// 业务作用：在共享投影上执行独立规则，保持范围、捕获与搜索预算一致。
+    /// 业务作用：在共享投影上执行独立结构规则，消费范围受限，断言保留完整正文上下文。
     /// 参数说明:
     /// - options: 表达式与搜索模式。
-    /// - scope: 本次规则允许消费的范围。
+    /// - scope: 本次规则允许消费的范围，不将结构范围截成新的全文。
     /// - firstOnly: 是否只获取首个命中，适用于逐层名称提取。
     /// - allowEmpty: 是否保留零长度结果；函数列表关闭此开关。
     /// 返回：固定修订中的结果；取消或规则超限时失败。
@@ -33,7 +33,8 @@ public struct PreparedSearchInput: Sendable {
             options: options,
             scope: scope,
             firstOnly: firstOnly,
-            allowEmpty: allowEmpty
+            allowEmpty: allowEmpty,
+            limitContextToScope: false
         )
     }
 }

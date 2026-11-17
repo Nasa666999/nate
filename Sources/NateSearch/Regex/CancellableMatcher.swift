@@ -25,6 +25,11 @@ struct CancellableMatcher {
     var restart = RegexRestart.next
     var lastRegionPruned = false
     var lastRegionThen = false
+    // 左侧真实正文可用于回看，前向证据仍不得越过本请求的上下文末端。
+    var contextEnd: Int?
+    var inputEnd: Int {
+        min(contextEnd ?? input.count, input.count)
+    }
 
     /// 业务作用：在每个执行步骤限制计算、内存和取消延迟。
     /// 参数说明: 无。
@@ -51,7 +56,7 @@ struct CancellableMatcher {
         var next = state
         switch node {
         case .literal(let value):
-            guard state.position < input.count,
+            guard state.position < inputEnd,
                 equal(input[state.position], value, sensitive: state.sensitive)
             else {
                 return nil
@@ -59,7 +64,7 @@ struct CancellableMatcher {
             next.position += 1
             return next
         case .any:
-            guard state.position < input.count,
+            guard state.position < inputEnd,
                 state.dot || ![10, 13, 0x85, 0x2028, 0x2029].contains(input[state.position])
             else {
                 return nil
@@ -67,17 +72,17 @@ struct CancellableMatcher {
             next.position += 1
             return next
         case .linebreak:
-            guard state.position < input.count,
+            guard state.position < inputEnd,
                 [10, 11, 12, 13, 0x85, 0x2028, 0x2029].contains(input[state.position])
             else {
                 return nil
             }
             next.position +=
-                input[state.position] == 13 && state.position + 1 < input.count
+                input[state.position] == 13 && state.position + 1 < inputEnd
                     && input[state.position + 1] == 10 ? 2 : 1
             return next
         case .characterClass(let kinds, let inverted, let ranges):
-            guard state.position < input.count else {
+            guard state.position < inputEnd else {
                 return nil
             }
             let unit = input[state.position]
@@ -165,7 +170,7 @@ struct CancellableMatcher {
         case .anchor(let anchor):
             let p = state.position
             let before = p > 0 ? input[p - 1] : nil
-            let after = p < input.count ? input[p] : nil
+            let after = p < inputEnd ? input[p] : nil
             let boundary = (before.map(word) ?? false) != (after.map(word) ?? false)
             let accepted: Bool
             switch anchor {
@@ -173,9 +178,9 @@ struct CancellableMatcher {
                 accepted = p == 0 || state.multiline && (before == 10 || (before == 13 && after != 10))
             case "$":
                 accepted =
-                    p == input.count || state.multiline && (after == 13 || (after == 10 && before != 13))
+                    p == inputEnd || state.multiline && (after == 13 || (after == 10 && before != 13))
             case "A": accepted = p == 0
-            case "z": accepted = p == input.count
+            case "z": accepted = p == inputEnd
             case "Z": accepted = p >= softEnd
             case "G": accepted = p == scanStart
             case "b": accepted = boundary
@@ -186,7 +191,7 @@ struct CancellableMatcher {
             }
             return accepted ? state : nil
         case .reference(let id):
-            guard let range = state.captures[id], range.length <= input.count - state.position else {
+            guard let range = state.captures[id], range.length <= inputEnd - state.position else {
                 return nil
             }
             for i in 0..<range.length {

@@ -5,7 +5,7 @@ enum Substitution {
     /// 业务作用：解释 Boost 风格捕获、上下文与大小写替换，空替换合法。
     /// 参数说明:
     /// - format: 用户替换表达式。
-    /// - hit: 已参与捕获与命名映射。
+    /// - hit: 已参与捕获、命名映射和本轮前后文范围。
     /// - input: 原快照 UTF-16 上下文。
     /// - depth: 内部分组展开深度。
     /// 返回：完整替换文字；格式错误在提交前失败。
@@ -26,7 +26,10 @@ enum Substitution {
             guard let r = hit.captures[id], r.location >= 0, r.location + r.length <= input.count else {
                 return ""
             }
-            return String(decoding: input[r.location..<(r.location + r.length)], as: UTF16.self)
+            return String(
+                decoding: input[r.location..<(r.location + r.length)],
+                as: UTF16.self
+            )
         }
         /// 业务作用：按当前替换大小写状态追加文字。
         /// 参数说明:
@@ -92,12 +95,30 @@ enum Substitution {
                     append(captured(0))
                 }
                 else if token == "`" {
-                    append(String(decoding: input[..<hit.utf16Range.location], as: UTF16.self))
-                }
-                else if token == "'" {
+                    let range =
+                        hit.context?.prefix
+                        ?? NSRange(
+                            location: 0,
+                            length: hit.utf16Range.location
+                        )
                     append(
                         String(
-                            decoding: input[(hit.utf16Range.location + hit.utf16Range.length)...],
+                            decoding: input[range.location..<(range.location + range.length)],
+                            as: UTF16.self
+                        )
+                    )
+                }
+                else if token == "'" {
+                    let end = hit.utf16Range.location + hit.utf16Range.length
+                    let range =
+                        hit.context?.suffix
+                        ?? NSRange(
+                            location: end,
+                            length: input.count - end
+                        )
+                    append(
+                        String(
+                            decoding: input[range.location..<(range.location + range.length)],
                             as: UTF16.self
                         )
                     )
