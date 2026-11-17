@@ -33,6 +33,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let fileIO = IOExecutor(name: "nate.files", concurrency: 2)
     let readIO = IOExecutor(name: "nate.reads", concurrency: 2)
     let recoveryIO = IOExecutor(name: "nate.recovery", concurrency: 1)
+    let commandIO = IOExecutor(name: "nate.commands", concurrency: 1)
+    var externalCommandTask: Task<Void, Never>?
+    var lastExternalOutput: String?
     var recovery: RecoveryStore?
     var recoveryReady = false
     var instanceLease: InstanceLease?

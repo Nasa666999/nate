@@ -147,6 +147,8 @@ extension ApplicationController: NSMenuItemValidation {
         attach(language, to: bar)
         let tools = NSMenu(title: "工具")
         add(tools, "取消文件读取", "cancelReads")
+        add(tools, "取消外部命令", "cancelExternalCommand")
+        add(tools, "上次外部命令结果", "lastExternalOutput")
         for (title, id) in [
             ("JSON 格式化", "tool:json"), ("XML 格式化", "tool:xml"), ("Base64 编码", "tool:base64Encode"),
             ("Base64 解码", "tool:base64Decode"), ("URL 编码", "tool:urlEncode"), ("URL 解码", "tool:urlDecode"),
@@ -248,6 +250,12 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "playMacro" {
             return !macroRecording && !macroActions.isEmpty
+        }
+        if id == "cancelExternalCommand" {
+            return externalCommandTask != nil
+        }
+        if id == "lastExternalOutput" {
+            return lastExternalOutput != nil
         }
         if id == "undo" {
             return (NSApp.keyWindow?.firstResponder as? NSTextView)?.undoManager?.canUndo

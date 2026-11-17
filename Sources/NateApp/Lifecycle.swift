@@ -43,6 +43,7 @@ extension ApplicationController {
         readIO.cancelReads()
         cancelCompletion()
         cancelStructure()
+        externalCommandTask?.cancel()
         mainWindow?.editor.finishComposition()
         let protectedDocuments = documents
         for document in protectedDocuments {
@@ -52,6 +53,9 @@ extension ApplicationController {
         Task {
             // 尚未发布的打开请求不拥有写入副作用，退出时保留请求文件而不等待系统读取。
             instanceRequestTask?.cancel()
+            if let task = externalCommandTask {
+                await task.value
+            }
             if let task = searchTask {
                 await task.value
             }

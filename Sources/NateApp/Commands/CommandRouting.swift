@@ -151,6 +151,11 @@ extension ApplicationController {
         case "typingAssistance": requestCompletion(automatic: true)
         case "completePath": requestPathCompletion()
         case "cancelReads": readIO.cancelReads()
+        case "cancelExternalCommand": externalCommandTask?.cancel()
+        case "lastExternalOutput":
+            if let output = lastExternalOutput {
+                mainWindow?.showResults(output)
+            }
         case "assistancePreferences": showAssistancePreferences()
         case "wrap":
             mainWindow?.editor.wrapLines.toggle()

@@ -52,6 +52,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     let results = ResultTextView()
     public var onOpenURLs: (([URL]) -> Void)?
     public var onResult: ((Int) -> Void)?
+    public private(set) var resultGeneration = UUID()
     let tabs = TabStrip()
     let scroll = NSScrollView()
     let split = NSSplitView()
@@ -166,6 +167,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         resultsScroll.documentView = results
         resultsScroll.isHidden = true
         split.addArrangedSubview(resultsScroll)
+        split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
         root.addSubview(split)
         status.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         status.toolTip = "单击处理保存状态、重试或外部冲突。"
@@ -266,10 +268,15 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// - navigable: 是否存在与每行对应的有效定位证据。
     /// 返回：底部结果面板可见。
     public func showResults(_ text: String, navigable: Bool = false) {
+        resultGeneration = UUID()
         results.navigationEnabled = navigable
         results.string = text
         resultsScroll.isHidden = false
+        window?.contentView?.layoutSubtreeIfNeeded()
+        split.adjustSubviews()
         split.setPosition(max(200, split.bounds.height - 190), ofDividerAt: 0)
+        window?.contentView?.layoutSubtreeIfNeeded()
+        refreshEditors()
     }
 
     /// 业务作用：侧栏与克隆编辑区分别占用独立分隔区域，关闭侧栏不改变共享正文关系。
