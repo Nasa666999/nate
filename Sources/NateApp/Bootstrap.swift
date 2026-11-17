@@ -23,6 +23,13 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var functionListCatalog: FunctionListCatalog?
     var structureTask: Task<Void, Never>?
     var directoryWorkspace: DirectoryWorkspaceController?
+    let projectPanelStates = [
+        ProjectPanelState(),
+        ProjectPanelState(),
+        ProjectPanelState(),
+    ]
+    var projectOpenTask: Task<Void, Never>?
+    var projectOpenGeneration = UUID()
     var structureGeneration = UUID()
     var structureRequestKey: String?
     var completionTask: Task<Void, Never>?
@@ -322,6 +329,21 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// - window: 待连接主窗口。
     /// 返回：窗口只发出意图，不执行磁盘访问。
     func connect(_ window: EditorWindow) {
+        window.projectPanels.onAction = {
+            [weak self] index, action, node in
+            self?.routeProjectAction(action, panel: index, node: node)
+        }
+        window.projectPanels.onOpen = {
+            [weak self] index, node in self?.openProjectNode(node, panel: index)
+        }
+        window.projectPanels.onSelectionChange = {
+            [weak self] _ in self?.cancelProjectOpen()
+        }
+        window.projectPanels.onHide = {
+            [weak self, weak window] in
+            self?.cancelProjectOpen()
+            window?.setProjectsVisible(false)
+        }
         window.onIncrementalQuery = {
             [weak self] query, options in self?.searchIncrementally(query, options: options)
         }

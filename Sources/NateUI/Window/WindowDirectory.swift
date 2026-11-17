@@ -7,6 +7,8 @@ extension EditorWindow {
     /// 返回：侧栏显示或隐藏，正文只更新可用宽度，不移动焦点和选区。
     public func setDirectoryVisible(_ visible: Bool) {
         directoryPanel.isHidden = !visible
+        navigationSplit.isHidden = directoryPanel.isHidden && projectPanels.isHidden
+        navigationSplit.adjustSubviews()
         window?.contentView?.layoutSubtreeIfNeeded()
         workspaceSplit.adjustSubviews()
         if visible {

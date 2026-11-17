@@ -125,6 +125,7 @@ extension ApplicationController: NSMenuItemValidation {
             ("左右分屏 / 克隆", "splitVertical"), ("上下分屏 / 克隆", "splitHorizontal"), ("关闭分屏", "unsplit"),
             ("从右到左", "rtl"), ("固定标签", "pin"), ("编辑器只读", "readOnly"), ("监视文件", "monitor"),
             ("打开目录工作区…", "folder"), ("刷新目录工作区", "refreshFolder"), ("关闭目录工作区", "closeFolder"),
+            ("项目面板 1", "projectPanel:0"), ("项目面板 2", "projectPanel:1"), ("项目面板 3", "projectPanel:2"),
             ("函数列表", "symbolsList"), ("文档统计", "statistics"), ("全屏", "fullscreen"),
         ] {
             add(view, title, id)

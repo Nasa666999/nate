@@ -53,6 +53,8 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onIncrementalSuspend: (() -> Bool)?
     public let incrementalSearch = IncrementalSearchBar(frame: .zero)
     public let directoryPanel = DirectoryTreePanel(frame: .zero)
+    public let projectPanels = ProjectPanelsView(frame: .zero)
+    let navigationSplit = NSSplitView()
     var incrementalHeight: NSLayoutConstraint?
     public internal(set) var editor: EditorView
     public let status = SaveStatusField(labelWithString: "")
@@ -166,7 +168,13 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         editorSplit.addArrangedSubview(scroll)
         workspaceSplit.isVertical = true
         workspaceSplit.dividerStyle = .thin
-        workspaceSplit.addArrangedSubview(directoryPanel)
+        navigationSplit.isVertical = false
+        navigationSplit.dividerStyle = .thin
+        navigationSplit.addArrangedSubview(directoryPanel)
+        navigationSplit.addArrangedSubview(projectPanels)
+        navigationSplit.isHidden = true
+        projectPanels.isHidden = true
+        workspaceSplit.addArrangedSubview(navigationSplit)
         workspaceSplit.addArrangedSubview(editorSplit)
         workspaceSplit.addArrangedSubview(structurePanel)
         // 尺寸保持优先级低于系统拖动约束，侧栏才能保留初始宽度并允许用户调整。

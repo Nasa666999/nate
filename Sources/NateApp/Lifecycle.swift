@@ -39,9 +39,14 @@ extension ApplicationController {
         if closing {
             return .terminateCancel
         }
+        // 项目定义和正文分别保护，尚未确认的虚拟结构不能在正文保存后被静默丢弃。
+        guard permitsProjectTermination() else {
+            return .terminateCancel
+        }
         closing = true
         // 退出即将固定恢复元数据，先撤销只读查询的光标发布权。
         cancelIncrementalSearch(resetOrigin: true)
+        cancelProjectOpen()
         directoryWorkspace?.pause()
         if let findWindow {
             scheduleSearchSettings(findWindow.state)

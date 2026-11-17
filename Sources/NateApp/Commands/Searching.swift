@@ -10,6 +10,7 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：请求身份先失效，再取消计算并收回句柄；正文、查询原文和历史不变。
     func suspendSearchForInput() {
+        cancelProjectOpen()
         // 先撤销发布资格再通知底层取消，已完成但仍等待主执行域的旧结果也必须失效。
         cancelIncrementalSearch(resetOrigin: true)
         queryGeneration = UUID()

@@ -28,6 +28,10 @@ extension ApplicationController {
             refreshUI()
             return
         }
+        if id.hasPrefix("projectPanel:"), let index = Int(id.dropFirst("projectPanel:".count)) {
+            showProjectPanel(index)
+            return
+        }
         if id.hasPrefix("encoding:"), let index = Int(id.dropFirst(9)) {
             Task {
                 await convertEncoding(index)
