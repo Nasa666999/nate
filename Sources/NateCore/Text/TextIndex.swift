@@ -121,23 +121,50 @@ extension PieceTree {
         return ByteRange(start, max(start, end))
     }
 
-    /// 业务作用：用树行索引定位光标行，末端仍属于合法行。
+    /// 业务作用：沿字节索引累计前缀换行数，只扫描一个叶片，避免逐次行首查找放大定位成本。
     /// 参数说明:
     /// - offset: 当前快照字节位置。
-    /// 返回：从零开始的逻辑行号。
+    /// 返回：从零开始的逻辑行号；越界位置夹到文档边界，CRLF 两字节之间仍属于前一行。
     public func lineNumber(at offset: Int) -> Int {
-        var low = 0
-        var high = lineCount
-        while low + 1 < high {
-            let mid = (low + high) / 2
-            if lineStart(mid) <= offset {
-                low = mid
+        let target = min(max(0, offset), byteCount)
+        guard target > 0, root.breaks > 0 else {
+            return 0
+        }
+        guard target < byteCount else {
+            return root.breaks
+        }
+        var node = root
+        var index = target
+        var breaks = 0
+        var previous: UInt8 = 0
+        while let left = node.left, let right = node.right {
+            if index < left.count {
+                node = left
             }
             else {
-                high = mid
+                // 完整子树已缓存换行数，跨树的 CRLF 仍只占一个逻辑换行。
+                breaks += left.breaks - (previous == 13 && left.first == 10 ? 1 : 0)
+                if let last = left.last {
+                    previous = last
+                }
+                index -= left.count
+                node = right
             }
         }
-        return low
+        for byte in node.bytes.prefix(index) {
+            if byte == 13 || (byte == 10 && previous != 13) {
+                breaks += 1
+            }
+            previous = byte
+        }
+        // 前缀末尾的 CR 若紧接未消费的 LF，整对换行尚未结束，不能提前进入下一行。
+        if previous == 13 {
+            let next = index < node.count ? node.bytes[index] : byte(at: target)
+            if next == 10 {
+                breaks -= 1
+            }
+        }
+        return breaks
     }
 
     /// 业务作用：逐字移动和删除遵守扩展字形簇，CRLF 不被切开。
