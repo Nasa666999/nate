@@ -7,8 +7,14 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     public var onDismiss: (() -> Void)?
     public var onSelectionContextRequest: (() -> Void)?
     public var presentationPreferences = SearchPresentationPreferences()
+    public var isEditingInput: Bool {
+        [query, replacement, directory, filters].contains {
+            $0.isEditingInput
+        }
+    }
     var inputFontConfiguration = SearchInputFont()
     public var onStateChange: ((SearchWindowState) -> Void)?
+    public var onInputBegan: (() -> Void)?
     public var onResetSavedState: ((SearchWindowState) -> Void)? {
         didSet {
             resetSavedState.isHidden = onResetSavedState == nil
@@ -85,13 +91,13 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// - options: 发起请求时的查找与替换条件。
     /// - directory: 原请求根目录的完整输入。
     /// - filters: 原请求的包含与排除模式。
-    /// 返回：所有条件和路径、过滤原文完全相同时为真，不进行 Unicode 规范化或路径改写。
+    /// 返回：无候选或全文草稿、所有条件与路径过滤原文完全相同时为真，不进行 Unicode 规范化或路径改写。
     public func matchesDirectoryRequest(
         options: SearchOptions,
         directory: String,
         filters: String
     ) -> Bool {
-        self.options == options
+        !isEditingInput && self.options == options
             && self.directory.stringValue.utf8.elementsEqual(directory.utf8)
             && self.filters.stringValue.utf8.elementsEqual(filters.utf8)
     }
@@ -137,6 +143,18 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         filters.stringValue = "*.*"
         for input in [query, replacement, directory, filters] {
             input.delegate = self
+            input.onEditingStateChange = {
+                [weak self] editing in
+                if editing {
+                    self?.onInputBegan?()
+                }
+            }
+            input.onCancel = {
+                [weak self] in self?.cancelFromInput()
+            }
+            input.onSubmit = {
+                [weak self] reversing in self?.submitFromInput(reversing: reversing)
+            }
             input.onFeedback = {
                 [weak self] message in
                 self?.feedback.stringValue = message
@@ -295,7 +313,10 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
             let selection, !selection.isEmpty,
             selection.utf8.count <= presentationPreferences.fillLimit * 4,
             selection.unicodeScalars.count <= presentationPreferences.fillLimit,
-            presentationPreferences.fillMultiline || !selection.utf8.contains(where: { $0 == 10 || $0 == 13 })
+            presentationPreferences.fillMultiline
+                || !selection.utf8.contains(where: {
+                    $0 == 10 || $0 == 13
+                })
         {
             query.stringValue = selection
         }
@@ -407,8 +428,13 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// 业务作用：按钮和键盘使用同一请求入口，完整历史更新不改变实际执行文本，取消不增加历史。
     /// 参数说明:
     /// - id: 已确定方向和范围的动作标识。
-    /// 返回：四类完整输入按最近使用顺序保留最多 30 项，再调用应用的后台协调入口。
+    /// 返回：已确认输入按最近使用顺序保留最多 30 项后提交；候选或全文草稿期间不执行，也不记录历史。
     func submit(_ id: String) {
+        // 原生按钮和程序入口都不能把候选、全文草稿或其旧值当成新的执行意图。
+        guard id == "cancel" || !isEditingInput else {
+            feedback.stringValue = "请先确认或取消当前输入，再继续搜索。"
+            return
+        }
         if id != "cancel" {
             remember(query, history: &queryHistory)
             remember(replacement, history: &replaceHistory)
@@ -454,17 +480,11 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
             return false
         }
         if name == "cancelOperation:" {
-            stateChanged()
-            window?.orderOut(nil)
-            onDismiss?()
+            cancelFromInput()
             return true
         }
         if name == "insertNewline:" || name == "insertNewlineIgnoringFieldEditor:" {
-            var previous = backwards.state == .on
-            if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
-                previous.toggle()
-            }
-            submit(previous ? "previous" : "next")
+            submitFromInput(reversing: NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
             return true
         }
         return false

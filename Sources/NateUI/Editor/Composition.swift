@@ -44,6 +44,8 @@ extension EditorView {
                 text: value,
                 selected: selectedRange
             )
+            // 进入候选即撤销旧搜索的发布权；随后取消候选也不能让旧请求重新获得原选区。
+            onCommand?("compositionBegan")
         }
         else if composition?.revision == document.revision {
             composition?.text = value

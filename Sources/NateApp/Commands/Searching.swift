@@ -6,13 +6,35 @@ import NateStorage
 import NateUI
 
 extension ApplicationController {
+    /// 业务作用：正文候选或搜索草稿开始时撤销既有请求，取消输入也不能恢复旧结果的选择或写入权限。
+    /// 参数说明: 无。
+    /// 返回：请求身份先失效，再取消计算并收回句柄；正文、查询原文和历史不变。
+    func suspendSearchForInput() {
+        // 先撤销发布资格再通知底层取消，已完成但仍等待主执行域的旧结果也必须失效。
+        cancelIncrementalSearch(resetOrigin: true)
+        queryGeneration = UUID()
+        searchNavigationGeneration = UUID()
+        resultNavigationGeneration = UUID()
+        searchTask?.cancel()
+        searchTask = nil
+        resultNavigationTask?.cancel()
+        resultNavigationTask = nil
+        searchNavigationEvidence = nil
+        cancelCompletion()
+    }
+
     /// 业务作用：查找窗口与正文并行使用，选区填入和范围限制分别处理。
     /// 参数说明:
     /// - replacing: 是否进入替换流程。
     /// - inFiles: 是否显示目录与过滤条件，进入跨文件范围。
     /// 返回：复用查找条件，保持既有历史。
     func presentFind(replacing: Bool, inFiles: Bool = false) {
-        mainWindow?.editor.finishComposition()
+        // 完整查找窗口重新接管用户意图，旧增量请求不能在打开窗口后移动正文光标。
+        cancelIncrementalSearch()
+        // 当前草稿和候选仍由原输入上下文持有，重复快捷键不能改填另一份查询或结束候选。
+        guard findWindow?.isEditingInput != true, mainWindow?.hasMarkedEditorInput != true else {
+            return
+        }
         if findWindow == nil {
             let window = FindReplaceWindow()
             do {
@@ -35,6 +57,9 @@ extension ApplicationController {
                 [weak self] action, options, directory, filters in
                 self?.search(action, options: options, directory: directory, filters: filters)
             }
+            window.onInputBegan = {
+                [weak self] in self?.suspendSearchForInput()
+            }
             window.onSelectionContextRequest = {
                 [weak self] in
                 _ = self?.refreshSearchPresentation()
@@ -53,6 +78,11 @@ extension ApplicationController {
         if let searchSettingsError {
             findWindow?.feedback.stringValue = searchSettingsError
         }
+        // 原字段结束编辑可能提交最后一次确认输入，完成焦点转交后再封住这类迟到增量请求。
+        cancelIncrementalSearch()
+        if mainWindow?.isIncrementalSearchVisible == true {
+            mainWindow?.incrementalSearch.feedback.stringValue = "已切换到查找窗口。"
+        }
     }
 
     /// 业务作用：固定请求身份、快照和范围，在后台搜索完成后复验再发布。
@@ -70,6 +100,8 @@ extension ApplicationController {
         filters: String,
         afterReplacement: Bool = false
     ) {
+        // 明确的完整查找或替换取代增量输入，先撤销旧导航的发布资格。
+        cancelIncrementalSearch()
         searchTask?.cancel()
         resultNavigationTask?.cancel()
         if action == "cancel" {
@@ -86,6 +118,11 @@ extension ApplicationController {
         guard !closing else {
             return
         }
+        // 菜单入口也可能发生在候选或全文草稿中，不能把尚未确认的字段当成执行条件。
+        guard findWindow?.isEditingInput != true, mainWindow?.hasMarkedEditorInput != true else {
+            findWindow?.feedback.stringValue = "请先确认或取消输入法候选、全文草稿，再执行查找。"
+            return
+        }
         if action == "files" || action == "replaceFiles" {
             searchDirectory(
                 directory,
@@ -95,7 +132,6 @@ extension ApplicationController {
             )
             return
         }
-        mainWindow?.editor.finishComposition()
         guard let active else {
             return
         }
@@ -226,7 +262,10 @@ extension ApplicationController {
                     }
                 )
                 try Task.checkCancellation()
-                guard !self.closing, generation == self.queryGeneration, self.findWindow?.options == options
+                guard !self.closing, generation == self.queryGeneration,
+                    self.mainWindow?.hasMarkedEditorInput != true,
+                    self.findWindow?.isEditingInput != true,
+                    self.findWindow?.options == options
                 else {
                     return
                 }
@@ -317,13 +356,19 @@ extension ApplicationController {
             }
             catch is CancellationError {
                 // 错误反馈同样属于原查询，不能覆盖用户已经改写的表达式状态。
-                if generation == self.queryGeneration, self.findWindow?.options == options {
+                if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
+                    self.mainWindow?.hasMarkedEditorInput != true,
+                    self.findWindow?.options == options
+                {
                     self.findWindow?.feedback.stringValue = "已取消，未发布搜索计划。"
                 }
             }
             catch {
                 // 表达式失败也必须持有原输入的反馈权，不能覆盖已经改变的查找条件。
-                if generation == self.queryGeneration, self.findWindow?.options == options {
+                if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
+                    self.mainWindow?.hasMarkedEditorInput != true,
+                    self.findWindow?.options == options
+                {
                     self.findWindow?.feedback.stringValue = error.localizedDescription
                 }
             }

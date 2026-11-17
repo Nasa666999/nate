@@ -75,6 +75,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var initialRecoveryConfirmation = true
     var publishedRecoveryWorkspace: RecoveryWorkspaceState?
     var searchTask: Task<Void, Never>?
+    var incrementalTask: Task<Void, Never>?
+    var incrementalOrigin: IncrementalSearchOrigin?
+    var incrementalGeneration = UUID()
+    var incrementalOptions = IncrementalSearchOptions()
+    var incrementalDefaults: UserDefaults?
     var searchNavigationEvidence: SearchNavigationEvidence?
     var searchNavigationGeneration = UUID()
     var externalObservationTask: Task<Void, Never>?
@@ -165,6 +170,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             instanceLease = lease
             saveBackupStore = SaveBackupStore(directory: support.appendingPathComponent("SavedBackups"))
             loadSaveBackupPolicy()
+            loadIncrementalOptions(from: .standard)
             await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
@@ -315,6 +321,21 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// - window: 待连接主窗口。
     /// 返回：窗口只发出意图，不执行磁盘访问。
     func connect(_ window: EditorWindow) {
+        window.onIncrementalQuery = {
+            [weak self] query, options in self?.searchIncrementally(query, options: options)
+        }
+        window.onIncrementalOptions = {
+            [weak self] options in self?.saveIncrementalOptions(options)
+        }
+        window.onIncrementalSuspend = {
+            [weak self] in
+            guard let self else {
+                return false
+            }
+            let pending = self.incrementalTask != nil
+            self.cancelIncrementalSearch()
+            return pending
+        }
         window.onCommand = {
             [weak self] in self?.route($0)
         }
@@ -383,10 +404,15 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         else {
             return
         }
+        // 切换标签结束原视图的增量会话，旧计算不能沿稳定 UUID 导航到新活动正文。
+        cancelIncrementalSearch(resetOrigin: true)
         mainWindow?.editor.finishComposition()
         cancelCompletion()
         activeID = id
         mainWindow?.showDocument(document.buffer)
+        if mainWindow?.isIncrementalSearchVisible == true {
+            mainWindow?.incrementalSearch.feedback.stringValue = "文档已切换，可继续查找。"
+        }
         previousTextForMacro = document.buffer.text
         refreshUI()
     }
@@ -399,6 +425,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return
         }
         cancelCompletion()
+        // 正文已经进入新修订，原增量快照和起点都不能继续发布。
+        cancelIncrementalSearch(resetOrigin: true)
+        if mainWindow?.isIncrementalSearchVisible == true {
+            mainWindow?.incrementalSearch.feedback.stringValue = "正文已改变，可继续查找。"
+        }
         active.dirtyHint = true
         if macroRecording && !macroPlaying {
             recordTextChange(active)

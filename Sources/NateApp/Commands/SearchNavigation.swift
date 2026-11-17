@@ -107,6 +107,8 @@ extension ApplicationController {
                 // 文档身份相同仍不足以移动光标；用户切换克隆、改选区或关闭重开后原导航权已失效。
                 guard generation == self.queryGeneration,
                     navigationGeneration == self.searchNavigationGeneration,
+                    self.findWindow?.isEditingInput != true,
+                    self.mainWindow?.hasMarkedEditorInput != true,
                     self.findWindow?.options == options,
                     let editor, self.mainWindow?.editor === editor, self.active?.buffer === buffer,
                     editor.document === buffer, buffer.revision == snapshot.revision,
@@ -161,13 +163,19 @@ extension ApplicationController {
             }
             catch is CancellationError {
                 // 取消提示也需保留原表达式身份，输入已改变时不能覆盖当前反馈。
-                if generation == self.queryGeneration, self.findWindow?.options == options {
+                if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
+                    self.mainWindow?.hasMarkedEditorInput != true,
+                    self.findWindow?.options == options
+                {
                     self.findWindow?.feedback.stringValue = "已取消，未发布搜索计划。"
                 }
             }
             catch {
                 // 迟到的表达式错误不能借相同任务代次覆盖新输入。
-                if generation == self.queryGeneration, self.findWindow?.options == options {
+                if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
+                    self.mainWindow?.hasMarkedEditorInput != true,
+                    self.findWindow?.options == options
+                {
                     self.findWindow?.feedback.stringValue = error.localizedDescription
                 }
             }

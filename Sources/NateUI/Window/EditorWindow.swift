@@ -1,5 +1,6 @@
 import AppKit
 import NateCore
+import NateSearch
 
 public struct TabPresentation: Equatable {
     public var id: UUID
@@ -47,6 +48,11 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onTabAction: ((UUID, String) -> Void)?
     public var onEdit: (() -> Void)?
     public var onWindowClose: (() -> Void)?
+    public var onIncrementalQuery: ((String, IncrementalSearchOptions) -> Void)?
+    public var onIncrementalOptions: ((IncrementalSearchOptions) -> Void)?
+    public var onIncrementalSuspend: (() -> Bool)?
+    public let incrementalSearch = IncrementalSearchBar(frame: .zero)
+    var incrementalHeight: NSLayoutConstraint?
     public internal(set) var editor: EditorView
     public let status = SaveStatusField(labelWithString: "")
     let results = ResultTextView()
@@ -120,6 +126,23 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         toolbarStack.addArrangedSubview(NSView())
         root.addSubview(toolbarStack)
         root.addSubview(tabs)
+        root.addSubview(incrementalSearch)
+        incrementalSearch.isHidden = true
+        incrementalSearch.onQuery = {
+            [weak self] query, options in self?.onIncrementalQuery?(query, options)
+        }
+        incrementalSearch.onOptionsChange = {
+            [weak self] options in self?.onIncrementalOptions?(options)
+        }
+        incrementalSearch.onSuspend = {
+            [weak self] in self?.onIncrementalSuspend?() ?? false
+        }
+        incrementalSearch.onNavigate = {
+            [weak self] previous in self?.onCommand?(previous ? "incrementalPrevious" : "incrementalNext")
+        }
+        incrementalSearch.onClose = {
+            [weak self] in self?.onCommand?("closeIncrementalSearch")
+        }
         tabs.heightAnchor.constraint(equalToConstant: 33).isActive = true
         tabs.onSelect = {
             [weak self] id in self?.onSelect?(id)
@@ -177,9 +200,11 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         status.lineBreakMode = .byTruncatingMiddle
         root.addSubview(status)
         status.heightAnchor.constraint(equalToConstant: 25).isActive = true
-        for view in [toolbarStack, tabs, split, status] {
+        for view in [toolbarStack, tabs, incrementalSearch, split, status] {
             view.translatesAutoresizingMaskIntoConstraints = false
         }
+        incrementalHeight = incrementalSearch.heightAnchor.constraint(equalToConstant: 0)
+        incrementalHeight?.isActive = true
         NSLayoutConstraint.activate([
             toolbarStack.topAnchor.constraint(equalTo: root.topAnchor),
             toolbarStack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
@@ -188,7 +213,10 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             tabs.topAnchor.constraint(equalTo: toolbarStack.bottomAnchor),
             tabs.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             tabs.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            split.topAnchor.constraint(equalTo: tabs.bottomAnchor),
+            incrementalSearch.topAnchor.constraint(equalTo: tabs.bottomAnchor),
+            incrementalSearch.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            incrementalSearch.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            split.topAnchor.constraint(equalTo: incrementalSearch.bottomAnchor),
             split.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             split.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             split.bottomAnchor.constraint(equalTo: status.topAnchor),

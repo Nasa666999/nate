@@ -2,11 +2,35 @@ import AppKit
 import NateSearch
 
 extension FindReplaceWindow {
+    /// 业务作用：原生短字段与完整输入摘要按同一方向规则执行查找，Shift 只临时反向。
+    /// 参数说明:
+    /// - reversing: 是否临时反转已保存的查找方向。
+    /// 返回：完整查询按当前方向提交，不改变反向选项本身。
+    func submitFromInput(reversing: Bool) {
+        var previous = backwards.state == .on
+        if reversing {
+            previous.toggle()
+        }
+        submit(previous ? "previous" : "next")
+    }
+
+    /// 业务作用：原生字段和长输入摘要共用取消入口，先保存已确认条件再交还正文焦点。
+    /// 参数说明: 无。
+    /// 返回：搜索面板隐藏，当前输入保留，候选确认由调用者的输入上下文门禁优先处理。
+    func cancelFromInput() {
+        stateChanged()
+        window?.orderOut(nil)
+        onDismiss?()
+    }
+
     public var state: SearchWindowState {
         var result = SearchWindowState()
         result.options = options
-        result.directory = directory.stringValue
-        result.filters = filters.stringValue
+        // 退出或选项变化可能发生在候选期间；归档只记录确认原文，不把候选或全文草稿变成下次启动的查询。
+        result.options.query = query.committedStringValue
+        result.options.replacement = replacement.committedStringValue
+        result.directory = directory.committedStringValue
+        result.filters = filters.committedStringValue
         result.queryHistory = queryHistory
         result.replacementHistory = replaceHistory
         result.directoryHistory = directoryHistory

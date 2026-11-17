@@ -151,14 +151,48 @@ extension ApplicationController {
             }
         case "find", "replace", "findFiles":
             presentFind(replacing: id == "replace", inFiles: id == "findFiles")
+        case "incrementalSearch": showIncrementalSearch()
+        case "closeIncrementalSearch": closeIncrementalSearch()
+        case "incrementalNext", "incrementalPrevious":
+            if let window = mainWindow, window.isIncrementalSearchVisible {
+                window.incrementalSearch.publishQuery()
+                searchIncrementally(
+                    window.incrementalSearch.query,
+                    options: window.incrementalSearch.options,
+                    previous: id == "incrementalPrevious"
+                )
+            }
         case "findNext", "findPrevious":
+            if let window = mainWindow, let nativeWindow = window.window, window.isIncrementalSearchVisible,
+                NSApp.keyWindow === nativeWindow
+                    || (nativeWindow.attachedSheet != nil && nativeWindow.attachedSheet === NSApp.keyWindow)
+            {
+                // 增量栏及其全文草稿拥有当前输入；草稿未确认时不借全局匹配命令执行另一份查询。
+                guard !window.incrementalSearch.isEditingInput else {
+                    return
+                }
+                window.incrementalSearch.publishQuery()
+                searchIncrementally(
+                    window.incrementalSearch.query,
+                    options: window.incrementalSearch.options,
+                    previous: id == "findPrevious"
+                )
+                return
+            }
             if findWindow == nil {
                 presentFind(replacing: false)
             }
             if let options = findWindow?.options {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
+        case "compositionBegan":
+            suspendSearchForInput()
         case "selectionChanged":
+            // 用户位置和克隆焦点属于新的导航意图，等待中的旧增量结果不得再选择原位置。
+            if incrementalTask != nil {
+                cancelIncrementalSearch(resetOrigin: true)
+                mainWindow?.incrementalSearch.feedback.stringValue = "光标或视图已改变，请继续查找。"
+            }
             searchNavigationEvidence = nil
             searchNavigationGeneration = UUID()
             cancelCompletion()

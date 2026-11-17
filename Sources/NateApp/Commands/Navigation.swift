@@ -9,6 +9,8 @@ extension ApplicationController {
     /// - index: 当前展示结果的条目序号。
     /// 返回：打开对应文档并选中完整命中；过期时保留正文并提示。
     func navigateResult(_ index: Int) {
+        // 用户明确定位结果后，等待读取期间的旧增量计算也不能抢先改变被复验的光标。
+        cancelIncrementalSearch(resetOrigin: true)
         resultNavigationTask?.cancel()
         resultNavigationTask = nil
         resultNavigationGeneration = UUID()
@@ -35,6 +37,8 @@ extension ApplicationController {
         let permitted: @MainActor () -> Bool = {
             [weak self, weak origin = active?.buffer, weak editor = mainWindow?.editor] in
             guard let self, !self.closing, !Task.isCancelled,
+                self.findWindow?.isEditingInput != true,
+                self.mainWindow?.hasMarkedEditorInput != true,
                 self.resultNavigationGeneration == request, self.queryGeneration == query,
                 self.searchNavigationGeneration == selectionGeneration,
                 self.mainWindow?.resultGeneration == presentation,
@@ -46,7 +50,8 @@ extension ApplicationController {
             }
             return true
         }
-        resultNavigationTask = Task { [weak self] in
+        resultNavigationTask = Task {
+            [weak self] in
             guard let self else {
                 return
             }

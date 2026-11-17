@@ -100,7 +100,7 @@ final class SearchExpressionEditor: NSWindowController, NSWindowDelegate, NSText
     /// 业务作用：取消全文编辑，保留原搜索条件。
     /// 参数说明: 无。
     /// 返回：编辑窗口关闭且不发布本轮草稿。
-    @objc private func cancelInput() {
+    @objc func cancelInput() {
         finish(nil)
     }
 

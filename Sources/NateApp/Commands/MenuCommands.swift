@@ -101,6 +101,8 @@ extension ApplicationController: NSMenuItemValidation {
         add(edit, "插入 / 覆盖", "overwrite")
         attach(edit, to: bar)
         let search = NSMenu(title: "搜索")
+        add(search, "增量查找", "incrementalSearch", key: "i")
+        search.items.last?.keyEquivalentModifierMask = [.command, .option]
         add(search, "跳转到匹配括号", "matchingBracket", key: "b")
         add(search, "选择整对括号", "selectBracketPair", key: "b")
         search.items.last?.keyEquivalentModifierMask = [.command, .option]

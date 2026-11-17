@@ -190,6 +190,7 @@ extension ApplicationController {
                 }
                 // 目录和过滤条件同样决定目标集合，后台计划不能在这些输入变化后取得发布权。
                 guard
+                    self.mainWindow?.hasMarkedEditorInput != true,
                     self.findWindow?.matchesDirectoryRequest(
                         options: requested,
                         directory: directory,
@@ -218,6 +219,7 @@ extension ApplicationController {
                 }
                 // 确认窗口会运行嵌套事件循环，原查询条件仍须成立才能开始执行固定计划。
                 guard
+                    self.mainWindow?.hasMarkedEditorInput != true,
                     self.findWindow?.matchesDirectoryRequest(
                         options: requested,
                         directory: directory,
@@ -234,6 +236,7 @@ extension ApplicationController {
                     }
                     // 文件动作等待期间可以重新编辑条件，后续文件不得继续沿用已经撤销的请求参数。
                     guard
+                        self.mainWindow?.hasMarkedEditorInput != true,
                         self.findWindow?.matchesDirectoryRequest(
                             options: requested,
                             directory: directory,
@@ -360,6 +363,7 @@ extension ApplicationController {
             catch {
                 // 枚举或编译失败也不能把旧目录条件的错误发布到新请求上。
                 if generation == self.queryGeneration,
+                    self.mainWindow?.hasMarkedEditorInput != true,
                     self.findWindow?.matchesDirectoryRequest(
                         options: requested,
                         directory: directory,

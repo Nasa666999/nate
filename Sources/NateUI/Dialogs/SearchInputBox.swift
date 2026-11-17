@@ -8,11 +8,27 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     private var values: [String] = []
     private var historyIDs: [UUID] = []
     private var raw = ""
+    private var confirmedRaw = ""
     private var inputGeneration = UUID()
     private var editor: SearchExpressionEditor?
+    private var reportedEditing = false
     public weak var delegate: (any NSTextFieldDelegate)?
     public var onFeedback: ((String) -> Void)?
     public var onHistoryChange: (([String]) -> Void)?
+    public var onCommittedChange: ((String) -> Void)?
+    public var onEditingStateChange: ((Bool) -> Void)?
+    public var onCancel: (() -> Void)?
+    public var onSubmit: ((Bool) -> Void)?
+    public var hasMarkedInput: Bool {
+        (field.currentEditor() as? NSTextView)?.hasMarkedText() == true
+            || editor?.text.hasMarkedText() == true
+    }
+    public var isEditingInput: Bool {
+        hasMarkedInput || editor != nil
+    }
+    public var committedStringValue: String {
+        confirmedRaw
+    }
     public var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) {
         didSet {
             field.font = font
@@ -39,8 +55,11 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
                 window?.makeFirstResponder(edit)
             }
             raw = newValue
+            confirmedRaw = newValue
             inputGeneration = UUID()
             updatePresentation()
+            reportEditingState()
+            onCommittedChange?(raw)
         }
     }
 
@@ -174,23 +193,57 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
         return true
     }
 
+    /// 业务作用：长输入摘要取得焦点时保留完整编辑和退出入口，摘要本身不接收正文字符。
+    /// 参数说明:
+    /// - event: 当前摘要焦点收到的原生键盘事件。
+    /// 返回：Enter 提交所属界面的查找，未装配动作时打开全文编辑；Esc 交回所属界面，候选仍归原生上下文。
+    public override func keyDown(with event: NSEvent) {
+        guard !isEditingInput else {
+            return
+        }
+        switch event.keyCode {
+        case 53:
+            onCancel?()
+        case 36, 76:
+            if let onSubmit {
+                onSubmit(event.modifierFlags.contains(.shift))
+            }
+            else {
+                editFullText()
+            }
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
     /// 业务作用：原生输入通知先固定全部原文，再切换长表达式展示，不能让布局摘要代替执行值。
     /// 参数说明:
     /// - notification: 当前短字段的文本变更。
-    /// 返回：完整内容保留，长内容转入明确的全文编辑入口。
+    /// 返回：完整内容保留，长内容转入全文编辑；候选只发布编辑状态，已确认内容才触发查询回调。
     public func controlTextDidChange(_ notification: Notification) {
         inputGeneration = UUID()
         guard let text = field.currentEditor() as? NSTextView else {
             raw = field.stringValue
+            confirmedRaw = raw
+            reportEditingState()
+            onCommittedChange?(raw)
             return
         }
         raw = text.string
+        reportEditingState()
         // 输入法候选仍由原生字段持有，普通变更不重写控件或结束候选；确认后才切换长输入展示。
         guard requiresFullEditor, !text.hasMarkedText() else {
+            if !text.hasMarkedText() {
+                confirmedRaw = raw
+                onCommittedChange?(raw)
+            }
             return
         }
         window?.makeFirstResponder(edit)
         updatePresentation()
+        confirmedRaw = raw
+        reportEditingState()
+        onCommittedChange?(raw)
     }
 
     /// 业务作用：短输入结束时固定已确认的完整内容，再切换长表达式的有界展示。
@@ -199,8 +252,29 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     /// 返回：后续执行读取完整原文，候选不会被摘要刷新抢先结束。
     public func controlTextDidEndEditing(_ notification: Notification) {
         raw = field.stringValue
+        confirmedRaw = raw
         inputGeneration = UUID()
         updatePresentation()
+        reportEditingState()
+        onCommittedChange?(raw)
+    }
+
+    /// 业务作用：关闭拥有此输入的界面时取消尚未确认的全文草稿，不能由附属窗口迟到确认重新发布输入。
+    /// 参数说明: 无。
+    /// 返回：全文附属窗口结束，当前已确认原文保持不变。
+    public func cancelFullTextEditor() {
+        editor?.cancelInput()
+    }
+
+    /// 业务作用：把候选或全文草稿的进入、解除状态交给拥有者，允许撤销旧查询而不把草稿当作查询原文。
+    /// 参数说明: 无。
+    /// 返回：状态真正变化时回调一次，重复原生通知不重复撤销请求。
+    private func reportEditingState() {
+        let editing = (field.currentEditor() as? NSTextView)?.hasMarkedText() == true || editor != nil
+        if editing != reportedEditing {
+            reportedEditing = editing
+            onEditingStateChange?(editing)
+        }
     }
 
     /// 业务作用：把 Enter、Esc 与输入法候选的处理交回搜索窗口，输入组件不改变搜索方向。
@@ -285,15 +359,21 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
             // 查找窗口可能被新选区或历史重新赋值，旧草稿不能覆盖更新的完整输入。
             guard value == nil || self.inputGeneration == generation else {
                 self.editor = nil
+                self.reportEditingState()
                 self.onFeedback?("原输入已改变，旧草稿未发布；请重新打开“编辑全文”。")
                 return
             }
+            self.editor = nil
             if let value {
                 self.stringValue = value
             }
-            self.editor = nil
+            else {
+                self.reportEditingState()
+                self.onCommittedChange?(self.raw)
+            }
         }
         editor = controller
+        reportEditingState()
         controller.present(attachedTo: window)
     }
 }
