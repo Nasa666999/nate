@@ -114,6 +114,7 @@ extension ApplicationController {
             }
         }
         do {
+            let backup = try saveBackupRequest(request)
             let result = try await fileIO.run {
                 try self.fileOperations.perform(request) {
                     try self.fileOperations.write(
@@ -121,7 +122,8 @@ extension ApplicationController {
                         request: request,
                         encoding.encode(snapshot.text.text(), catalog: catalog),
                         to: url,
-                        expected: expected
+                        expected: expected,
+                        backup: backup
                     )
                 }
             }

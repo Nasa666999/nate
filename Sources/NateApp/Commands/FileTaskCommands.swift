@@ -113,6 +113,8 @@ extension ApplicationController {
         case .preparingBytes: return "准备编码字节"
         case .waitingForAccess: return "等待系统文件访问"
         case .checkingBaseline: return "核对原文件"
+        case .preservingBackup: return "保护覆盖前的原始字节"
+        case .preparingDirectory: return "取得目标目录同步权限"
         case .writingTemporary: return "写入临时文件"
         case .preservingMetadata: return "保留文件权限与属性"
         case .synchronizingFile: return "同步文件内容"

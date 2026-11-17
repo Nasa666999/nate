@@ -103,6 +103,7 @@ extension ApplicationController {
                 self.refreshUI()
             }
             do {
+                let backup = try self.saveBackupRequest(request)
                 let result = try await executor.run {
                     try self.fileOperations.perform(request) {
                         let bytes = try encoding.encode(snapshot.text.text(), catalog: catalog)
@@ -111,7 +112,8 @@ extension ApplicationController {
                             request: request,
                             bytes,
                             to: url,
-                            expected: baseline
+                            expected: baseline,
+                            backup: backup
                         )
                     }
                 }

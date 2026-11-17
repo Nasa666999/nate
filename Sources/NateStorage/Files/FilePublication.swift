@@ -5,6 +5,8 @@ public enum FileSaveStage: Sendable, Equatable {
     case preparingBytes
     case waitingForAccess
     case checkingBaseline
+    case preservingBackup
+    case preparingDirectory
     case writingTemporary
     case preservingMetadata
     case synchronizingFile
@@ -24,3 +26,11 @@ public protocol FilePublicationAuthority: Sendable {
 }
 
 public typealias FileSaveObservation = @Sendable (FileSaveStage) -> Void
+
+public protocol FilePublicationScope: Sendable {
+    /// 业务作用：为一次复合保存中的独立持久化动作分别授予单次权限，取消沿整个动作范围传播。
+    /// 参数说明:
+    /// - operation: 在派生权限仍可被观察的范围内同步完成的动作。
+    /// 返回：真实动作结果；范围撤销后不能产生新的有效发布权。
+    func withAuthority<Value>(_ operation: (any FilePublicationAuthority) throws -> Value) throws -> Value
+}

@@ -146,6 +146,7 @@ public struct CoordinatedFileAccess: Sendable {
     /// - url: 用户确认的目标。
     /// - expected: 必须仍匹配的磁盘证据。
     /// - replacing: 是否以另一个文档替换目标，而非更新同一文档内容。
+    /// - backup: 覆盖前必须完成的原字节备份，为空时不额外保存历史。
     /// - permit: 发布前必须有效的动作权限。
     /// - authority: 单次发布权。
     /// - observe: 协调与持久化阶段的实际观察入口。
@@ -155,6 +156,7 @@ public struct CoordinatedFileAccess: Sendable {
         to url: URL,
         expected: DiskBaseline?,
         replacing: Bool = false,
+        backup: SaveBackupRequest? = nil,
         permit: @escaping @Sendable () -> Bool = {
             true
         },
@@ -167,6 +169,24 @@ public struct CoordinatedFileAccess: Sendable {
         return try coordinator.write(at: url, intent: replacing ? .replacing : .updating, permit: permit) {
             coordinated in
             try validate(coordinated, requested: url, permit: permit)
+            if let backup, let expected {
+                observe(.preservingBackup)
+                do {
+                    try backup.store.preserve(
+                        url,
+                        expected: expected,
+                        policy: backup.policy,
+                        authority: backup.authority,
+                        permit: permit
+                    )
+                }
+                catch is CancellationError {
+                    throw CancellationError()
+                }
+                catch {
+                    throw NateError.message("保存前备份未完成，原文件未覆盖：" + error.localizedDescription)
+                }
+            }
             return try FileStorage.save(
                 data,
                 to: url,

@@ -283,6 +283,7 @@ final class FileOperationLedger: Sendable {
     /// - url: 原目标。
     /// - expected: 磁盘基线。
     /// - replacing: 是否为另存替换。
+    /// - backup: 本次覆盖前采用的备份策略和权限快照。
     /// - permit: 外层仍有效的动作权限。
     /// 返回：完整保存点，结束登记由包含整个同步动作的 perform 负责。
     func write(
@@ -292,6 +293,7 @@ final class FileOperationLedger: Sendable {
         to url: URL,
         expected: DiskBaseline?,
         replacing: Bool = false,
+        backup: SaveBackupRequest? = nil,
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -301,6 +303,7 @@ final class FileOperationLedger: Sendable {
             to: url,
             expected: expected,
             replacing: replacing,
+            backup: backup,
             permit: {
                 !request.permission.isCancelled && permit()
             },

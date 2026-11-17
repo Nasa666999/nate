@@ -33,6 +33,10 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var publishingResources = false
     var findWindow: FindReplaceWindow?
     var fileTasksWindow: FileTasksWindow?
+    var savedBackupsWindow: SavedBackupsWindow?
+    var savedBackupRecords: [SavedFileBackup] = []
+    var backupBrowserTask: Task<Void, Never>?
+    var backupBrowserGeneration = UUID()
     let fileIO = IOExecutor(name: "nate.files", concurrency: 2)
     let readIO = IOExecutor(name: "nate.reads", concurrency: 2)
     let recoveryIO = IOExecutor(name: "nate.recovery", concurrency: 1, maximumStalled: 0)
@@ -40,6 +44,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var externalCommandTask: Task<Void, Never>?
     var lastExternalOutput: String?
     var recovery: RecoveryStore?
+    var saveBackupStore: SaveBackupStore?
+    var saveBackupPolicy = SaveBackupPolicy()
+    var saveBackupSettingsError: String?
     var recoveryReady = false
     var instanceLease: InstanceLease?
     var instanceInbox: InstanceInbox?
@@ -140,6 +147,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 return
             }
             instanceLease = lease
+            saveBackupStore = SaveBackupStore(directory: support.appendingPathComponent("SavedBackups"))
+            loadSaveBackupPolicy()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
                 try await recoveryIO.run {

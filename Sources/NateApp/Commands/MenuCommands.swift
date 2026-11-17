@@ -13,6 +13,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "关于 Nate", "about")
         add(application, "设置…", "preferences", key: ",")
         add(application, "补全与参数提示…", "assistancePreferences")
+        add(application, "保存时备份设置…", "saveBackupPreferences")
         application.addItem(.separator())
         let hide = NSMenuItem(title: "隐藏 Nate", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hide.target = NSApp
@@ -34,6 +35,7 @@ extension ApplicationController: NSMenuItemValidation {
         let recent = NSMenu(title: "最近文件")
         add(file, "恢复已关闭临时内容…", "recoveryArchive")
         add(file, "恢复先前保留工作区…", "pausedWorkspaces")
+        add(file, "打开保存前备份…", "savedBackups")
         for path in recentFiles {
             add(recent, path, "recent:" + path)
         }

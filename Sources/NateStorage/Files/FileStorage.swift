@@ -146,20 +146,52 @@ public enum FileStorage {
         else if FileManager.default.fileExists(atPath: target.path) {
             throw NateError.message("保存目标已存在，必须先确认其当前内容。")
         }
-        let temporary = target.deletingLastPathComponent().appendingPathComponent(
-            ".nate-\(UUID().uuidString)"
+        // 目录读取可能等待系统隐私授权，必须在替换原文件之前取得同步描述符，不能先产生未确认覆盖。
+        observe(.preparingDirectory)
+        let parent = target.deletingLastPathComponent()
+        // 用户目录允许合法链接别名，实际描述符身份与发布前路径复验共同约束写入目标。
+        let directory = Darwin.open(
+            parent.resolvingSymlinksInPath().standardizedFileURL.path,
+            O_RDONLY | O_CLOEXEC | O_DIRECTORY
         )
-        let fd = Darwin.open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+        guard directory >= 0 else {
+            throw posix("无法取得目标目录同步权限，原文件未覆盖")
+        }
+        defer {
+            Darwin.close(directory)
+        }
+        var directoryIdentity = stat()
+        guard fstat(directory, &directoryIdentity) == 0 else {
+            throw posix("无法确认目标目录身份，原文件未覆盖")
+        }
+        guard permit() else {
+            throw CancellationError()
+        }
+        let temporary = ".nate-\(UUID().uuidString)"
+        let fd = Darwin.openat(
+            directory,
+            temporary,
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+            0o600
+        )
         guard fd >= 0 else {
             throw posix("无法创建同目录临时文件")
         }
         observe(.writingTemporary)
         var published = false
         defer {
-            Darwin.close(fd)
             if !published {
-                Darwin.unlink(temporary.path)
+                var held = stat()
+                var path = stat()
+                // 目录移动后仍只清理本次描述符对应的临时项，不能按旧绝对路径删除未知的新文件。
+                if fstat(fd, &held) == 0,
+                    fstatat(directory, temporary, &path, AT_SYMLINK_NOFOLLOW) == 0,
+                    held.st_dev == path.st_dev, held.st_ino == path.st_ino
+                {
+                    Darwin.unlinkat(directory, temporary, 0)
+                }
             }
+            Darwin.close(fd)
         }
         try data.withUnsafeBytes {
             raw in
@@ -181,17 +213,32 @@ public enum FileStorage {
                 written += amount
             }
         }
-        if expected != nil {
+        if let expected {
             observe(.preservingMetadata)
+            let source = Darwin.openat(
+                directory,
+                target.lastPathComponent,
+                O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW
+            )
+            guard source >= 0 else {
+                throw posix("无法读取原文件元数据")
+            }
+            defer {
+                Darwin.close(source)
+            }
             var metadata = stat()
-            guard stat(target.path, &metadata) == 0 else {
-                throw posix("无法读取原文件权限")
+            // 元数据来源必须仍是授权原文件，不跟随发布前临时改向的链接。
+            guard fstat(source, &metadata) == 0,
+                UInt64(UInt32(bitPattern: metadata.st_dev)) == expected.device,
+                metadata.st_ino == expected.inode, metadata.st_nlink <= 1
+            else {
+                throw NateError.message("原文件元数据身份发生外部变化，覆盖已停止。")
             }
             guard fchmod(fd, metadata.st_mode & 0o7777) == 0 else {
                 throw posix("无法保留文件权限")
             }
             // 元数据与 ACL 在发布前复制，原文件尚未被替换。
-            guard copyfile(target.path, temporary.path, nil, copyfile_flags_t(COPYFILE_METADATA)) == 0 else {
+            guard fcopyfile(source, fd, nil, copyfile_flags_t(COPYFILE_METADATA)) == 0 else {
                 throw posix("无法保留文件元数据")
             }
         }
@@ -213,6 +260,24 @@ public enum FileStorage {
             }
         }
         let flags: UInt32 = expected == nil ? UInt32(RENAME_EXCL) : 0
+        var currentDirectory = stat()
+        // 同步描述符与即将发布的路径必须仍属于同一目录，目录被替换后不能继续沿用旧同步权威。
+        guard stat(parent.path, &currentDirectory) == 0,
+            currentDirectory.st_dev == directoryIdentity.st_dev,
+            currentDirectory.st_ino == directoryIdentity.st_ino
+        else {
+            throw NateError.message("发布前目标目录发生外部变化，原文件未覆盖。")
+        }
+        var prepared = stat()
+        var temporaryPath = stat()
+        // 发布名称必须仍指向本次输出描述符，未知替换或链接不能借用当前保存的发布权限。
+        guard fstat(fd, &prepared) == 0,
+            fstatat(directory, temporary, &temporaryPath, AT_SYMLINK_NOFOLLOW) == 0,
+            temporaryPath.st_mode & S_IFMT == S_IFREG, temporaryPath.st_nlink == 1,
+            sameObservation(prepared, temporaryPath)
+        else {
+            throw NateError.message("发布前临时内容身份发生外部变化，原文件未覆盖。")
+        }
         // 取消只在发布前停止；替换已经发生后必须继续确认实际持久化阶段。
         guard permit() else {
             throw CancellationError()
@@ -220,22 +285,27 @@ public enum FileStorage {
         // 发布权只使用一次；取得权威后即使收到取消，也必须继续确认实际替换和同步结果。
         if let authority {
             try authority.publish {
-                try publishReplacement(temporary, to: target, flags: flags, observe: observe)
+                try publishReplacement(
+                    temporary,
+                    to: target.lastPathComponent,
+                    directory: directory,
+                    flags: flags,
+                    observe: observe
+                )
             }
         }
         else {
-            try publishReplacement(temporary, to: target, flags: flags, observe: observe)
+            try publishReplacement(
+                temporary,
+                to: target.lastPathComponent,
+                directory: directory,
+                flags: flags,
+                observe: observe
+            )
         }
         published = true
         observe(.published)
         observe(.synchronizingDirectory)
-        let directory = Darwin.open(target.deletingLastPathComponent().path, O_RDONLY | O_CLOEXEC)
-        guard directory >= 0 else {
-            throw NateError.message("内容已替换，但无法确认目录同步。")
-        }
-        defer {
-            Darwin.close(directory)
-        }
         guard fsync(directory) == 0 else {
             throw NateError.message("内容已替换，但目录同步失败，请检查磁盘实际状态。")
         }
@@ -256,20 +326,22 @@ public enum FileStorage {
 
     /// 业务作用：取得发布权后只执行一次原子替换，阶段观察不会把待执行动作保存到同步范围外。
     /// 参数说明:
-    /// - temporary: 已完成编码与强同步的同目录临时文件。
-    /// - target: 已复验的原目标。
+    /// - temporary: 已完成编码与强同步的同目录临时名称。
+    /// - target: 已复验的原目标名称。
+    /// - directory: 发布前取得并确认身份的共同父目录描述符。
     /// - flags: 新建目标的排他发布规则。
     /// - observe: 实际阶段观察入口。
     /// 返回：原子替换成功；失败保留实际错误，由调用方处理临时文件和未确认状态。
     static func publishReplacement(
-        _ temporary: URL,
-        to target: URL,
+        _ temporary: String,
+        to target: String,
+        directory: Int32,
         flags: UInt32,
         observe: FileSaveObservation
     ) throws {
         // 完整且已同步的内容在此一次切换为目标，后续只确认持久化而不再更改正文。
         observe(.publishing)
-        guard renamex_np(temporary.path, target.path, flags) == 0 else {
+        guard renameatx_np(directory, temporary, directory, target, flags) == 0 else {
             throw posix("无法发布文件替换")
         }
     }

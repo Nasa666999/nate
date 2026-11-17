@@ -166,6 +166,7 @@ extension ApplicationController {
             }
         }
         do {
+            let backup = try saveBackupRequest(request)
             let result = try await fileIO.run {
                 try self.fileOperations.perform(request) {
                     request.observe(.checkingBaseline)
@@ -185,7 +186,8 @@ extension ApplicationController {
                         data,
                         to: destination,
                         expected: expected,
-                        replacing: true
+                        replacing: true,
+                        backup: backup
                     )
                 }
             }

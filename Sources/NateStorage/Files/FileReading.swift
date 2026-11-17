@@ -70,6 +70,7 @@ extension FileStorage {
     /// - maximumBytes: 文件字节预算。
     /// - maximumCaptureBytes: 最多保留的原字节前缀，摘要仍涵盖完整文件。
     /// - resolvingLinks: 用户原文件可解析符号链接；私有恢复记录直接拒绝链接。
+    /// - consume: 同步分块接收者，默认忽略；用于有限内存复制，不得保留块内指针。
     /// - permit: 请求仍有效的权限。
     /// 返回：精确基线和可选正文；任一身份或时间观察变化时失败。
     static func readEvidence(
@@ -78,6 +79,9 @@ extension FileStorage {
         maximumBytes: Int,
         maximumCaptureBytes: Int = Int.max,
         resolvingLinks: Bool = true,
+        consume: (UnsafeRawBufferPointer) throws -> Void = {
+            _ in
+        },
         permit: @Sendable () -> Bool
     ) throws -> FileReadEvidence {
         guard maximumBytes >= 0 else {
@@ -134,6 +138,7 @@ extension FileStorage {
                 }
                 let content = UnsafeRawBufferPointer(rebasing: bytes[..<amount])
                 hasher.update(bufferPointer: content)
+                try consume(content)
                 if collectBytes, data.count < maximumCaptureBytes {
                     data.append(
                         contentsOf: content.prefix(min(content.count, maximumCaptureBytes - data.count))
