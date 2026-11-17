@@ -55,6 +55,7 @@ extension RegexParser {
         case 81 where !inClass:
             let start = index
             while index < units.count {
+                try checkpoint()
                 if index + 1 < units.count, units[index] == 92, units[index + 1] == 69 {
                     let result = Array(units[start..<index])
                     index += 2
@@ -150,6 +151,7 @@ extension RegexParser {
         var kinds = ""
         var first = true
         while index < units.count && (units[index] != 93 || first) {
+            try checkpoint()
             first = false
             var node: RegexNode
             if index + 1 < units.count, units[index] == 91, units[index + 1] == 58 {

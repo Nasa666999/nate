@@ -17,6 +17,7 @@ extension SearchEngine {
         previous: Bool = false,
         continuingEmpty: Bool = false
     ) throws -> SearchResult {
+        try options.validateInput()
         guard let selected = snapshot.text.nsRange(selection) else {
             throw NateError.invalidRange
         }
@@ -84,6 +85,7 @@ extension SearchEngine {
         options: SearchOptions,
         selection: ByteRange
     ) throws -> SearchResult {
+        try options.validateInput()
         guard snapshot.text.nsRange(selection) != nil else {
             throw NateError.invalidRange
         }

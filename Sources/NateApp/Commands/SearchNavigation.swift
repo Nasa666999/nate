@@ -72,6 +72,12 @@ extension ApplicationController {
             guard let self else {
                 return
             }
+            // 只收回本请求的句柄，迟到完成不能清除新查询仍在使用的取消入口。
+            defer {
+                if generation == self.queryGeneration {
+                    self.searchTask = nil
+                }
+            }
             do {
                 let worker = Task.detached(priority: .userInitiated) {
                     let result =

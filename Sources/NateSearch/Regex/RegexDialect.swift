@@ -47,25 +47,44 @@ struct RegexParser {
     var groups: [Int: RegexNode] = [:]
     var referencedGroups: [Int] = []
     var referencedNames: [String] = []
+    var permit: @Sendable () -> Bool = {
+        true
+    }
+    var compileDeadline = ContinuousClock.now.advanced(by: .seconds(2))
+    var compileSteps = 0
 
     /// 业务作用：编译 Boost 风格表达式，非法语法在任何修改前失败。
     /// 参数说明:
     /// - pattern: 原始正则文本。
     /// - caseSensitive: 搜索界面给出的初始大小写规则。
     /// - dotMatchesNewline: 搜索界面给出的初始点号规则。
+    /// - permit: 调用方仍持有的计算权限，阻塞队列中也检查实际撤销。
     /// 返回：携带捕获和子程序定义的有界执行树。
     static func compile(
         _ pattern: String,
         caseSensitive: Bool,
-        dotMatchesNewline: Bool
+        dotMatchesNewline: Bool,
+        permit: @escaping @Sendable () -> Bool = {
+            true
+        }
     ) throws -> CompiledRegex {
+        try Task.checkCancellation()
+        // 在建立字符投影前限制输入并复验调用权，已撤销请求不能继续派生大块内存。
+        guard permit() else {
+            throw CancellationError()
+        }
+        guard pattern.utf8.count <= 1_048_576 else {
+            throw NateError.message("正则表达式超过 1 MiB UTF-8 输入限额。")
+        }
         var parser = RegexParser(
             units: Array(pattern.utf16),
-            modes: RegexModes(sensitive: caseSensitive, dot: dotMatchesNewline)
+            modes: RegexModes(
+                sensitive: caseSensitive,
+                dot: dotMatchesNewline
+            ),
+            permit: permit
         )
-        guard parser.units.count <= 1_000_000 else {
-            throw NateError.message("表达式超过 1 MB 限额。")
-        }
+        try parser.checkpoint(force: true)
         let root = try parser.expression(depth: 0)
         guard parser.index == parser.units.count else {
             throw NateError.message("正则位置 \(parser.index + 1)：括号不匹配。")
@@ -80,7 +99,33 @@ struct RegexParser {
         else {
             throw parser.diagnostic("引用指向不存在的捕获")
         }
-        return CompiledRegex(root: root, names: parser.names, groups: parser.groups)
+        try parser.checkpoint(force: true)
+        return CompiledRegex(
+            root: root,
+            names: parser.names,
+            groups: parser.groups
+        )
+    }
+
+    /// 业务作用：编译扫描与树构建共用有界预算，注释、字符类和引用块也不能绕过取消。
+    /// 参数说明:
+    /// - force: 是否立即复验显式令牌及实际截止。
+    /// 返回：超过 262144 个扫描步骤、两秒截止或失去调用权时停止编译，不进入匹配阶段。
+    mutating func checkpoint(force: Bool = false) throws {
+        compileSteps += 1
+        guard compileSteps <= 262_144 else {
+            throw NateError.message("正则编译超过 262144 个扫描步骤预算。")
+        }
+        if force || compileSteps & 255 == 0 {
+            try Task.checkCancellation()
+            // I/O 队列不继承 Swift Task 的取消上下文，显式令牌必须在解析器内部独立复验。
+            guard permit() else {
+                throw CancellationError()
+            }
+            guard ContinuousClock.now < compileDeadline else {
+                throw NateError.message("正则编译超过 2 秒预算。")
+            }
+        }
     }
 
     /// 业务作用：解析分支和串联，限制表达式嵌套避免栈耗尽。
@@ -98,6 +143,7 @@ struct RegexParser {
         var branches: [RegexNode] = []
         var sequence: [RegexNode] = []
         while index < units.count {
+            try checkpoint()
             try skipTrivia()
             guard index < units.count, units[index] != 41 else {
                 break
@@ -173,11 +219,13 @@ struct RegexParser {
     /// 返回：停在下一个语法单元；内联注释没有终止符时消费剩余表达式。
     mutating func skipTrivia() throws {
         while index < units.count {
+            try checkpoint()
             if index + 2 < units.count, units[index] == 40,
                 units[index + 1] == 63, units[index + 2] == 35
             {
                 index += 3
                 while index < units.count, units[index] != 41 {
+                    try checkpoint()
                     index += 1
                 }
                 _ = take(41)
@@ -187,6 +235,7 @@ struct RegexParser {
             }
             else if modes.extended, units[index] == 35 {
                 while index < units.count, ![10, 13].contains(units[index]) {
+                    try checkpoint()
                     index += 1
                 }
             }
@@ -245,6 +294,7 @@ struct RegexParser {
     mutating func readUntil(_ end: UInt16) throws -> String {
         let start = index
         while index < units.count && units[index] != end {
+            try checkpoint()
             index += 1
         }
         let value = String(decoding: units[start..<index], as: UTF16.self)

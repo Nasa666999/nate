@@ -8,21 +8,32 @@ public enum SearchEngine {
     /// - options: 搜索文本、方言及开关。
     /// - scope: 显式限定范围；选区限制失效时不扩大到全文。
     /// - enumeration: 批量、导航或排除空匹配的继续规则。
+    /// - permit: 显式调用权限，为假时取消底层计算，适用于独立 I/O 队列。
     /// 返回：完整命中列表；错误、取消和超限均以失败返回。
     public static func find(
         in snapshot: DocumentSnapshot,
         options: SearchOptions,
         scope: ByteRange? = nil,
-        enumeration: SearchEnumeration = .batch
+        enumeration: SearchEnumeration = .batch,
+        permit: @escaping @Sendable () -> Bool = {
+            true
+        }
     ) throws -> SearchResult {
-        try find(
+        try Task.checkCancellation()
+        // 原请求撤销后不再建立全文派生投影，避免迟到工作继续增加快照的内存占用。
+        guard permit() else {
+            throw CancellationError()
+        }
+        try options.validateInput()
+        return try find(
             in: snapshot,
             input: Array(snapshot.text.text().utf16),
             options: options,
             scope: scope,
             firstOnly: false,
             allowEmpty: true,
-            enumeration: enumeration
+            enumeration: enumeration,
+            permit: permit
         )
     }
 
@@ -37,6 +48,7 @@ public enum SearchEngine {
     /// - enumeration: 相邻匹配和末尾边界的继续规则。
     /// - limitContextToScope: 为真时断言和全文终点受目标终点约束；结构规则可保留完整正文上下文。
     /// - allowEmptyAtStart: 是否接受本次调用起点的空匹配；已选中的空命中继续导航时关闭。
+    /// - permit: 在解析、匹配及边界内持续复验的显式调用权限。
     /// 返回：与同一正文身份关联的搜索结果。
     static func find(
         in snapshot: DocumentSnapshot,
@@ -47,11 +59,17 @@ public enum SearchEngine {
         allowEmpty: Bool,
         enumeration: SearchEnumeration = .batch,
         limitContextToScope: Bool = true,
-        allowEmptyAtStart: Bool = true
-    ) throws -> SearchResult {
-        guard !options.query.isEmpty else {
-            throw NateError.message("请输入查找内容。")
+        allowEmptyAtStart: Bool = true,
+        permit: @escaping @Sendable () -> Bool = {
+            true
         }
+    ) throws -> SearchResult {
+        try Task.checkCancellation()
+        // 共享投影调用也可能来自独立队列，不能因跳过外层入口而跳过权限门禁。
+        guard permit() else {
+            throw CancellationError()
+        }
+        try options.validateInput()
         if options.selectionOnly && (scope == nil || scope?.isEmpty == true) {
             throw NateError.message("选区限制已启用，但没有有效选区。")
         }
@@ -64,19 +82,22 @@ public enum SearchEngine {
                 input: input,
                 range: range,
                 options: options,
-                firstOnly: firstOnly
+                firstOnly: firstOnly,
+                permit: permit
             )
         }
         let compiled = try RegexParser.compile(
             options.query,
             caseSensitive: options.caseSensitive,
-            dotMatchesNewline: options.dotMatchesNewline
+            dotMatchesNewline: options.dotMatchesNewline,
+            permit: permit
         )
         var matcher = CancellableMatcher(
             input: input,
             compiled: compiled,
             limit: options.stepLimit,
-            deadline: ContinuousClock.now.advanced(by: .seconds(3))
+            deadline: ContinuousClock.now.advanced(by: .seconds(3)),
+            permit: permit
         )
         let end = range.location + range.length
         let captureCount = compiled.groups.keys.max() ?? 0
@@ -197,8 +218,15 @@ public enum SearchEngine {
     /// 参数说明:
     /// - result: 对应快照的匹配结果。
     /// - snapshot: 原始正文与捕获上下文。
+    /// - permit: 调用方仍然持有的替换计划权限。
     /// 返回：所有替换均使用原匹配，不重新搜索生成内容；范围、取消、格式及膨胀预算失败时不产生部分计划。
-    public static func replacementPlan(_ result: SearchResult, snapshot: DocumentSnapshot) throws
+    public static func replacementPlan(
+        _ result: SearchResult,
+        snapshot: DocumentSnapshot,
+        permit: @escaping @Sendable () -> Bool = {
+            true
+        }
+    ) throws
         -> [TextEdit]
     {
         guard result.documentID == snapshot.id, result.revision == snapshot.revision else {
@@ -207,7 +235,7 @@ public enum SearchEngine {
         guard result.options.replacement.utf8.count <= ReplacementBudget.formatLimit else {
             throw NateError.message("替换格式超过 1 MiB；请输入完整且不超过上限的格式。")
         }
-        var budget = ReplacementBudget()
+        var budget = ReplacementBudget(permit: permit)
         try budget.checkpoint(force: true)
         var edits: [TextEdit] = []
         var outputBytes = 0

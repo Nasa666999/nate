@@ -47,13 +47,22 @@ extension ApplicationController {
             guard let self else {
                 return
             }
+            // 只收回本请求的句柄，迟到完成不能清除新查询仍在使用的取消入口。
+            defer {
+                if generation == self.queryGeneration {
+                    self.searchTask = nil
+                }
+            }
             do {
                 let (plans, failures) = try await reader.readCancellable {
                     token in
                     let matcher = FileFilters(filters)
                     _ = try SearchEngine.find(
                         in: DocumentSnapshot(id: UUID(), revision: 0, text: PieceTree()),
-                        options: options
+                        options: options,
+                        permit: {
+                            !token.isCancelled
+                        }
                     )
                     let listing = try DirectoryTraversal.listing(
                         under: root,
@@ -98,11 +107,23 @@ extension ApplicationController {
                                 ((!options.ignoreOpenBuffers || replacing)
                                     ? opened[loaded.baseline.resolvedPath] : nil)
                                 ?? DocumentSnapshot(id: UUID(), revision: 0, text: loaded.tree)
-                            let result = try SearchEngine.find(in: snapshot, options: options)
+                            let result = try SearchEngine.find(
+                                in: snapshot,
+                                options: options,
+                                permit: {
+                                    !token.isCancelled
+                                }
+                            )
                             if !result.hits.isEmpty {
                                 let edits =
                                     replacing
-                                    ? try SearchEngine.replacementPlan(result, snapshot: snapshot) : []
+                                    ? try SearchEngine.replacementPlan(
+                                        result,
+                                        snapshot: snapshot,
+                                        permit: {
+                                            !token.isCancelled
+                                        }
+                                    ) : []
                                 let prepared =
                                     replacing && opened[loaded.baseline.resolvedPath] != nil
                                     ? try PreparedTransaction(snapshot: snapshot, edits: edits, name: "文件中替换")

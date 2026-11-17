@@ -102,6 +102,7 @@ extension RegexParser {
                 let outerModes = modes
                 var enabled = true
                 while index < units.count && units[index] != 58 && units[index] != 41 {
+                    try checkpoint()
                     let flag = units[index]
                     index += 1
                     if flag == 45 {

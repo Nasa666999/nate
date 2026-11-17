@@ -26,6 +26,9 @@ struct CancellableMatcher {
     var restart = RegexRestart.next
     var lastRegionPruned = false
     var lastRegionThen = false
+    var permit: @Sendable () -> Bool = {
+        true
+    }
     // 左侧真实正文可用于回看，前向证据仍不得越过本请求的上下文末端。
     var contextEnd: Int?
     var inputEnd: Int {
@@ -40,8 +43,12 @@ struct CancellableMatcher {
         guard steps <= limit else {
             throw NateError.message("搜索超过计算预算，请缩小范围或简化表达式。")
         }
-        if steps % 256 == 0 {
+        if steps == 1 || steps % 256 == 0 {
             try Task.checkCancellation()
+            // 阻塞队列中的匹配没有 Swift Task 取消上下文，显式权限失效也必须停止实际回溯。
+            guard permit() else {
+                throw CancellationError()
+            }
             guard ContinuousClock.now < deadline else {
                 throw NateError.message("搜索超过 3 秒预算。")
             }

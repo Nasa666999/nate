@@ -51,7 +51,9 @@ extension ApplicationController {
     ) {
         searchTask?.cancel()
         if action == "cancel" {
-            findWindow?.feedback.stringValue = "正在取消；已发布的文件修改会保留实际完成清单。"
+            findWindow?.feedback.stringValue =
+                searchTask == nil
+                ? "当前没有正在执行的搜索任务。" : "正在取消；已发布的文件修改会保留实际完成清单。"
             return
         }
         queryGeneration = UUID()
@@ -123,6 +125,12 @@ extension ApplicationController {
             [weak self] in
             guard let self else {
                 return
+            }
+            // 只收回本请求的句柄，迟到完成不能清除新查询仍在使用的取消入口。
+            defer {
+                if generation == self.queryGeneration {
+                    self.searchTask = nil
+                }
             }
             do {
                 let worker = Task.detached(priority: .userInitiated) {

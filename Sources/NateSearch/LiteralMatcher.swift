@@ -10,6 +10,7 @@ enum LiteralMatcher {
     /// - options: 大小写、全词与结果预算。
     /// - firstOnly: 是否在首个完整命中后停止。
     /// - backwards: 是否从范围终点倒向起点匹配，保留反向查找的重叠候选。
+    /// - permit: 显式调用权限，脱离 Swift Task 的队列同样据此停止计算。
     /// 返回：不交叠的字面命中，取消与超时明确失败。
     static func find(
         snapshot: DocumentSnapshot,
@@ -17,10 +18,20 @@ enum LiteralMatcher {
         range: NSRange,
         options: SearchOptions,
         firstOnly: Bool = false,
-        backwards: Bool = false
+        backwards: Bool = false,
+        permit: @escaping @Sendable () -> Bool = {
+            true
+        }
     )
         throws -> SearchResult
     {
+        try Task.checkCancellation()
+        // 显式撤销先于查询投影和前缀表分配，独立队列不能继续处理已经失效的动作。
+        guard permit() else {
+            throw CancellationError()
+        }
+        try options.validateInput()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         let query = options.mode == .extended ? ExtendedEscapes.decode(options.query) : options.query
         let units = Array(query.utf16)
         let pattern = (backwards ? Array(units.reversed()) : units).map {
@@ -33,6 +44,15 @@ enum LiteralMatcher {
         var j = 0
         if pattern.count > 1 {
             for i in 1..<pattern.count {
+                if i % 4096 == 0 {
+                    try Task.checkCancellation()
+                    guard permit() else {
+                        throw CancellationError()
+                    }
+                    guard ContinuousClock.now < deadline else {
+                        throw NateError.message("字面搜索超过 10 秒预算。")
+                    }
+                }
                 while j > 0 && pattern[i] != pattern[j] {
                     j = prefix[j - 1]
                 }
@@ -44,11 +64,13 @@ enum LiteralMatcher {
         }
         var hits: [SearchHit] = []
         j = 0
-        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         for offset in 0..<range.length {
             let i = backwards ? range.location + range.length - 1 - offset : range.location + offset
             if offset % 4096 == 0 {
                 try Task.checkCancellation()
+                guard permit() else {
+                    throw CancellationError()
+                }
                 guard ContinuousClock.now < deadline else {
                     throw NateError.message("字面搜索超过 10 秒预算。")
                 }

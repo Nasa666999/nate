@@ -7,15 +7,23 @@ struct ReplacementBudget {
     static let documentLimit = 1024 * 1024 * 1024
     static let formatLimit = 1024 * 1024
     let deadline: ContinuousClock.Instant
+    let permit: @Sendable () -> Bool
     var steps = 0
     var workBytes = 0
 
     /// 业务作用：整份替换计划共用计算预算，嵌套格式和多个命中不能分别取得新的完整额度。
     /// 参数说明:
     /// - deadline: 本份计划实际停止计算的时刻。
+    /// - permit: 调用方仍然持有的计划计算权限。
     /// 返回：未消耗的计划预算，不授予正文修改权限。
-    init(deadline: ContinuousClock.Instant = .now.advanced(by: .seconds(5))) {
+    init(
+        deadline: ContinuousClock.Instant = .now.advanced(by: .seconds(5)),
+        permit: @escaping @Sendable () -> Bool = {
+            true
+        }
+    ) {
         self.deadline = deadline
+        self.permit = permit
     }
 
     /// 业务作用：在格式扫描及原文读取边界执行真正的任务取消和截止检查。
@@ -29,6 +37,10 @@ struct ReplacementBudget {
         }
         if force || steps & 255 == 0 {
             try Task.checkCancellation()
+            // 文件队列撤销的是显式令牌，不能仅等待没有继承取消状态的外层任务。
+            guard permit() else {
+                throw CancellationError()
+            }
             guard ContinuousClock.now < deadline else {
                 throw NateError.message("替换计划超过计算截止时间。")
             }
