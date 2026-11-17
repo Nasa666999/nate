@@ -3,6 +3,7 @@ import NateCore
 import NatePlatform
 import NateSearch
 import NateStorage
+import NateUI
 
 extension ApplicationController {
     /// 业务作用：目录搜索优先使用已打开快照，文件替换先预览并保留原字节副本。
@@ -54,7 +55,7 @@ extension ApplicationController {
                 }
             }
             do {
-                let (plans, failures) = try await reader.readCancellable {
+                let (plans, failures, unmapped) = try await reader.readCancellable {
                     token in
                     let matcher = FileFilters(filters)
                     _ = try SearchEngine.find(
@@ -82,6 +83,9 @@ extension ApplicationController {
                     let all = listing.files
                     var failures = listing.failures
                     var plans: [DirectoryPlan] = []
+                    var preview = SearchResultPreviewBuilder(permit: {
+                        !token.isCancelled
+                    })
                     var identities: Set<String> = []
                     for url in all where matcher.accepts(url.lastPathComponent) {
                         try token.check()
@@ -126,8 +130,16 @@ extension ApplicationController {
                                     ) : []
                                 let prepared =
                                     replacing && opened[loaded.baseline.resolvedPath] != nil
-                                    ? try PreparedTransaction(snapshot: snapshot, edits: edits, name: "文件中替换")
+                                    ? try PreparedTransaction(
+                                        snapshot: snapshot,
+                                        edits: edits,
+                                        name: "文件中替换"
+                                    )
                                     : nil
+                                let rows =
+                                    replacing
+                                    ? []
+                                    : try preview.prepare(result.hits, text: snapshot.text, label: url.path)
                                 plans.append(
                                     DirectoryPlan(
                                         url: url,
@@ -135,13 +147,14 @@ extension ApplicationController {
                                         snapshot: snapshot,
                                         result: result,
                                         edits: edits,
-                                        prepared: prepared
+                                        prepared: prepared,
+                                        previews: rows
                                     )
                                 )
                             }
                         }
                         catch {
-                            if error is CancellationError {
+                            if error is CancellationError || error is SearchPreviewFailure {
                                 throw error
                             }
                             failures.append(url.path + "：" + error.localizedDescription)
@@ -150,7 +163,7 @@ extension ApplicationController {
                             }
                         }
                     }
-                    return (plans, failures)
+                    return (plans, failures, preview.unmappedCount)
                 }
                 try Task.checkCancellation()
                 guard !self.closing, generation == self.queryGeneration else {
@@ -270,14 +283,8 @@ extension ApplicationController {
                     else {
                         let fromDisk =
                             options.ignoreOpenBuffers || opened[plan.loaded.baseline.resolvedPath] == nil
-                        for hit in plan.result.hits {
-                            guard let range = hit.range else {
-                                continue
-                            }
-                            let line = plan.snapshot.text.lineNumber(at: range.lower)
-                            output.append(
-                                "\(plan.url.path):\(line + 1)  \(plan.snapshot.text.text(in: plan.snapshot.text.lineRange(line, includeEnding: false)).prefix(500))"
-                            )
+                        for row in plan.previews {
+                            output.append(row.text)
                             navigation.append(
                                 ResultNavigation(
                                     documentID: fromDisk
@@ -285,7 +292,7 @@ extension ApplicationController {
                                     revision: fromDisk
                                         ? nil : opened[plan.loaded.baseline.resolvedPath]?.revision,
                                     url: plan.url,
-                                    range: range,
+                                    range: row.range,
                                     diskBaseline: fromDisk ? plan.loaded.baseline : nil,
                                     diskEncoding: fromDisk ? plan.loaded.encoding : nil,
                                     authority: fromDisk ? nil : authorities[plan.snapshot.id]
@@ -304,7 +311,13 @@ extension ApplicationController {
                         "跳过 · " + $0
                     }
                 )
-                self.mainWindow?.showResults(output.joined(separator: "\n"), navigable: !replacing)
+                if output.isEmpty {
+                    output.append(unmapped > 0 ? "当前查询的 UTF-16 命中无法无损定位，请调整表达式。" : "当前查询没有匹配。")
+                }
+                self.mainWindow?.showResults(
+                    output.joined(separator: "\n"),
+                    navigable: !replacing && !navigation.isEmpty
+                )
                 if replacing {
                     let notStarted = plans.count - completedFiles - unconfirmedFiles
                     self.findWindow?.feedback.stringValue =
@@ -318,6 +331,9 @@ extension ApplicationController {
                         Task.isCancelled
                         ? "已取消；以上为实际完成清单。"
                         : "完成 · \(plans.count) 个命中文件，\(plans.reduce(0) { $0 + $1.result.hits.count }) 处。"
+                    if unmapped > 0 {
+                        self.findWindow?.feedback.stringValue += "其中 \(unmapped) 个 UTF-16 命中无法无损定位。"
+                    }
                 }
                 self.mainWindow?.editor.refresh()
                 self.refreshUI()
@@ -340,4 +356,5 @@ struct DirectoryPlan: Sendable {
     var result: SearchResult
     var edits: [TextEdit]
     var prepared: PreparedTransaction?
+    var previews: [SearchPreviewRow]
 }

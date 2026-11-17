@@ -101,7 +101,7 @@ extension ApplicationController {
                 (document.buffer.id, SearchDocumentAuthority(document))
             }
         )
-        let captured: [(DocumentSnapshot, ResolvedSearchScope)]
+        let captured: [(DocumentSnapshot, ResolvedSearchScope, String)]
         do {
             captured = try targets.map {
                 document in
@@ -113,7 +113,8 @@ extension ApplicationController {
                         snapshot: snapshot,
                         options: options,
                         selections: document.buffer.selections
-                    )
+                    ),
+                    document.url?.path ?? document.name
                 )
             }
         }
@@ -122,6 +123,7 @@ extension ApplicationController {
             return
         }
         let actualScope = captured.count == 1 ? captured[0].1.description : "\(captured.count) 个文档全文 · 正向"
+        let displaysResults = !action.hasPrefix("replace") && !["count", "mark"].contains(action)
         searchTask = Task {
             [weak self] in
             guard let self else {
@@ -135,9 +137,11 @@ extension ApplicationController {
             }
             do {
                 let worker = Task.detached(priority: .userInitiated) {
-                    try captured.map {
+                    var preview = SearchResultPreviewBuilder()
+                    let batches = try captured.map {
                         snapshot,
-                        scope in
+                        scope,
+                        label in
                         try Task.checkCancellation()
                         let result = try SearchEngine.find(
                             in: snapshot,
@@ -149,11 +153,19 @@ extension ApplicationController {
                             ? try SearchEngine.replacementPlan(result, snapshot: snapshot) : []
                         let prepared =
                             ["replaceAll", "replaceOpen"].contains(action)
-                            ? try PreparedTransaction(snapshot: snapshot, edits: edits, name: "全部替换") : nil
-                        return (snapshot, result, edits, prepared)
+                            ? try PreparedTransaction(
+                                snapshot: snapshot,
+                                edits: edits,
+                                name: "全部替换"
+                            ) : nil
+                        let rows =
+                            displaysResults
+                            ? try preview.prepare(result.hits, text: snapshot.text, label: label) : []
+                        return (snapshot, result, edits, prepared, rows)
                     }
+                    return (batches, preview.unmappedCount)
                 }
-                let batches = try await withTaskCancellationHandler(
+                let (batches, unmapped) = try await withTaskCancellationHandler(
                     operation: {
                         try await worker.value
                     },
@@ -168,7 +180,7 @@ extension ApplicationController {
                 }
                 var resolved: [UUID: WorkspaceDocument] = [:]
                 // 多文档动作先复验完整集合，再开始同步发布，避免后一个目标失效时前一个已经被改写。
-                for (snapshot, _, _, _) in batches {
+                for (snapshot, _, _, _, _) in batches {
                     guard
                         let document = self.documents.first(where: {
                             candidate in
@@ -189,7 +201,7 @@ extension ApplicationController {
                 var skipped = 0
                 var output: [String] = []
                 var navigation: [ResultNavigation] = []
-                for (snapshot, result, edits, prepared) in batches {
+                for (snapshot, result, edits, prepared, rows) in batches {
                     guard let document = resolved[snapshot.id] else {
                         throw NateError.staleRevision
                     }
@@ -217,21 +229,15 @@ extension ApplicationController {
                     }
                     else {
                         count += result.hits.count
-                        if action != "count" {
-                            for hit in result.hits {
-                                guard let range = hit.range else {
-                                    continue
-                                }
-                                let line = snapshot.text.lineNumber(at: range.lower)
-                                output.append(
-                                    "\(document.url?.path ?? document.name):\(line + 1)  \(snapshot.text.text(in: snapshot.text.lineRange(line, includeEnding: false)).prefix(500))"
-                                )
+                        if displaysResults {
+                            for row in rows {
+                                output.append(row.text)
                                 navigation.append(
                                     ResultNavigation(
                                         documentID: document.buffer.id,
                                         revision: snapshot.revision,
                                         url: document.url,
-                                        range: range,
+                                        range: row.range,
                                         authority: authorities[snapshot.id]
                                     )
                                 )
@@ -242,9 +248,14 @@ extension ApplicationController {
                 self.findWindow?.feedback.stringValue =
                     actualScope + " · "
                     + "\(action.hasPrefix("replace") ? "替换" : "匹配") \(count) 处。\(skipped > 0 ? "跳过 \(skipped) 个只读文档。" : "")"
-                if !output.isEmpty {
+                    + (unmapped > 0 ? "其中 \(unmapped) 个 UTF-16 命中无法无损定位。" : "")
+                if displaysResults {
                     self.resultNavigation = navigation
-                    self.mainWindow?.showResults(output.joined(separator: "\n"), navigable: true)
+                    let text =
+                        output.isEmpty
+                        ? (unmapped > 0 ? "当前查询的 UTF-16 命中无法无损定位，请调整表达式。" : "当前查询没有可导航匹配。")
+                        : output.joined(separator: "\n")
+                    self.mainWindow?.showResults(text, navigable: !navigation.isEmpty)
                 }
                 self.mainWindow?.refreshEditors()
                 self.refreshUI()
