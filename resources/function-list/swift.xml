@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NotepadPlus>
+  <functionList>
+    <parser id="nate_swift" displayName="Swift" commentExpr="(?s:/\*.*?\*/)|(?m-s://.*$)">
+      <function mainExpr="^\h*(?:(?:public|private|fileprivate|internal|open|static|class|final|override|mutating|nonmutating|nonisolated|distributed)\s+)*(?:func|class|struct|enum|protocol|actor|extension)\h+[^\r\n{]+">
+        <functionName><nameExpr expr="(?:func|class|struct|enum|protocol|actor|extension)\h+\K[^\r\n{]+" /></functionName>
+      </function>
+    </parser>
+  </functionList>
+</NotepadPlus>

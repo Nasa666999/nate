@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NotepadPlus>
+  <functionList>
+    <parser id="nate_markdown" displayName="Markdown" commentExpr="(?s:```.*?```)|(?s:~~~.*?~~~)|(?s:&lt;!--.*?--&gt;)">
+      <function mainExpr="^\h*#{1,6}\h+[^\r\n]+">
+        <functionName><nameExpr expr="#{1,6}\h+\K[^\r\n]+" /></functionName>
+      </function>
+    </parser>
+  </functionList>
+</NotepadPlus>

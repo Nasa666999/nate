@@ -8,8 +8,15 @@ enum LiteralMatcher {
     /// - input: 对应 UTF-16 单元。
     /// - range: 当前搜索范围。
     /// - options: 大小写、全词与结果预算。
+    /// - firstOnly: 是否在首个完整命中后停止。
     /// 返回：不交叠的字面命中，取消与超时明确失败。
-    static func find(snapshot: DocumentSnapshot, input: [UInt16], range: NSRange, options: SearchOptions)
+    static func find(
+        snapshot: DocumentSnapshot,
+        input: [UInt16],
+        range: NSRange,
+        options: SearchOptions,
+        firstOnly: Bool = false
+    )
         throws -> SearchResult
     {
         let query = options.mode == .extended ? ExtendedEscapes.decode(options.query) : options.query
@@ -65,6 +72,9 @@ enum LiteralMatcher {
                     )
                     guard hits.count <= options.maxMatches else {
                         throw NateError.message("命中超过结果上限，请缩小范围。")
+                    }
+                    if firstOnly {
+                        break
                     }
                     j = 0
                 }

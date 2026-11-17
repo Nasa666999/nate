@@ -18,6 +18,10 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var mainWindow: EditorWindow?
     var registry: LanguageRegistry?
     var completionCatalog: CompletionCatalog?
+    var functionListCatalog: FunctionListCatalog?
+    var structureTask: Task<Void, Never>?
+    var structureGeneration = UUID()
+    var structureRequestKey: String?
     var completionTask: Task<Void, Never>?
     var completionGeneration = UUID()
     var codecs: LegacyCodecCatalog?
@@ -165,6 +169,15 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             }
             catch {
                 SystemIntegration.alert("补全资源未载入", error.localizedDescription)
+            }
+            do {
+                let directory = SystemIntegration.resourceDirectory().appendingPathComponent("function-list")
+                functionListCatalog = try await fileIO.run {
+                    try FunctionListCatalog(directory: directory)
+                }
+            }
+            catch {
+                SystemIntegration.alert("函数列表资源未载入", error.localizedDescription)
             }
             await loadUserLanguages()
             for (record, tree) in restored.documents {
@@ -397,5 +410,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         window.status.stringValue =
             "  \(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(state)"
+        if window.isStructureVisible {
+            requestStructure()
+        }
     }
 }

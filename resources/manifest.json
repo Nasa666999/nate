@@ -386,7 +386,7 @@
     },
     {
       "path" : "function-list\/fortran77.xml",
-      "sha256" : "f4d8a82a10041b94db4e95716b5c8e865178cefef1497bbfdf72282aa52c4f87"
+      "sha256" : "a27f7e581663f13025e5968bdada8f5c9eb1de003f57d8b04644f19eadac9dcf"
     },
     {
       "path" : "function-list\/gdscript.xml",
@@ -431,6 +431,10 @@
     {
       "path" : "function-list\/makefile.xml",
       "sha256" : "ef5eafa03d5e7d473426441d1c76568587a5eed5be3908d8f83b98a5fd11c22d"
+    },
+    {
+      "path" : "function-list\/markdown.xml",
+      "sha256" : "581310e67f9cf6d2e6abd18c0dbf2996a17c07dfcbd50f97c893a87803de0560"
     },
     {
       "path" : "function-list\/nim.xml",
@@ -491,6 +495,10 @@
     {
       "path" : "function-list\/sql.xml",
       "sha256" : "e9ef87709abf7f19644563695eeff3b1675c0d393682ef721278391354fddb20"
+    },
+    {
+      "path" : "function-list\/swift.xml",
+      "sha256" : "adf42590b4f1d34da5f4b0f8932b5c29b248692b0e657895e8ca40009f75b542"
     },
     {
       "path" : "function-list\/tex.xml",

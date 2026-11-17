@@ -69,8 +69,13 @@ struct RegexParser {
         guard parser.index == parser.units.count else {
             throw NateError.message("正则位置 \(parser.index + 1)：括号不匹配。")
         }
-        guard parser.referencedGroups.allSatisfy({ $0 > 0 && $0 <= parser.count }),
-            parser.referencedNames.allSatisfy({ parser.names[$0] != nil })
+        guard
+            parser.referencedGroups.allSatisfy({
+                $0 > 0 && $0 <= parser.count
+            }),
+            parser.referencedNames.allSatisfy({
+                parser.names[$0] != nil
+            })
         else {
             throw parser.diagnostic("引用指向不存在的捕获")
         }
@@ -110,7 +115,10 @@ struct RegexParser {
                 sequence += literals.dropLast().map {
                     .flags(modes.sensitive, modes.dot, modes.multiline, .literal($0))
                 }
-                node = literals.last.map { .literal($0) } ?? .empty
+                node =
+                    literals.last.map {
+                        .literal($0)
+                    } ?? .empty
             }
             try skipTrivia()
             if index < units.count {

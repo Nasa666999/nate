@@ -50,7 +50,15 @@ struct CancellableMatcher {
         switch node {
         case .directive, .empty: return [state]
         case .quoted(let units):
-            return try run(.sequence(units.map { .literal($0) }), state, depth: depth + 1)
+            return try run(
+                .sequence(
+                    units.map {
+                        .literal($0)
+                    }
+                ),
+                state,
+                depth: depth + 1
+            )
         case .literal(let value):
             guard state.position < input.count,
                 equal(input[state.position], value, sensitive: state.sensitive)
@@ -114,14 +122,31 @@ struct CancellableMatcher {
                         } ?? false
                 case "v": hit = [10, 11, 12, 13, 0x85, 0x2028, 0x2029].contains(unit)
                 case "l":
-                    hit = Unicode.Scalar(unit).map { CharacterSet.lowercaseLetters.contains($0) } ?? false
+                    hit =
+                        Unicode.Scalar(unit).map {
+                            CharacterSet.lowercaseLetters.contains($0)
+                        } ?? false
                 case "u":
-                    hit = Unicode.Scalar(unit).map { CharacterSet.uppercaseLetters.contains($0) } ?? false
-                case "a": hit = Unicode.Scalar(unit).map { CharacterSet.letters.contains($0) } ?? false
-                case "n": hit = Unicode.Scalar(unit).map { CharacterSet.alphanumerics.contains($0) } ?? false
+                    hit =
+                        Unicode.Scalar(unit).map {
+                            CharacterSet.uppercaseLetters.contains($0)
+                        } ?? false
+                case "a":
+                    hit =
+                        Unicode.Scalar(unit).map {
+                            CharacterSet.letters.contains($0)
+                        } ?? false
+                case "n":
+                    hit =
+                        Unicode.Scalar(unit).map {
+                            CharacterSet.alphanumerics.contains($0)
+                        } ?? false
                 case "t": hit = unit == 9 || unit == 32
                 case "c":
-                    hit = Unicode.Scalar(unit).map { CharacterSet.controlCharacters.contains($0) } ?? false
+                    hit =
+                        Unicode.Scalar(unit).map {
+                            CharacterSet.controlCharacters.contains($0)
+                        } ?? false
                 case "g": hit = unit > 32 && unit != 127
                 case "p": hit = unit >= 32 && unit != 127
                 case "q":
@@ -134,7 +159,10 @@ struct CancellableMatcher {
                 default: break
                 }
                 if !state.sensitive && (lower == "l" || lower == "u") {
-                    hit = Unicode.Scalar(unit).map { CharacterSet.letters.contains($0) } ?? false
+                    hit =
+                        Unicode.Scalar(unit).map {
+                            CharacterSet.letters.contains($0)
+                        } ?? false
                 }
                 matches = matches || (String(kind) == lower ? hit : !hit)
             }
@@ -212,7 +240,11 @@ struct CancellableMatcher {
             guard let ids = compiled.names[name] else {
                 throw NateError.message("未知正则捕获名称。")
             }
-            guard let id = ids.first(where: { state.captures[$0] != nil }) else {
+            guard
+                let id = ids.first(where: {
+                    state.captures[$0] != nil
+                })
+            else {
                 return []
             }
             return try run(.reference(id), state, depth: depth + 1)
@@ -265,7 +297,9 @@ struct CancellableMatcher {
             case .capture(let id): accepted = state.captures[id] != nil ? state : nil
             case .named(let name):
                 accepted =
-                    compiled.names[name]?.contains(where: { state.captures[$0] != nil }) == true ? state : nil
+                    compiled.names[name]?.contains(where: {
+                        state.captures[$0] != nil
+                    }) == true ? state : nil
             case .assertion(let assertion):
                 accepted = try run(assertion, state, depth: depth + 1).first
             case .definition: accepted = nil

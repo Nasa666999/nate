@@ -240,6 +240,9 @@ extension ApplicationController: NSMenuItemValidation {
         if id == "symbols" {
             menuItem.state = mainWindow?.editor.showSymbols == true ? .on : .off
         }
+        if id == "symbolsList" {
+            menuItem.state = mainWindow?.isStructureVisible == true ? .on : .off
+        }
         if id == "recordMacro" {
             menuItem.state = macroRecording ? .on : .off
         }

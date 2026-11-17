@@ -42,6 +42,7 @@ extension ApplicationController {
         closing = true
         readIO.cancelReads()
         cancelCompletion()
+        cancelStructure()
         mainWindow?.editor.finishComposition()
         let protectedDocuments = documents
         for document in protectedDocuments {

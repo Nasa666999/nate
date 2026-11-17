@@ -56,6 +56,11 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     let scroll = NSScrollView()
     let split = NSSplitView()
     let editorSplit = NSSplitView()
+    let workspaceSplit = NSSplitView()
+    public let structurePanel = StructurePanel(frame: .zero)
+    public var isStructureVisible: Bool {
+        !structurePanel.isHidden
+    }
     let resultsScroll = NSScrollView()
     let toolbarStack = NSStackView()
     var scrollPositions: [UUID: NSPoint] = [:]
@@ -134,7 +139,20 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         editorSplit.isVertical = true
         editorSplit.dividerStyle = .thin
         editorSplit.addArrangedSubview(scroll)
-        split.addArrangedSubview(editorSplit)
+        workspaceSplit.isVertical = true
+        workspaceSplit.dividerStyle = .thin
+        workspaceSplit.addArrangedSubview(editorSplit)
+        workspaceSplit.addArrangedSubview(structurePanel)
+        // 尺寸保持优先级低于系统拖动约束，侧栏才能保留初始宽度并允许用户调整。
+        workspaceSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
+        structurePanel.isHidden = true
+        structurePanel.onRefresh = {
+            [weak self] in self?.onCommand?("refreshStructure")
+        }
+        structurePanel.onClose = {
+            [weak self] in self?.onCommand?("closeStructure")
+        }
+        split.addArrangedSubview(workspaceSplit)
         results.isEditable = false
         results.onActivate = {
             [weak self] row in self?.onResult?(row)
@@ -252,6 +270,20 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         results.string = text
         resultsScroll.isHidden = false
         split.setPosition(max(200, split.bounds.height - 190), ofDividerAt: 0)
+    }
+
+    /// 业务作用：侧栏与克隆编辑区分别占用独立分隔区域，关闭侧栏不改变共享正文关系。
+    /// 参数说明:
+    /// - visible: 是否展示函数列表。
+    /// 返回：显示时分配可调整宽度，编辑视图按实际剩余空间重新排版。
+    public func setStructureVisible(_ visible: Bool) {
+        structurePanel.isHidden = !visible
+        window?.contentView?.layoutSubtreeIfNeeded()
+        workspaceSplit.adjustSubviews()
+        if visible {
+            workspaceSplit.setPosition(max(280, workspaceSplit.bounds.width - 280), ofDividerAt: 0)
+        }
+        refreshEditors()
     }
 
     /// 业务作用：将工具栏入口交给同一命令路由。

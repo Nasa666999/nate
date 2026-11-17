@@ -222,48 +222,4 @@ extension ApplicationController {
         }
     }
 
-    /// 业务作用：从当前语言的代码结构提取可导航列表，无适用规则时明确反馈。
-    /// 参数说明: 无。
-    /// 返回：命中行以完整快照身份导航。
-    func showSymbols() {
-        guard let active else {
-            return
-        }
-        let definitions: [String: String] = [
-            "swift":
-                #"^\s*(?:(?:public|private|internal|static|final|override)\s+)*(?:func|class|struct|enum|protocol|actor)\s+([\w]+)"#,
-            "rust": #"^\s*(?:pub\s+)?(?:async\s+)?(?:fn|struct|enum|trait|impl|mod)\s+([\w]+)"#,
-            "python": #"^\s*(?:async\s+)?(?:def|class)\s+([\w]+)"#,
-            "javascript.js": #"^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const|let)\s+([\w]+)"#,
-            "markdown": #"^#{1,6}\s+(.+)"#, "ini": #"^\s*\[(.+)\]"#, "toml": #"^\s*\[(.+)\]"#,
-        ]
-        guard let pattern = definitions[active.language],
-            let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines])
-        else {
-            SystemIntegration.alert("函数列表", "当前语言尚无适用的结构提取规则。正文、搜索和高亮仍可使用。")
-            return
-        }
-        let tree = active.buffer.text
-        let source = tree.text()
-        let matches = regex.matches(in: source, range: NSRange(location: 0, length: source.utf16.count))
-        var output: [String] = []
-        resultNavigation = matches.compactMap {
-            hit in
-            guard let range = tree.byteRange(hit.range) else {
-                return nil
-            }
-            let row = tree.lineNumber(at: range.lower)
-            output.append("\(row + 1)  \(tree.text(in: tree.lineRange(row, includeEnding: false)))")
-            return ResultNavigation(
-                documentID: active.buffer.id,
-                revision: active.buffer.revision,
-                url: active.url,
-                range: range
-            )
-        }
-        mainWindow?.showResults(
-            output.isEmpty ? "没有找到适用结构。" : output.joined(separator: "\n"),
-            navigable: !output.isEmpty
-        )
-    }
 }

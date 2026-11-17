@@ -13,6 +13,33 @@ public enum SearchEngine {
         options: SearchOptions,
         scope: ByteRange? = nil
     ) throws -> SearchResult {
+        try find(
+            in: snapshot,
+            input: Array(snapshot.text.text().utf16),
+            options: options,
+            scope: scope,
+            firstOnly: false,
+            allowEmpty: true
+        )
+    }
+
+    /// 业务作用：复用固定正文的 UTF-16 投影执行多条结构规则，避免每个名称层级复制全文。
+    /// 参数说明:
+    /// - snapshot: 已提交正文快照。
+    /// - input: 与快照一致的 UTF-16 投影。
+    /// - options: 当前表达式与预算。
+    /// - scope: 本条规则可消费的字节范围。
+    /// - firstOnly: 是否在第一个完整命中后结束。
+    /// - allowEmpty: 是否发布零长度命中；结构提取只接受非空名称。
+    /// 返回：与同一正文身份关联的搜索结果。
+    static func find(
+        in snapshot: DocumentSnapshot,
+        input: [UInt16],
+        options: SearchOptions,
+        scope: ByteRange?,
+        firstOnly: Bool,
+        allowEmpty: Bool
+    ) throws -> SearchResult {
         guard !options.query.isEmpty else {
             throw NateError.message("请输入查找内容。")
         }
@@ -22,30 +49,20 @@ public enum SearchEngine {
         guard let range = snapshot.text.nsRange(scope ?? ByteRange(0, snapshot.text.byteCount)) else {
             throw NateError.invalidRange
         }
-        let input = Array(snapshot.text.text().utf16)
         if options.mode != .regex {
-            return try LiteralMatcher.find(snapshot: snapshot, input: input, range: range, options: options)
-        }
-        let compiled: CompiledRegex
-        if options.mode == .regex {
-            compiled = try RegexParser.compile(
-                options.query,
-                caseSensitive: options.caseSensitive,
-                dotMatchesNewline: options.dotMatchesNewline
+            return try LiteralMatcher.find(
+                snapshot: snapshot,
+                input: input,
+                range: range,
+                options: options,
+                firstOnly: firstOnly
             )
         }
-        else {
-            let query = options.mode == .extended ? ExtendedEscapes.decode(options.query) : options.query
-            compiled = CompiledRegex(
-                root: .sequence(
-                    query.utf16.map {
-                        .literal($0)
-                    }
-                ),
-                names: [:],
-                groups: [:]
-            )
-        }
+        let compiled = try RegexParser.compile(
+            options.query,
+            caseSensitive: options.caseSensitive,
+            dotMatchesNewline: options.dotMatchesNewline
+        )
         var matcher = CancellableMatcher(
             input: input,
             compiled: compiled,
@@ -74,6 +91,10 @@ public enum SearchEngine {
             if let state = try matcher.run(compiled.root, initial).first(where: {
                 $0.position <= end
             }) {
+                if !allowEmpty && state.start == state.position {
+                    position = max(position + 1, state.position + 1)
+                    continue
+                }
                 // 断言中的起点重置可能形成反向范围，不能把它作为可写命中发布给正文事务。
                 guard state.start <= state.position else {
                     throw NateError.message("表达式产生反向匹配范围，请将 \\K 移出前向断言。")
@@ -92,8 +113,11 @@ public enum SearchEngine {
                             utf16Range: matched,
                             range: snapshot.text.byteRange(matched),
                             captures: captures,
-                            names: compiled.names.mapValues { ids in
-                                ids.first(where: { captures[$0] != nil }) ?? ids[0]
+                            names: compiled.names.mapValues {
+                                ids in
+                                ids.first(where: {
+                                    captures[$0] != nil
+                                }) ?? ids[0]
                             }
                         )
                     )
@@ -101,6 +125,9 @@ public enum SearchEngine {
                         throw NateError.message("命中超过结果上限，请缩小搜索范围。")
                     }
                     lastEnd = state.position
+                    if firstOnly {
+                        break
+                    }
                     position = state.position > position ? state.position : position + 1
                     continue
                 }
