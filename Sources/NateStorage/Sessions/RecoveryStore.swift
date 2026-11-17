@@ -134,17 +134,25 @@ public struct RecoveryStore: Sendable {
     /// 业务作用：将恢复内容固定到可写的用户数据目录。
     /// 参数说明:
     /// - directory: 本实例专属恢复目录。
-    /// 返回：不依赖应用包位置的恢复存储。
+    /// 返回：不依赖应用包位置的恢复存储；无效目录保留原证据，实际访问时明确拒绝。
     public init(directory: URL) {
-        self.directory = directory.resolvingSymlinksInPath().standardizedFileURL
+        do {
+            try FileStorage.validateFileURL(directory)
+            self.directory = directory.resolvingSymlinksInPath().standardizedFileURL
+        }
+        catch {
+            // 无效输入不能先被转成可写的其它目录，后续读写仍依据原始 URL 拒绝。
+            self.directory = directory
+        }
     }
 
-    /// 业务作用：为显式传入完整字符串的调用者建立分块检查点，正文树调用方使用流式入口。
+    /// 业务作用：在恢复目录合法时为完整字符串建立分块检查点，正文树调用方使用流式入口。
     /// 参数说明:
     /// - document: 已提交文档及恢复元数据。
     /// 返回：内容分块和清单已同步后的引用，不发布工作区索引。
     public func checkpoint(_ document: RecoveryDocument) throws -> RecoveryReference {
-        try checkpoint(metadata: document, text: PieceTree(document.text))
+        try FileStorage.validateFileURL(directory)
+        return try checkpoint(metadata: document, text: PieceTree(document.text))
     }
 
     /// 业务作用：为需要完整字符串的调用者读取已验证恢复内容，应用编辑流程直接取得正文树。

@@ -8,6 +8,7 @@ extension RecoveryStore {
     /// - active: 活动文档身份，可为空。
     /// 返回：新索引已同步或既有相同字节已复验；未知格式和损坏依赖不会被自动覆盖。
     public func publish(_ references: [RecoveryReference], active: UUID?) throws {
+        try FileStorage.validateFileURL(directory)
         let deadline = ContinuousClock.now.advanced(by: RecoveryLimits.processingTime)
         try validateReferences(references, deadline: deadline)
         guard

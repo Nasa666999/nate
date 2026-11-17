@@ -224,6 +224,7 @@ extension RecoveryStore {
     /// 参数说明: 无。
     /// 返回：建立私有目录，既有非目录或符号链接被拒绝。
     private func prepareRecoveryDirectory() throws {
+        try FileStorage.validateFileURL(directory)
         try FileManager.default.createDirectory(
             at: directory,
             withIntermediateDirectories: true,

@@ -24,6 +24,11 @@ extension ApplicationController {
             findWindow?.feedback.stringValue = "请先填写明确的搜索目录。"
             return
         }
+        // 路径在构造 URL 之前就拒绝 NUL，不能把无效目录默默转换为包含 %00 的另一目录。
+        guard !directory.utf8.contains(0) else {
+            findWindow?.feedback.stringValue = "搜索目录不能包含 NUL。"
+            return
+        }
         let root = URL(fileURLWithPath: directory, isDirectory: true)
         let generation = queryGeneration
         let authorities = Dictionary(

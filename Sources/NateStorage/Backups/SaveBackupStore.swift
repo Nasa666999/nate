@@ -11,10 +11,18 @@ public struct SaveBackupStore: Sendable {
     /// 业务作用：将保存前的原始字节固定在应用支持目录，不把备份写入用户原目录。
     /// 参数说明:
     /// - directory: 独立于工作区恢复内容的私有目录。
-    /// 返回：可跨后台线程使用的存储入口，事务由目录锁串行化。
+    /// 返回：可跨后台线程使用的存储入口；无效目录保留原证据并在访问时拒绝，事务由目录锁串行化。
     public init(directory: URL) {
-        self.directory = directory.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL
-            .appendingPathComponent(directory.lastPathComponent, isDirectory: true)
+        do {
+            try FileStorage.validateFileURL(directory)
+            self.directory = directory.deletingLastPathComponent().resolvingSymlinksInPath()
+                .standardizedFileURL
+                .appendingPathComponent(directory.lastPathComponent, isDirectory: true)
+        }
+        catch {
+            // 无效原路径不能先规范化成另一个合法名称，保留原 URL 供每次实际访问拒绝。
+            self.directory = directory
+        }
     }
 
     /// 业务作用：覆盖原文件之前先持久化经相同磁盘基线确认的原始字节和可浏览索引。
@@ -38,6 +46,7 @@ public struct SaveBackupStore: Sendable {
         guard policy.mode != .disabled else {
             return
         }
+        try FileStorage.validateFileURL(url)
         try withDirectoryLock(create: true, permit: permit) {
             let current = try readIndex(permit: permit)
             try validateDependencies(current.index.entries, permit: permit)

@@ -33,6 +33,11 @@ public enum DirectoryTraversal {
             true
         }
     ) throws -> DirectoryListing {
+        // 创建枚举器本身也可能访问外部目录，失权请求必须在建立遍历之前停止。
+        guard permit() else {
+            throw CancellationError()
+        }
+        try FileStorage.validateFileURL(root)
         let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .isPackageKey]
         var failures: [String] = []
         var options: FileManager.DirectoryEnumerationOptions = [.skipsPackageDescendants]

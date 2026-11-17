@@ -4,13 +4,13 @@ import NatePlatform
 import NateStorage
 
 extension ApplicationController {
-    /// 业务作用：所有打开入口按真实文件身份去重，避免竞争自动保存。
+    /// 业务作用：所有打开入口先验证文件 URL，再按真实身份去重，避免错误路径访问和竞争自动保存。
     /// 参数说明:
     /// - url: Finder、对话框或 CLI 提供的路径。
     /// - explicitEncoding: 用户选择的重新解释代码页。
     /// - activateOnOpen: 是否在读取完成后立即激活；异步结果导航可先建立后台标签再复验自己的焦点权限。
     /// - permit: 主执行域中的发布权限，失效时不添加标签、改变焦点或发布迟到错误。
-    /// 返回：实际打开的文档；失败返回空，不误用先前的活动标签。
+    /// 返回：实际打开的文档；无效 URL 在类型探测前拒绝，失败返回空，不误用先前活动标签。
     @discardableResult
     func openFile(
         _ url: URL,
@@ -25,8 +25,10 @@ extension ApplicationController {
             return nil
         }
         let catalog = codecs
-        mainWindow?.status.stringValue = "正在读取 · " + url.lastPathComponent + " · 可在工具菜单取消读取"
         do {
+            // 文件类型探测也会访问目标，必须先验证原始 URL，不能先查询被转义成另一名称的路径。
+            try FileStorage.validateFileURL(url)
+            mainWindow?.status.stringValue = "正在读取 · " + url.lastPathComponent + " · 可在工具菜单取消读取"
             // 类型探测也可能等待外置盘或系统授权，必须使用有界读取通道而不阻塞主事件循环。
             let directory = try await readIO.readCancellable {
                 token in

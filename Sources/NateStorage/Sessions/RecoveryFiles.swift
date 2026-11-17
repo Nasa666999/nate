@@ -53,6 +53,8 @@ extension RecoveryStore {
     /// - url: 待访问文件或分块目录。
     /// 返回：可信父目录；存在符号链接改向时拒绝。
     func recoveryParent(_ url: URL) throws -> URL {
+        try FileStorage.validateFileURL(directory)
+        try FileStorage.validateFileURL(url)
         let parent = url.deletingLastPathComponent().standardizedFileURL
         guard parent.path == directory.path || parent.path == chunksDirectory.path,
             parent.resolvingSymlinksInPath().standardizedFileURL.path == parent.path

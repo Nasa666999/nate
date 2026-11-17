@@ -22,6 +22,7 @@ extension SaveBackupStore {
         guard permit() else {
             throw CancellationError()
         }
+        try FileStorage.validateFileURL(directory)
         if try item(directory) == nil {
             guard create else {
                 return try operation()

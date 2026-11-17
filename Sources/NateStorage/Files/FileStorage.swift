@@ -119,6 +119,7 @@ public enum FileStorage {
         guard permit() else {
             throw CancellationError()
         }
+        try validateFileURL(url)
         observe(.checkingBaseline)
         let target =
             expected.map {

@@ -32,6 +32,7 @@ extension FileStorage {
     /// - url: 当前绑定的原始路径，符号链接每次重新解析。
     /// 返回：包含纳秒修改与状态时间的观察标记；缺失目标明确失败。
     public static func stamp(_ url: URL) throws -> FileStamp {
+        try validateFileURL(url)
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
         var value = stat()
         guard stat(resolved.path, &value) == 0 else {

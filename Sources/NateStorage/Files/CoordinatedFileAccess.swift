@@ -55,9 +55,9 @@ public struct CoordinatedFileAccess: Sendable {
     /// 业务作用：由应用装配平台协调，实现存储模块对 macOS 机制的单向依赖。
     /// 参数说明:
     /// - coordinator: 线程安全的平台适配器。
-    /// 返回：不可变文件访问入口，后台请求分别建立自己的协调上下文。
+    /// 返回：包含原始 URL 门禁的不可变文件入口，后台请求分别建立自己的协调上下文。
     public init(coordinator: any FileCoordinating) {
-        self.coordinator = coordinator
+        self.coordinator = ValidatedFileCoordinator(base: coordinator)
     }
 
     /// 业务作用：在同一协调和文件证据范围内读取原始资源字节，解析后可沿用其真实基线。

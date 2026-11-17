@@ -90,6 +90,7 @@ extension FileStorage {
         guard permit() else {
             throw CancellationError()
         }
+        try validateFileURL(url)
         let resolved =
             resolvingLinks ? url.resolvingSymlinksInPath().standardizedFileURL : url.standardizedFileURL
         let descriptor = Darwin.open(resolved.path, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW)

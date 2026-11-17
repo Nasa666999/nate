@@ -14,6 +14,7 @@ public struct LegacyCodecCatalog: Sendable {
     /// - directory: 由应用资源定位器注入的编码资源目录。
     /// 返回：不可变转换表；损坏或重复映射在发布前失败。
     public init(directory: URL) throws {
+        try FileStorage.validateFileURL(directory)
         var tables: [UInt32: LegacyCodePage] = [:]
         for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         where url.pathExtension == "bin" {

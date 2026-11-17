@@ -57,6 +57,8 @@ extension ApplicationController {
                 ? "当前没有正在执行的搜索任务。" : "正在取消；已发布的文件修改会保留实际完成清单。"
             return
         }
+        // 新请求即使在参数校验时被拒绝，也不能继续把旧的已取消句柄当作当前搜索。
+        searchTask = nil
         queryGeneration = UUID()
         let generation = queryGeneration
         // 退出收束已经撤销新的正文发布权，后台搜索入口不能重新授予它。
@@ -91,6 +93,7 @@ extension ApplicationController {
             alert.addButton(withTitle: "替换")
             alert.addButton(withTitle: "取消")
             guard alert.runModal() == .alertFirstButtonReturn else {
+                findWindow?.feedback.stringValue = "已取消，未开始替换打开文档。"
                 return
             }
         }
