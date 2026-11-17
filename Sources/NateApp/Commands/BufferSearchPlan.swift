@@ -11,7 +11,7 @@ struct BufferSearchCapture: Sendable {
 
 struct BufferSearchPlan: Sendable {
     let snapshot: DocumentSnapshot
-    let result: SearchResult
+    let hitCount: Int
     let edits: [TextEdit]
     let transaction: PreparedTransaction?
     let previews: [SearchPreviewRow]

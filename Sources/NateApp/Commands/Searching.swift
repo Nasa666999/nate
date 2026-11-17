@@ -144,6 +144,21 @@ extension ApplicationController {
                         capture in
                         try Task.checkCancellation()
                         let snapshot = capture.snapshot
+                        if action == "count" {
+                            return BufferSearchPlan(
+                                snapshot: snapshot,
+                                hitCount: try SearchEngine.count(
+                                    in: snapshot,
+                                    options: capture.scope.options,
+                                    scope: capture.scope.range
+                                ),
+                                edits: [],
+                                transaction: nil,
+                                previews: [],
+                                originalBookmarks: nil,
+                                bookmarkPlan: nil
+                            )
+                        }
                         let result = try SearchEngine.find(
                             in: snapshot,
                             options: capture.scope.options,
@@ -168,7 +183,7 @@ extension ApplicationController {
                         unmappedBookmarks += bookmarks?.unmappedCount ?? 0
                         return BufferSearchPlan(
                             snapshot: snapshot,
-                            result: result,
+                            hitCount: result.hits.count,
                             edits: edits,
                             transaction: prepared,
                             previews: rows,
@@ -223,7 +238,6 @@ extension ApplicationController {
                 var navigation: [ResultNavigation] = []
                 for plan in batches {
                     let snapshot = plan.snapshot
-                    let result = plan.result
                     guard let document = resolved[snapshot.id] else {
                         throw NateError.staleRevision
                     }
@@ -236,16 +250,16 @@ extension ApplicationController {
                             try document.buffer.commit(prepared)
                         }
                         document.dirtyHint = !plan.edits.isEmpty || document.dirtyHint
-                        count += result.hits.count
+                        count += plan.hitCount
                     }
                     else if action == "mark" {
                         if let bookmarks = plan.bookmarkPlan {
                             document.buffer.bookmarks = bookmarks.lines
                         }
-                        count += result.hits.count
+                        count += plan.hitCount
                     }
                     else {
-                        count += result.hits.count
+                        count += plan.hitCount
                         if displaysResults {
                             for row in plan.previews {
                                 output.append(row.text)

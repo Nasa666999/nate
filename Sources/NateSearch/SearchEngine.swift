@@ -49,7 +49,8 @@ public enum SearchEngine {
     /// - limitContextToScope: 为真时断言和全文终点受目标终点约束；结构规则可保留完整正文上下文。
     /// - allowEmptyAtStart: 是否接受本次调用起点的空匹配；已选中的空命中继续导航时关闭。
     /// - permit: 在解析、匹配及边界内持续复验的显式调用权限。
-    /// 返回：与同一正文身份关联的搜索结果。
+    /// - onHit: 非空时只同步提交命中坐标，不构建结果列表；计数因此不取得展示条目额度。
+    /// 返回：普通调用提供绑定原文身份的命中列表；同步枚举调用的列表为空，数量由接收者累计，错误不返回部分执行结果。
     static func find(
         in snapshot: DocumentSnapshot,
         input: [UInt16],
@@ -62,7 +63,8 @@ public enum SearchEngine {
         allowEmptyAtStart: Bool = true,
         permit: @escaping @Sendable () -> Bool = {
             true
-        }
+        },
+        onHit: ((NSRange) throws -> Void)? = nil
     ) throws -> SearchResult {
         try Task.checkCancellation()
         // 共享投影调用也可能来自独立队列，不能因跳过外层入口而跳过权限门禁。
@@ -83,7 +85,8 @@ public enum SearchEngine {
                 range: range,
                 options: options,
                 firstOnly: firstOnly,
-                permit: permit
+                permit: permit,
+                onHit: onHit
             )
         }
         let compiled = try RegexParser.compile(
@@ -103,9 +106,11 @@ public enum SearchEngine {
         let captureCount = compiled.groups.keys.max() ?? 0
         matcher.contextEnd = limitContextToScope ? end : input.count
         matcher.softEnd = matcher.inputEnd
+        // 定位软末端也属于实际搜索计算，长换行尾部必须共用执行步数、取消与截止预算。
         while matcher.softEnd > 0,
             [10, 13, 0x85, 0x2028, 0x2029].contains(input[matcher.softEnd - 1])
         {
+            try matcher.checkpoint()
             matcher.softEnd -= 1
         }
         var position = range.location
@@ -154,35 +159,40 @@ public enum SearchEngine {
                         && (matched.location + matched.length == input.count
                             || !matcher.word(input[matched.location + matched.length]))
                 if whole {
-                    var captures = state.captures
-                    captures[0] = matched
-                    hits.append(
-                        SearchHit(
-                            utf16Range: matched,
-                            range: snapshot.text.byteRange(matched),
-                            captures: captures,
-                            names: compiled.names.mapValues {
-                                ids in
-                                ids.first(where: {
-                                    captures[$0] != nil
-                                }) ?? ids[0]
-                            },
-                            context: SearchMatchContext(
-                                prefix: NSRange(
-                                    location: searchStart,
-                                    length: state.start - searchStart
+                    if let onHit {
+                        try onHit(matched)
+                    }
+                    else {
+                        var captures = state.captures
+                        captures[0] = matched
+                        hits.append(
+                            SearchHit(
+                                utf16Range: matched,
+                                range: snapshot.text.byteRange(matched),
+                                captures: captures,
+                                names: compiled.names.mapValues {
+                                    ids in
+                                    ids.first(where: {
+                                        captures[$0] != nil
+                                    }) ?? ids[0]
+                                },
+                                context: SearchMatchContext(
+                                    prefix: NSRange(
+                                        location: searchStart,
+                                        length: state.start - searchStart
+                                    ),
+                                    suffix: NSRange(
+                                        location: state.position,
+                                        length: matcher.inputEnd - state.position
+                                    )
                                 ),
-                                suffix: NSRange(
-                                    location: state.position,
-                                    length: matcher.inputEnd - state.position
-                                )
-                            ),
-                            captureCount: captureCount,
-                            lastClosedCapture: state.lastClosedCapture
+                                captureCount: captureCount,
+                                lastClosedCapture: state.lastClosedCapture
+                            )
                         )
-                    )
-                    guard hits.count <= options.maxMatches else {
-                        throw NateError.message("命中超过结果上限，请缩小搜索范围。")
+                        guard hits.count <= options.maxMatches else {
+                            throw NateError.message("命中超过结果上限，请缩小搜索范围。")
+                        }
                     }
                     if firstOnly {
                         break

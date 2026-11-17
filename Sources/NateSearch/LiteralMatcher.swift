@@ -11,7 +11,8 @@ enum LiteralMatcher {
     /// - firstOnly: 是否在首个完整命中后停止。
     /// - backwards: 是否从范围终点倒向起点匹配，保留反向查找的重叠候选。
     /// - permit: 显式调用权限，脱离 Swift Task 的队列同样据此停止计算。
-    /// 返回：不交叠的字面命中，取消与超时明确失败。
+    /// - onHit: 非空时只同步累计命中，不保留坐标列表或申请展示额度。
+    /// 返回：普通调用提供不交叠的字面命中；同步枚举调用不保留列表，取消与超时都终止整个调用。
     static func find(
         snapshot: DocumentSnapshot,
         input: [UInt16],
@@ -21,7 +22,8 @@ enum LiteralMatcher {
         backwards: Bool = false,
         permit: @escaping @Sendable () -> Bool = {
             true
-        }
+        },
+        onHit: ((NSRange) throws -> Void)? = nil
     )
         throws -> SearchResult
     {
@@ -92,15 +94,20 @@ enum LiteralMatcher {
                         location: start,
                         length: pattern.count
                     )
-                    hits.append(
-                        SearchHit(
-                            utf16Range: range,
-                            range: snapshot.text.byteRange(range),
-                            captures: [0: range]
+                    if let onHit {
+                        try onHit(range)
+                    }
+                    else {
+                        hits.append(
+                            SearchHit(
+                                utf16Range: range,
+                                range: snapshot.text.byteRange(range),
+                                captures: [0: range]
+                            )
                         )
-                    )
-                    guard hits.count <= options.maxMatches else {
-                        throw NateError.message("命中超过结果上限，请缩小范围。")
+                        guard hits.count <= options.maxMatches else {
+                            throw NateError.message("命中超过结果上限，请缩小范围。")
+                        }
                     }
                     if firstOnly {
                         break
