@@ -25,6 +25,21 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
     let confirmOpen = NSButton(checkboxWithTitle: "替换所有打开文档前确认", target: nil, action: nil)
     var queryHistory: [String] = []
     var replaceHistory: [String] = []
+    public private(set) var page: FindReplacePage = .find
+    let tabs = NSSegmentedControl(
+        labels: FindReplacePage.allCases.map(\.rawValue),
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
+    var directoryRow: NSGridRow?
+    var filterRow: NSGridRow?
+    let navigationOptions = NSStackView()
+    let fileOptions = NSStackView()
+    let navigationActions = NSStackView()
+    let replacementActions = NSStackView()
+    let fileActions = NSStackView()
+    let markActions = NSStackView()
     public var stayAfterReplace: Bool {
         stay.state == .on
     }
@@ -94,13 +109,8 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
                 root.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor),
             ])
         }
-        let tabs = NSSegmentedControl(
-            labels: ["查找", "替换", "文件中查找", "标记"],
-            trackingMode: .selectOne,
-            target: nil,
-            action: nil
-        )
-        tabs.selectedSegment = 1
+        tabs.target = self
+        tabs.action = #selector(pageChanged)
         root.addArrangedSubview(tabs)
         query.placeholderString = "查找内容（可粘贴换行、Tab 和 NUL）"
         replacement.placeholderString = "替换为（留空表示删除）"
@@ -120,6 +130,8 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         ])
         grid.rowSpacing = 9
         grid.columnSpacing = 12
+        directoryRow = grid.row(at: 2)
+        filterRow = grid.row(at: 3)
         root.addArrangedSubview(grid)
         grid.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -36).isActive = true
         query.widthAnchor.constraint(greaterThanOrEqualToConstant: 550).isActive = true
@@ -132,33 +144,45 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
         let options = NSStackView(views: [mode, caseSensitive, wholeWord, dot])
         options.spacing = 14
         root.addArrangedSubview(options)
-        root.addArrangedSubview(NSStackView(views: [backwards, wrap, selection, stay]))
+        for option in [backwards, wrap, selection] {
+            navigationOptions.addArrangedSubview(option)
+        }
+        root.addArrangedSubview(navigationOptions)
+        root.addArrangedSubview(stay)
         root.addArrangedSubview(confirmOpen)
-        root.addArrangedSubview(NSStackView(views: [recursive, includeHidden, diskBuffers]))
-        let row1 = NSStackView()
-        let row2 = NSStackView()
+        for option in [recursive, includeHidden, diskBuffers] {
+            fileOptions.addArrangedSubview(option)
+        }
+        root.addArrangedSubview(fileOptions)
         for (id, title) in [
             ("previous", "上一个"), ("next", "下一个"), ("count", "计数"),
-            ("all", "当前文档全部查找"), ("open", "全部打开文档查找"), ("mark", "标记与书签"),
+            ("all", "当前文档全部查找"), ("open", "全部打开文档查找"),
         ] {
-            row1.addArrangedSubview(button(id, title))
+            navigationActions.addArrangedSubview(button(id, title))
         }
         for (id, title) in [
             ("replaceOne", "替换一个"), ("replaceAll", "当前文档全部替换"),
-            ("replaceOpen", "全部打开文档替换"), ("files", "文件中查找"), ("replaceFiles", "文件中替换"), ("cancel", "取消任务"),
+            ("replaceOpen", "全部打开文档替换"),
         ] {
-            row2.addArrangedSubview(button(id, title))
+            replacementActions.addArrangedSubview(button(id, title))
         }
-        row1.spacing = 5
-        row2.spacing = 5
-        root.addArrangedSubview(row1)
-        root.addArrangedSubview(row2)
+        fileActions.addArrangedSubview(button("files", "文件中查找"))
+        fileActions.addArrangedSubview(button("replaceFiles", "文件中替换"))
+        markActions.addArrangedSubview(button("mark", "添加匹配行书签"))
+        for actions in [navigationActions, replacementActions, fileActions, markActions] {
+            actions.spacing = 5
+            root.addArrangedSubview(actions)
+        }
+        let swap = NSButton(title: "交换查找与替换", target: self, action: #selector(swapInputs))
+        swap.controlSize = .small
+        root.addArrangedSubview(NSStackView(views: [button("cancel", "取消任务"), swap]))
         feedback.font = NSFont.systemFont(ofSize: 11)
         feedback.textColor = .secondaryLabelColor
         root.addArrangedSubview(feedback)
         feedback.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -36).isActive = true
         window.center()
         modeChanged()
+        selectPage(.find, focus: false)
     }
 
     /// 业务作用：查找状态由应用管理，不从窗口归档恢复失效范围。
@@ -175,12 +199,74 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate {
     /// - replacing: 是否显示替换交互。
     /// 返回：窗口可见并将焦点置于查找内容。
     public func present(selection: String?, replacing: Bool) {
+        present(selection: selection, page: replacing ? .replace : .find)
+    }
+
+    /// 业务作用：打开指定的搜索范围页签，共享完整表达式、历史和模式，不在切换范围时清空输入。
+    /// 参数说明:
+    /// - selection: 可用于填充查找内容的完整短选区。
+    /// - page: 菜单或快捷键请求的实际操作范围。
+    /// 返回：对应页签可见，焦点进入查找内容；无目录时文件操作仍由执行入口明确拒绝。
+    public func present(selection: String?, page: FindReplacePage) {
         if let selection, !selection.isEmpty, selection.count <= 1024 {
             query.stringValue = selection
         }
+        selectPage(page, focus: false)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(query)
+    }
+
+    /// 业务作用：页签点击改变可见范围与对应动作，实际查找条件保持原值。
+    /// 参数说明: 无。
+    /// 返回：文件页显示目录和过滤，其它页显示适用的缓冲区操作。
+    @objc func pageChanged() {
+        guard FindReplacePage.allCases.indices.contains(tabs.selectedSegment) else {
+            return
+        }
+        selectPage(FindReplacePage.allCases[tabs.selectedSegment], focus: true)
+    }
+
+    /// 业务作用：统一菜单和页签的范围展示，隐藏控件不清除选项，也不重新授予后台请求执行权。
+    /// 参数说明:
+    /// - page: 新的可见操作范围。
+    /// - focus: 是否把键盘入口交给查找内容。
+    /// 返回：可见动作与页签一致，查找、替换原文和目录输入保留。
+    func selectPage(_ page: FindReplacePage, focus: Bool) {
+        self.page = page
+        tabs.selectedSegment = FindReplacePage.allCases.firstIndex(of: page) ?? 0
+        let files = page == .files
+        let replacing = page == .replace
+        directoryRow?.isHidden = !files
+        filterRow?.isHidden = !files
+        navigationOptions.isHidden = files
+        fileOptions.isHidden = !files
+        stay.isHidden = !replacing
+        confirmOpen.isHidden = !replacing
+        navigationActions.isHidden = page != .find && !replacing
+        replacementActions.isHidden = !replacing
+        fileActions.isHidden = !files
+        markActions.isHidden = page != .mark
+        window?.title = page.rawValue + " — Nate"
+        window?.contentView?.layoutSubtreeIfNeeded()
+        if focus {
+            window?.makeFirstResponder(query)
+        }
+    }
+
+    /// 业务作用：交换完整查找和替换原文，长内容与不可见字符不经过显示摘要或历史标签。
+    /// 参数说明: 无。
+    /// 返回：两个完整输入互换；输入法仍有候选时保留原输入并提示先完成候选。
+    @objc func swapInputs() {
+        // 候选属于原生输入上下文，交换不能让程序化赋值提交或丢弃未确认的组合内容。
+        guard (window?.firstResponder as? NSTextView)?.hasMarkedText() != true else {
+            feedback.stringValue = "请先确认或取消输入法候选，再交换查找与替换。"
+            return
+        }
+        let originalQuery = query.stringValue
+        let originalReplacement = replacement.stringValue
+        query.stringValue = originalReplacement
+        replacement.stringValue = originalQuery
     }
 
     /// 业务作用：独立按钮标识与公共命令回调保持一致。

@@ -9,8 +9,9 @@ extension ApplicationController {
     /// 业务作用：查找窗口与正文并行使用，选区填入和范围限制分别处理。
     /// 参数说明:
     /// - replacing: 是否进入替换流程。
+    /// - inFiles: 是否显示目录与过滤条件，进入跨文件范围。
     /// 返回：复用查找条件，保持既有历史。
-    func presentFind(replacing: Bool) {
+    func presentFind(replacing: Bool, inFiles: Bool = false) {
         mainWindow?.editor.finishComposition()
         if findWindow == nil {
             let window = FindReplaceWindow()
@@ -31,7 +32,7 @@ extension ApplicationController {
             range in
             range.range.count <= 4096 ? active?.buffer.text.text(in: range.range) : nil
         }
-        findWindow?.present(selection: selection, replacing: replacing)
+        findWindow?.present(selection: selection, page: inFiles ? .files : replacing ? .replace : .find)
     }
 
     /// 业务作用：固定请求身份、快照和范围，在后台搜索完成后复验再发布。

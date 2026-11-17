@@ -149,7 +149,8 @@ extension ApplicationController {
                 mainWindow?.editor.refresh(reveal: true)
                 didEdit()
             }
-        case "find", "replace", "findFiles": presentFind(replacing: id == "replace")
+        case "find", "replace", "findFiles":
+            presentFind(replacing: id == "replace", inFiles: id == "findFiles")
         case "findNext", "findPrevious":
             if findWindow == nil {
                 presentFind(replacing: false)
