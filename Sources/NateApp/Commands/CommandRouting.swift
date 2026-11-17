@@ -57,6 +57,9 @@ extension ApplicationController {
             return
         }
         switch id {
+        case "matchingBracket": mainWindow?.editor.navigateBracket(.jump)
+        case "selectBracketPair": mainWindow?.editor.navigateBracket(.selectPair)
+        case "selectInsideBracket": mainWindow?.editor.navigateBracket(.selectInside)
         case "new":
             _ = newDocument()
             buildMenus()

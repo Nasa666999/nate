@@ -37,6 +37,7 @@ public struct SyntaxAnalysis: Sendable {
         }
         var checkpoints: [Int: LexicalState] = [:]
         var output: [Int: [SyntaxToken]] = [:]
+        let scanner = SyntaxScanner(language: language)
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         var consumed = 0
         for line in startLine..<min(snapshot.text.lineCount, visible.upperBound) {
@@ -56,11 +57,14 @@ public struct SyntaxAnalysis: Sendable {
             let tokens =
                 udl.map {
                     UDLLexer.highlight(text, base: range.lower, definition: $0, state: &user)
-                } ?? SyntaxEngine.highlight(text, base: range.lower, language: language, state: &native)
+                } ?? scanner.highlight(text, base: range.lower, state: &native)
             if visible.contains(line) {
                 output[line] = tokens
             }
         }
-        return SyntaxAnalysis(tokens: output, checkpoints: checkpoints)
+        return SyntaxAnalysis(
+            tokens: output,
+            checkpoints: checkpoints
+        )
     }
 }

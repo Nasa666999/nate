@@ -2,6 +2,7 @@ import AppKit
 import NateCore
 import NatePlatform
 import NateStorage
+import NateUI
 
 extension ApplicationController: NSMenuItemValidation {
     /// 业务作用：建立共享命令菜单，键盘、工具栏和上下文调用同一业务入口。
@@ -100,6 +101,11 @@ extension ApplicationController: NSMenuItemValidation {
         add(edit, "插入 / 覆盖", "overwrite")
         attach(edit, to: bar)
         let search = NSMenu(title: "搜索")
+        add(search, "跳转到匹配括号", "matchingBracket", key: "b")
+        add(search, "选择整对括号", "selectBracketPair", key: "b")
+        search.items.last?.keyEquivalentModifierMask = [.command, .option]
+        add(search, "选择括号内部", "selectInsideBracket", key: "B")
+        search.addItem(.separator())
         for (title, id, key) in [
             ("查找…", "find", "f"), ("替换…", "replace", "H"), ("文件中查找…", "findFiles", "F"),
             ("下一个匹配", "findNext", "g"), ("上一个匹配", "findPrevious", "G"), ("跳转行…", "goto", "l"),
@@ -232,6 +238,19 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if ["matchingBracket", "selectBracketPair", "selectInsideBracket"].contains(id) {
+            guard !closing, let window = mainWindow, NSApp.keyWindow === window.window,
+                let editor = NSApp.keyWindow?.firstResponder as? EditorView, editor === window.editor,
+                !editor.document.isEditingSuspended
+            else {
+                return false
+            }
+            switch id {
+            case "matchingBracket": return editor.bracketNavigationAvailable(.jump)
+            case "selectBracketPair": return editor.bracketNavigationAvailable(.selectPair)
+            default: return editor.bracketNavigationAvailable(.selectInside)
+            }
         }
         if id.hasPrefix("language:") {
             menuItem.state = active?.language == String(id.dropFirst(9)) ? .on : .off

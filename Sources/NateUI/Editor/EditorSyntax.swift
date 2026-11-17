@@ -3,6 +3,30 @@ import NateCore
 import NateSyntax
 
 extension EditorView {
+    /// 业务作用：以语言定义的精确编码字节识别资源变化，同标识的新规则不能复用旧高亮或括号结果。
+    /// 参数说明: 无。
+    /// 返回：资源实际变化时撤销旧分析；重复装配同一定义不重启后台任务。
+    func updateLanguageResource() {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let encoded: Data?
+        if let language {
+            guard let bytes = try? encoder.encode(language) else {
+                languageResource = nil
+                invalidateSyntax()
+                return
+            }
+            encoded = bytes
+        }
+        else {
+            encoded = nil
+        }
+        if encoded != languageResource {
+            languageResource = encoded
+            invalidateSyntax()
+        }
+    }
+
     /// 业务作用：高亮基于固定快照在后台传播，身份或资源变化后拒绝迟到结果。
     /// 参数说明:
     /// - line: 当前请求呈现的逻辑行。
@@ -106,6 +130,7 @@ extension EditorView {
     /// 参数说明: 无。
     /// 返回：取消旧任务并清空呈现缓存。
     public func invalidateSyntax() {
+        invalidateBracketAnalysis()
         syntaxTask?.cancel()
         syntaxTask = nil
         syntaxGeneration = UUID()

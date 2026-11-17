@@ -9,6 +9,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             viewSelections = document.selections
             observedRevision = document.revision
             projection.measured.removeAll()
+            if oldValue !== document {
+                invalidateBracketAnalysis()
+            }
         }
     }
     public var viewSelections = [TextSelection(anchor: 0, head: 0)] {
@@ -22,7 +25,18 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var observedRevision: UInt64 = 0
     var projection = VisualLineMap()
     var lastLayoutWidth: CGFloat = 0
-    public var language: LanguageDefinition?
+    public var language: LanguageDefinition? {
+        didSet {
+            updateLanguageResource()
+        }
+    }
+    var languageResource: Data?
+    let brackets = BracketViewState()
+    public var bracketLimits = BracketAnalysisLimits() {
+        didSet {
+            invalidateBracketAnalysis()
+        }
+    }
     public var userLanguage: UDLDefinition? {
         didSet {
             if oldValue?.originalXML != userLanguage?.originalXML {
@@ -188,6 +202,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// - dirtyRect: 系统要求重绘的区域。
     /// 返回：呈现当前已提交快照及独立预编辑，不改动文档。
     public override func draw(_ dirtyRect: NSRect) {
+        prepareBracketAnalysis()
         NSColor.textBackgroundColor.setFill()
         dirtyRect.fill()
         let tree = displayTree
@@ -214,6 +229,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                     }
                 }
             }
+            drawBracketMatch(in: layout, y: y)
             for fragment in layout.fragments {
                 context.saveGState()
                 fragment.draw(
@@ -366,6 +382,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public override func resignFirstResponder() -> Bool {
         finishComposition()
         dismissCompletion()
+        // 焦点即使稍后返回同一光标，也不能重新执行此前尚未确认的导航意图。
+        brackets.pending = nil
+        needsDisplay = true
         return super.resignFirstResponder()
     }
 
@@ -374,7 +393,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 返回：不再有解析任务或候选面板持有已关闭视图。
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        observeBracketFocus()
         if window == nil {
+            brackets.pending = nil
+            brackets.task?.cancel()
             syntaxTask?.cancel()
             syntaxTask = nil
             dismissCompletion()

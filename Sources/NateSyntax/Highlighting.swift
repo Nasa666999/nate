@@ -10,6 +10,7 @@ public struct SyntaxToken: Sendable {
     public let kind: SyntaxKind
     public let foreground: String?
     public let fontStyle: Int
+    public let lexicalStyle: String
 
     /// 业务作用：携带可配置语法呈现，样式不进入正文历史。
     /// 参数说明:
@@ -17,12 +18,20 @@ public struct SyntaxToken: Sendable {
     /// - kind: 默认主题分类。
     /// - foreground: 资源显式指定的前景色，为空时继承主题。
     /// - fontStyle: UDL 粗体、斜体和下划线位集合。
+    /// - lexicalStyle: 原词法样式身份，为空时采用基础类别；颜色相同不代表词法作用域相同。
     /// 返回：独立呈现属性。
-    public init(range: ByteRange, kind: SyntaxKind, foreground: String? = nil, fontStyle: Int = 0) {
+    public init(
+        range: ByteRange,
+        kind: SyntaxKind,
+        foreground: String? = nil,
+        fontStyle: Int = 0,
+        lexicalStyle: String? = nil
+    ) {
         self.range = range
         self.kind = kind
         self.foreground = foreground
         self.fontStyle = fontStyle
+        self.lexicalStyle = lexicalStyle ?? kind.rawValue
     }
 }
 
@@ -34,6 +43,30 @@ public struct SyntaxState: Sendable, Equatable {
     /// 参数说明: 无。
     /// 返回：未处于跨行注释或字符串的状态。
     public init() {}
+}
+
+public struct SyntaxScanner: Sendable {
+    let language: LanguageDefinition
+    let keywords: Set<String>
+
+    /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
+    /// 参数说明:
+    /// - language: 本次分析采用的不可变语言定义。
+    /// 返回：可跨后台任务传递的扫描上下文，词法状态由每个调用流程分别持有。
+    public init(language: LanguageDefinition) {
+        self.language = language
+        keywords = Set(language.keywords)
+    }
+
+    /// 业务作用：在固定语言定义下识别当前行并更新其后续词法状态。
+    /// 参数说明:
+    /// - text: 当前完整行或连续片段。
+    /// - base: 当前片段在原始正文中的 UTF-8 起点。
+    /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
+    /// 返回：当前片段的语法呈现范围，不修改正文。
+    public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        SyntaxEngine.scan(text, base: base, language: language, keywords: keywords, state: &state)
+    }
 }
 
 public enum SyntaxEngine {
@@ -50,11 +83,28 @@ public enum SyntaxEngine {
         language: LanguageDefinition,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
+        SyntaxScanner(language: language).highlight(text, base: base, state: &state)
+    }
+
+    /// 业务作用：复用已确认的资源集合，维护当前片段的词法呈现并传播跨行注释状态。
+    /// 参数说明:
+    /// - text: 当前片段。
+    /// - base: 原始正文字节起点。
+    /// - language: 固定语言定义。
+    /// - keywords: 与该定义一同建立的关键字集合。
+    /// - state: 本流程独立词法状态。
+    /// 返回：原始坐标中的样式片段，不产生编辑事务。
+    static func scan(
+        _ text: String,
+        base: Int,
+        language: LanguageDefinition,
+        keywords: Set<String>,
+        state: inout SyntaxState
+    ) -> [SyntaxToken] {
         if ["normal", "nfo"].contains(language.id) {
             return []
         }
         let bytes = Array(text.utf8)
-        let keywords = Set(language.keywords)
         var result: [SyntaxToken] = []
         var i = 0
         /// 业务作用：只在当前片段内比较词法起止标记，拒绝越界读取。
@@ -75,7 +125,15 @@ public enum SyntaxEngine {
         /// 返回：非空片段进入语法结果，不产生正文修改。
         func emit(_ start: Int, _ end: Int, _ kind: SyntaxKind) {
             if end > start {
-                result.append(SyntaxToken(range: ByteRange(base + start, base + end), kind: kind))
+                result.append(
+                    SyntaxToken(
+                        range: ByteRange(
+                            base + start,
+                            base + end
+                        ),
+                        kind: kind
+                    )
+                )
             }
         }
         if language.id == "markdown", bytes.first == 35 {

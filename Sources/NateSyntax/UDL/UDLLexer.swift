@@ -292,6 +292,7 @@ public enum UDLLexer {
         definition: UDLDefinition
     ) {
         let rule = definition.styles[style]
+        let lexicalStyle = "udl:" + style
         let kind: SyntaxKind =
             style == "DEFAULT"
             ? .text
@@ -302,6 +303,7 @@ public enum UDLLexer {
                     : style == "NUMBERS" ? .number : style.hasPrefix("KEYWORDS") ? .keyword : .punctuation
         var start = start
         if let previous = tokens.last, previous.range.upper == start, previous.kind == kind,
+            previous.lexicalStyle == lexicalStyle,
             previous.foreground == rule?.foreground, previous.fontStyle == rule?.fontStyle ?? 0
         {
             start = previous.range.lower
@@ -312,7 +314,8 @@ public enum UDLLexer {
                 range: ByteRange(start, end),
                 kind: kind,
                 foreground: rule?.foreground,
-                fontStyle: rule?.fontStyle ?? 0
+                fontStyle: rule?.fontStyle ?? 0,
+                lexicalStyle: lexicalStyle
             )
         )
     }

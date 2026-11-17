@@ -20,6 +20,10 @@ extension EditorView {
                 onCommand?(event.modifierFlags.contains(.shift) ? "previousTab" : "nextTab")
                 return
             }
+            if key == "b" {
+                onCommand?(event.modifierFlags.contains(.option) ? "selectBracketPair" : "matchingBracket")
+                return
+            }
             if let command = commands[key] {
                 onCommand?(command)
                 return
