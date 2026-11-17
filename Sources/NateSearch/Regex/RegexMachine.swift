@@ -18,7 +18,7 @@ enum RegexInstruction {
     case repetition(RegexRepeat)
     case repeated(RegexRepeat, Int)
     case alternative([RegexNode], Int, Int)
-    case subroutine([Int: NSRange])
+    case subroutine([Int: NSRange], Int?)
 }
 
 struct RegexPath {
@@ -69,9 +69,10 @@ extension CancellableMatcher {
                     }
                 }
                 switch instruction {
-                case .subroutine(let captures):
-                    // 子程序内部捕获只属于本次调用，返回后恢复调用方证据，定义块不能冒充已经参与的捕获。
+                case .subroutine(let captures, let previousRecursion):
+                    // 子程序内部捕获与递归身份只属于本次调用，返回后恢复调用方证据，定义块不能冒充已参与的捕获。
                     path.state.captures = captures
+                    path.state.currentRecursion = previousRecursion
                     path.state.accepted = false
                 case .capture(let id, let start):
                     path.state.captures[id] = NSRange(location: start, length: path.state.position - start)
@@ -197,7 +198,8 @@ extension CancellableMatcher {
                         guard let child = id == 0 ? compiled.root : compiled.groups[id] else {
                             throw NateError.message("未知正则子程序 \(id)。")
                         }
-                        try push(.subroutine(path.state.captures), onto: &path)
+                        try push(.subroutine(path.state.captures, path.state.currentRecursion), onto: &path)
+                        path.state.currentRecursion = id
                         try push(.node(child, depth + 1), onto: &path)
                     case .namedRecurse(let name):
                         guard let id = compiled.names[name]?.first else {
@@ -317,6 +319,16 @@ extension CancellableMatcher {
             accepted?.accepted = false
             return accepted
         case .definition: return nil
+        case .recursion(let id):
+            guard let current = state.currentRecursion else {
+                return nil
+            }
+            return id == nil || id == current ? state : nil
+        case .namedRecursion(let name):
+            guard let current = state.currentRecursion else {
+                return nil
+            }
+            return compiled.names[name]?.contains(current) == true ? state : nil
         }
     }
 }

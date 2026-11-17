@@ -74,6 +74,23 @@ extension RegexParser {
                 }
                 return .recurse(0)
             }
+            else if index + 1 < units.count, [43, 45].contains(units[index]),
+                (48...57).contains(units[index + 1])
+            {
+                let forward = take(43)
+                if !forward {
+                    index += 1
+                }
+                guard let distance = number(), distance > 0, take(41) else {
+                    throw diagnostic("相对子程序编号无效或缺少右括号")
+                }
+                let sum = count.addingReportingOverflow(forward ? distance : -distance + 1)
+                guard !sum.overflow, sum.partialValue > 0 else {
+                    throw diagnostic("相对子程序编号超出捕获范围")
+                }
+                referencedGroups.append(sum.partialValue)
+                return .recurse(sum.partialValue)
+            }
             else if let number = number() {
                 guard take(41) else {
                     throw diagnostic("子程序调用缺少右括号")

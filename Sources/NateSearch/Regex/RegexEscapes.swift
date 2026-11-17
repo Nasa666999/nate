@@ -100,6 +100,21 @@ extension RegexParser {
             }
             return .literal(value)
         case 107, 103:
+            if inClass {
+                return .literal(c)
+            }
+            if index < units.count, [43, 45].contains(units[index]) || (48...57).contains(units[index]) {
+                let negative = take(45)
+                if !negative {
+                    _ = take(43)
+                }
+                guard let number = number(), number > 0 else {
+                    throw diagnostic("反向引用编号无效")
+                }
+                let id = negative ? count - number + 1 : number
+                referencedGroups.append(id)
+                return .reference(id)
+            }
             let closing: UInt16
             if take(60) {
                 closing = 62

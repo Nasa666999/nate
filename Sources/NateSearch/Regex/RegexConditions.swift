@@ -6,10 +6,12 @@ indirect enum RegexCondition: Sendable {
     case named(String)
     case assertion(RegexNode)
     case definition
+    case recursion(Int?)
+    case namedRecursion(String)
 }
 
 extension RegexParser {
-    /// 业务作用：解析条件分支的捕获或断言门禁，定义块只登记子程序而不消费正文。
+    /// 业务作用：解析条件分支的捕获、断言或当前递归门禁，定义块只登记子程序而不消费正文。
     /// 参数说明:
     /// - depth: 条件所在的语法深度。
     /// 返回：已经消费条件右括号的门禁；非法条件失败。
@@ -46,6 +48,17 @@ extension RegexParser {
         }
         else {
             let name = try readUntil(41)
+            if name == "R" {
+                return .recursion(nil)
+            }
+            if name.hasPrefix("R&"), name.count > 2 {
+                return .namedRecursion(String(name.dropFirst(2)))
+            }
+            if name.hasPrefix("R"),
+                let id = Int(name.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)), id >= 0
+            {
+                return .recursion(id)
+            }
             guard name == "DEFINE" else {
                 throw diagnostic("条件名称必须使用名称界定符")
             }

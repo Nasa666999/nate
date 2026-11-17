@@ -9,6 +9,7 @@ struct MatchState {
     var dot: Bool
     var multiline = true
     var accepted = false
+    var currentRecursion: Int?
 }
 
 struct CancellableMatcher {
