@@ -12,7 +12,7 @@ extension ApplicationController {
             return
         }
         do {
-            let choices = try await recoveryIO.run {
+            let choices = try await recoveryIO.read {
                 try FileManager.default.contentsOfDirectory(
                     at: support,
                     includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
@@ -43,10 +43,10 @@ extension ApplicationController {
                 return
             }
             let chosen = choices[popup.indexOfSelectedItem]
-            let restored = try await recoveryIO.run {
-                let result = try RecoveryStore(directory: chosen).restore()
+            let restored = try await recoveryIO.read {
+                let result = try RecoveryStore(directory: chosen).restoreSnapshots()
                 return result.documents.map {
-                    (record: $0, tree: PieceTree($0.text))
+                    (record: $0.metadata, tree: $0.text)
                 }
             }
             guard !closing else {

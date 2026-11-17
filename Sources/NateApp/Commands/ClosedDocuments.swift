@@ -34,9 +34,12 @@ extension ApplicationController {
             return
         }
         do {
-            let (record, tree) = try await recoveryIO.run {
-                let record = try store.loadArchived(reference)
-                return (record, PieceTree(record.text))
+            let (record, tree) = try await recoveryIO.read {
+                let recovered = try store.loadArchivedSnapshot(reference)
+                return (recovered.metadata, recovered.text)
+            }
+            guard !closing else {
+                return
             }
             let document = WorkspaceDocument(
                 name: record.name,
@@ -70,7 +73,7 @@ extension ApplicationController {
             return
         }
         do {
-            let references = try await recoveryIO.run {
+            let references = try await recoveryIO.read {
                 try store.archivedReferences()
             }
             guard !references.isEmpty else {

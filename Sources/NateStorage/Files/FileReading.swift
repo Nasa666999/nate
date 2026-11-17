@@ -69,6 +69,7 @@ extension FileStorage {
     /// - collectBytes: 是否保留完整原始正文。
     /// - maximumBytes: 文件字节预算。
     /// - maximumCaptureBytes: 最多保留的原字节前缀，摘要仍涵盖完整文件。
+    /// - resolvingLinks: 用户原文件可解析符号链接；私有恢复记录直接拒绝链接。
     /// - permit: 请求仍有效的权限。
     /// 返回：精确基线和可选正文；任一身份或时间观察变化时失败。
     static func readEvidence(
@@ -76,6 +77,7 @@ extension FileStorage {
         collectBytes: Bool,
         maximumBytes: Int,
         maximumCaptureBytes: Int = Int.max,
+        resolvingLinks: Bool = true,
         permit: @Sendable () -> Bool
     ) throws -> FileReadEvidence {
         guard maximumBytes >= 0 else {
@@ -84,7 +86,8 @@ extension FileStorage {
         guard permit() else {
             throw CancellationError()
         }
-        let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+        let resolved =
+            resolvingLinks ? url.resolvingSymlinksInPath().standardizedFileURL : url.standardizedFileURL
         let descriptor = Darwin.open(resolved.path, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW)
         guard descriptor >= 0 else {
             throw posix("无法读取原文件")
@@ -148,7 +151,9 @@ extension FileStorage {
         var after = stat()
         var path = stat()
         // 描述符内容、路径身份及纳秒观察必须仍一致，不能把多个外部修订拼成一个保存基线。
-        guard fstat(descriptor, &after) == 0, stat(resolved.path, &path) == 0,
+        let descriptorResult = fstat(descriptor, &after)
+        let pathResult = resolvingLinks ? stat(resolved.path, &path) : lstat(resolved.path, &path)
+        guard descriptorResult == 0, pathResult == 0,
             sameObservation(metadata, after), sameObservation(after, path)
         else {
             throw NateError.message("获取磁盘证据期间文件发生变化。")

@@ -232,7 +232,9 @@ extension ApplicationController {
     /// - force: 是否在退出等边界重新固定视图元数据。
     /// 返回：每份正文先同步，再可靠发布有序恢复索引。
     func scheduleRecovery(force: Bool = false) {
-        guard recoveryReady, recoveryTask == nil, let store = recovery else {
+        guard recoveryReady, recoveryTask == nil, let store = recovery,
+            force || ContinuousClock.now >= nextRecoveryRetry
+        else {
             return
         }
         let captured = documents
@@ -246,7 +248,12 @@ extension ApplicationController {
             }
         )
         let oldReferences = captured.compactMap(\.recoveryReference)
-        guard !changed.isEmpty || oldReferences.count != captured.count || force else {
+        guard
+            !changed.isEmpty || oldReferences.count != captured.count || force
+                || captured.contains(where: {
+                    $0.recoveryError != nil
+                })
+        else {
             return
         }
         let payload: [(RecoveryDocument, PieceTree)] = changed.map {
@@ -258,6 +265,9 @@ extension ApplicationController {
             $0.buffer.id
         }
         let selected = activeID
+        let byteCounts = captured.map {
+            $0.buffer.text.byteCount
+        }
         let executor = recoveryIO
         lastRecoverySucceeded = false
         recoveryTask = Task {
@@ -271,15 +281,30 @@ extension ApplicationController {
             }
             do {
                 let references = try await executor.run {
+                    guard ids.count <= RecoveryLimits.documents else {
+                        throw NateError.message("恢复工作区超过 1024 个文档预算。")
+                    }
+                    var bytes = 0
+                    for count in byteCounts {
+                        guard count <= RecoveryLimits.documentBytes,
+                            count <= RecoveryLimits.workspaceBytes - bytes
+                        else {
+                            throw NateError.message("恢复正文超过单文档 1 GB 或工作区 2 GB 预算，现有记录保持原状。")
+                        }
+                        bytes += count
+                    }
+                    let deadline = ContinuousClock.now.advanced(by: RecoveryLimits.processingTime)
                     var references = Dictionary(
                         uniqueKeysWithValues: oldReferences.map {
                             ($0.id, $0)
                         }
                     )
                     for (metadata, tree) in payload {
-                        var record = metadata
-                        record.text = tree.text()
-                        references[record.id] = try store.checkpoint(record)
+                        references[metadata.id] = try store.checkpoint(
+                            metadata: metadata,
+                            text: tree,
+                            deadline: deadline
+                        )
                     }
                     let ordered = ids.compactMap {
                         references[$0]
@@ -298,7 +323,6 @@ extension ApplicationController {
                     document.recoveryReference = references[metadata.id]
                     document.recoveryRevision = metadata.revision
                     document.lastRecoveryMetadata = metadataKeys[metadata.id] ?? ""
-                    document.recoveryError = nil
                     if document.url == nil && document.buffer.revision == metadata.revision
                         && document.lastRecoveryMetadata == document.recoveryMetadataKey
                     {
@@ -308,20 +332,39 @@ extension ApplicationController {
                         document.dirtyHint = false
                     }
                 }
+                for document in captured
+                where self.documents.contains(where: {
+                    $0 === document
+                }) {
+                    document.recoveryError = nil
+                }
                 self.lastRecoverySucceeded = true
+                self.recoveryFailureCount = 0
+                self.nextRecoveryRetry = .now
                 self.refreshUI()
                 // 两份有效索引及关闭保留清单之外的快照不再承担恢复责任。
-                do {
-                    try await executor.run {
-                        try store.collect(retention: 0)
+                if ContinuousClock.now >= self.nextRecoveryCollection {
+                    self.nextRecoveryCollection = .now.advanced(by: .seconds(60))
+                    do {
+                        try await executor.run {
+                            try store.collect(retention: 0)
+                        }
                     }
-                }
-                catch {
-                    self.mainWindow?.status.stringValue = "恢复已保存；旧快照清理未完成：" + error.localizedDescription
+                    catch {
+                        self.lastRecoverySucceeded = false
+                        self.recoveryFailureCount = min(6, self.recoveryFailureCount + 1)
+                        self.nextRecoveryRetry = .now.advanced(by: .seconds(1 << self.recoveryFailureCount))
+                        for document in captured {
+                            document.recoveryError = "恢复索引已写出，后续依赖核验或清理未完成：" + error.localizedDescription
+                        }
+                        return false
+                    }
                 }
                 return true
             }
             catch {
+                self.recoveryFailureCount = min(6, self.recoveryFailureCount + 1)
+                self.nextRecoveryRetry = .now.advanced(by: .seconds(1 << self.recoveryFailureCount))
                 for document in captured {
                     document.recoveryError = error.localizedDescription
                 }

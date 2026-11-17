@@ -50,6 +50,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var autosaveTask: Task<Void, Never>?
     var recoveryTask: Task<Bool, Never>?
     var lastRecoverySucceeded = false
+    var nextRecoveryRetry = ContinuousClock.now
+    var recoveryFailureCount = 0
+    var nextRecoveryCollection = ContinuousClock.now.advanced(by: .seconds(60))
     var searchTask: Task<Void, Never>?
     var externalObservationTask: Task<Void, Never>?
     var externalStamps: [UUID: FileStamp] = [:]
@@ -159,11 +162,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             registry = try LanguageRegistry(
                 directory: SystemIntegration.resourceDirectory().appendingPathComponent("languages")
             )
-            let restored = try await recoveryIO.run {
-                let result = try store.restore()
+            let restored = try await recoveryIO.read {
+                let result = try store.restoreSnapshots()
                 return (
                     documents: result.documents.map {
-                        (record: $0, tree: PieceTree($0.text))
+                        (record: $0.metadata, tree: $0.text)
                     }, active: result.active
                 )
             }
@@ -194,7 +197,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                     textTree: tree,
                     id: record.id,
                     encoding: record.encoding,
-                    lineEnding: record.lineEnding ?? .lf
+                    lineEnding: record.lineEnding ?? .lf,
+                    revision: record.revision
                 )
                 document.savedEncoding = record.encoding
                 document.language = record.language
@@ -371,7 +375,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                     selected: $0.buffer.id == activeID,
                     pinned: $0.pinned,
                     dirty: $0.isDirty,
-                    failed: $0.failure != nil
+                    failed: $0.failure != nil || $0.recoveryError != nil
                 )
             }
         )
@@ -419,8 +423,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             state = active.isDirty ? "待保存" : active.state
         }
         let protection = !recoveryReady ? "⚠ 恢复保护不可用 · " : !autosaveEnabled ? "自动保存已暂停 · " : ""
+        let recoveryState =
+            active.url != nil && recoveryReady && active.recoveryError == nil
+            ? " · " + (active.recoveryRevision == active.buffer.revision ? "恢复正文已保存" : "恢复正文待保存") : ""
         window.status.stringValue =
-            "  \(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(protection)\(state)"
+            "  \(registry?.language(active.language)?.name ?? active.language)  │  Ln \(line + 1), Col \(column)  ·  选区 \(selectionCount) B / \(active.buffer.selections.count)  │  \(active.encoding.name)  │  \(active.buffer.text.lineCount) 行 · \(active.buffer.text.byteCount) B  │  \(window.editor.overwrite ? "OVR" : "INS")  │  \(protection)\(state)\(recoveryState)"
         if window.isStructureVisible {
             requestStructure()
         }

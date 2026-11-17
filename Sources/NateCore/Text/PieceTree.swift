@@ -2,6 +2,7 @@ import Foundation
 
 /// 不可变节点允许快照和历史共享正文；仅修改路径上的节点需要重新建立。
 final class PieceNode: Sendable {
+    let identity = UUID()
     let left: PieceNode?
     let right: PieceNode?
     let bytes: [UInt8]
@@ -271,7 +272,7 @@ public struct PieceTree: Sendable {
     /// - left: 前段子树。
     /// - right: 后段子树。
     /// 返回：保持正文顺序的平衡树。
-    private static func join(_ left: PieceNode, _ right: PieceNode) -> PieceNode {
+    static func join(_ left: PieceNode, _ right: PieceNode) -> PieceNode {
         if left.count == 0 {
             return right
         }

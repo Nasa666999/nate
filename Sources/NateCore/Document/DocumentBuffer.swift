@@ -88,10 +88,10 @@ public final class DocumentBuffer {
     var positionJournal: [RevisionPositionMap] = []
     var positionJournalChanges = 0
     public var canUndo: Bool {
-        !undoEntries.isEmpty && !isReadOnly && !isEditingSuspended
+        !undoEntries.isEmpty && !isReadOnly && !isEditingSuspended && revision < UInt64.max
     }
     public var canRedo: Bool {
-        !redoEntries.isEmpty && !isReadOnly && !isEditingSuspended
+        !redoEntries.isEmpty && !isReadOnly && !isEditingSuspended && revision < UInt64.max
     }
     public var snapshot: DocumentSnapshot {
         DocumentSnapshot(id: id, revision: revision, text: text, format: format)
@@ -102,11 +102,13 @@ public final class DocumentBuffer {
     /// - text: 初始正文。
     /// - id: 恢复记录的稳定身份；新打开默认新建。
     /// - format: 初始格式，不制造额外撤销项。
+    /// - revision: 已确认的恢复修订，新文档默认为零。
     /// 返回：串行事务控制的文档。
-    public init(text: String = "", id: UUID = UUID(), format: DocumentFormat = .utf8) {
+    public init(text: String = "", id: UUID = UUID(), format: DocumentFormat = .utf8, revision: UInt64 = 0) {
         self.id = id
         self.text = PieceTree(text)
         self.format = format
+        self.revision = revision
     }
 
     /// 业务作用：后台加载或恢复已经构建好的分块正文在主执行域直接接管，不再展开全文。
@@ -114,11 +116,13 @@ public final class DocumentBuffer {
     /// - text: 已验证的不可变分块正文。
     /// - id: 文档生命周期。
     /// - format: 原始编码和换行规则。
+    /// - revision: 已确认的恢复修订，不将恢复身份的序号重置为零。
     /// 返回：正文结构共享的新文档，不制造撤销项。
-    public init(text: PieceTree, id: UUID = UUID(), format: DocumentFormat = .utf8) {
+    public init(text: PieceTree, id: UUID = UUID(), format: DocumentFormat = .utf8, revision: UInt64 = 0) {
         self.id = id
         self.text = text
         self.format = format
+        self.revision = revision
     }
 
     /// 业务作用：唯一正文提交入口，全部校验完成后一次发布历史、选区和单调修订。
@@ -191,6 +195,10 @@ public final class DocumentBuffer {
             lastEdits = []
             lastActionName = ""
             return false
+        }
+        // 修订不能回绕到旧值，否则旧范围与后台结果可能重新取得发布资格。
+        guard revision < UInt64.max else {
+            throw NateError.message("文档修订已达到上限，请保存后关闭并重新打开，建立新的文档生命周期。")
         }
         let prepared = transaction.after
         let after =
@@ -322,9 +330,11 @@ public final class DocumentBuffer {
 
     /// 业务作用：撤销完整编辑并恢复操作前选区，保存不参与历史管理。
     /// 参数说明: 无。
-    /// 返回：恢复旧正文但使用新修订号，防止旧后台回调重新生效。
+    /// 返回：恢复旧正文但使用新修订号；达到修订上限时保留正文与历史。
     public func undo() {
-        guard !isReadOnly, !isEditingSuspended, let entry = undoEntries.popLast() else {
+        // 上限检查必须先于弹出历史，不能以修订回绕或丢弃历史换取撤销。
+        guard !isReadOnly, !isEditingSuspended, revision < UInt64.max, let entry = undoEntries.popLast()
+        else {
             return
         }
         text = entry.before
@@ -340,9 +350,11 @@ public final class DocumentBuffer {
 
     /// 业务作用：重做完整事务；新输入后旧分支不再可用。
     /// 参数说明: 无。
-    /// 返回：恢复事务结果和新修订号。
+    /// 返回：恢复事务结果和新修订号；达到修订上限时保留正文与历史。
     public func redo() {
-        guard !isReadOnly, !isEditingSuspended, let entry = redoEntries.popLast() else {
+        // 与普通提交使用相同单调门禁，达到上限后不消耗待重做事务。
+        guard !isReadOnly, !isEditingSuspended, revision < UInt64.max, let entry = redoEntries.popLast()
+        else {
             return
         }
         text = entry.after

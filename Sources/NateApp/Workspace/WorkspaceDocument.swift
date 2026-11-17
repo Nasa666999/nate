@@ -50,12 +50,14 @@ final class WorkspaceDocument {
         dirtyHint || encoding != savedEncoding
     }
     var recoveryMetadataKey: String {
-        let positions = buffer.selections.map {
-            "\($0.anchor):\($0.head):\($0.virtualColumn)"
-        }.joined(separator: ",")
-        let bookmarks = buffer.bookmarks.sorted().map(String.init).joined(separator: ",")
-        return
-            "\(url?.path ?? pendingOriginalPath ?? "")|\(name)|\(encoding.codePage)|\(encoding.bom)|\(buffer.format.lineEnding.rawValue)|\(language)|\(buffer.isReadOnly)|\(baseline?.digest ?? pendingOriginalBaseline?.digest ?? "")|\(positions)|\(bookmarks)"
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        // 相同正文摘要仍可能对应新的文件身份；完整元数据按原字节编码，分隔符与 Unicode 规范等价不参与判等。
+        guard let data = try? encoder.encode(recoveryDocument()) else {
+            // 无法编码的状态不能冒用旧检查点；每次保持不同身份，让持久化入口继续报告真实失败。
+            return UUID().uuidString
+        }
+        return FileStorage.digest(data)
     }
 
     /// 业务作用：建立标签元数据，正文身份不随路径改变。
@@ -66,6 +68,7 @@ final class WorkspaceDocument {
     /// - id: 恢复文档稳定身份。
     /// - encoding: 初始字节编码。
     /// - lineEnding: 新插入换行的规则。
+    /// - revision: 自动恢复同一文档身份时沿用的已确认修订。
     /// 返回：跨视图共享的文件关联和保存状态。
     init(
         name: String,
@@ -73,13 +76,15 @@ final class WorkspaceDocument {
         textTree: PieceTree? = nil,
         id: UUID = UUID(),
         encoding: TextEncoding = .utf8,
-        lineEnding: LineEnding = .lf
+        lineEnding: LineEnding = .lf,
+        revision: UInt64 = 0
     ) {
         self.name = name
         buffer = DocumentBuffer(
             text: textTree ?? PieceTree(text),
             id: id,
-            format: DocumentFormat(codePage: encoding.codePage, bom: encoding.bom, lineEnding: lineEnding)
+            format: DocumentFormat(codePage: encoding.codePage, bom: encoding.bom, lineEnding: lineEnding),
+            revision: revision
         )
         savedEncoding = encoding
         savedText = buffer.text
