@@ -94,21 +94,33 @@ struct CancellableMatcher {
                 return nil
             }
             let unit = input[state.position]
-            var matches = ranges.contains {
-                $0.contains(unit)
+            var matches = false
+            // 一个字符类也可能包含大量区间，每次分类工作必须计入同一执行预算，不能只在外层节点检查。
+            for range in ranges {
+                try checkpoint()
+                if range.contains(unit) {
+                    matches = true
+                    break
+                }
             }
-            if !state.sensitive {
-                matches =
-                    matches
-                    || ranges.contains {
-                        range in
-                        let lower = LiteralMatcher.fold(range.lowerBound, sensitive: false)
-                        let upper = LiteralMatcher.fold(range.upperBound, sensitive: false)
-                        let value = LiteralMatcher.fold(unit, sensitive: false)
-                        return lower <= value && value <= upper
+            if !matches && !state.sensitive {
+                let value = LiteralMatcher.fold(unit, sensitive: false)
+                for range in ranges {
+                    try checkpoint()
+                    let lower = LiteralMatcher.fold(range.lowerBound, sensitive: false)
+                    let upper = LiteralMatcher.fold(range.upperBound, sensitive: false)
+                    if lower <= value && value <= upper {
+                        matches = true
+                        break
                     }
+                }
             }
             for kind in kinds {
+                // 字符类是并集，成员已确定后无需继续扫描；最终否定只对整个并集应用一次。
+                if matches {
+                    break
+                }
+                try checkpoint()
                 let lower = String(kind).lowercased()
                 var hit = false
                 switch lower {
