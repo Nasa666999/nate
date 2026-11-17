@@ -15,6 +15,55 @@ public struct RecoveryDocument: Sendable, Codable {
     public var readOnly: Bool
     public var lineEnding: LineEnding?
 
+    /// 业务作用：恢复进度使用完整元数据的原字节证据，正文由独立修订和内容清单绑定。
+    /// 参数说明: 无。
+    /// 返回：稳定 SHA-256；无法编码时使用独立身份，不冒用任何既有检查点。
+    public var metadataKey: String {
+        var metadata = self
+        metadata.text = ""
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let data = try? encoder.encode(metadata) else {
+            return UUID().uuidString
+        }
+        return FileStorage.digest(data)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case revision
+        case name
+        case text
+        case path
+        case encoding
+        case baseline
+        case language
+        case selections
+        case bookmarks
+        case readOnly
+        case lineEnding
+    }
+
+    /// 业务作用：按固定行号编码书签，避免集合遍历顺序导致相同恢复元数据生成不同清单。
+    /// 参数说明:
+    /// - encoder: 调用方配置的编码器，清单入口另外固定字典键顺序。
+    /// 返回：全部业务字段交给编码器，书签按行号排列；编码失败向上传递。
+    public func encode(to encoder: any Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+        try values.encode(revision, forKey: .revision)
+        try values.encode(name, forKey: .name)
+        try values.encode(text, forKey: .text)
+        try values.encodeIfPresent(path, forKey: .path)
+        try values.encode(encoding, forKey: .encoding)
+        try values.encodeIfPresent(baseline, forKey: .baseline)
+        try values.encode(language, forKey: .language)
+        try values.encode(selections, forKey: .selections)
+        try values.encode(bookmarks.sorted(), forKey: .bookmarks)
+        try values.encode(readOnly, forKey: .readOnly)
+        try values.encodeIfPresent(lineEnding, forKey: .lineEnding)
+    }
+
     /// 业务作用：固定已提交正文及恢复所需元数据，不包含输入法预编辑。
     /// 参数说明:
     /// - id: 稳定文档身份。

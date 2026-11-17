@@ -16,6 +16,7 @@ public enum RecoveryLimits {
 public struct RecoveredSnapshot: Sendable {
     public let metadata: RecoveryDocument
     public let text: PieceTree
+    public let reference: RecoveryReference
 }
 
 struct RecoveryChunkReference: Sendable, Codable {
@@ -114,23 +115,36 @@ extension RecoveryStore {
             contentRoot: try chunkRoot(chunks),
             chunks: chunks
         )
-        let data = try JSONEncoder().encode(manifest)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(manifest)
         guard data.count <= RecoveryLimits.metadataBytes else {
             throw NateError.message("恢复元数据超过 8 MB 预算。")
         }
-        let filename = record.id.uuidString + "-" + UUID().uuidString + ".snapshot"
+        let checksum = FileStorage.digest(data)
+        let filename = record.id.uuidString + "-" + checksum + ".snapshot"
+        let target = directory.appendingPathComponent(filename)
         try checkRecoveryBudget(deadline, permit: permit)
-        // 每个内容分块先完整同步；清单可靠后才把引用交给工作区索引发布入口。
-        _ = try FileStorage.save(
-            data,
-            to: directory.appendingPathComponent(filename),
-            expected: nil,
-            permit: permit
-        )
+        if try recoveryFileExists(target) {
+            // 索引失败后的相同快照复用原清单，但文件名中的摘要不能代替实际字节证据。
+            let existing = try readRecoveryFile(
+                target,
+                maximumBytes: RecoveryLimits.metadataBytes,
+                collectBytes: false,
+                permit: permit
+            )
+            guard existing.baseline.digest == checksum else {
+                throw NateError.message("恢复清单的内容地址与实际字节不符，现有记录已保留。")
+            }
+        }
+        else {
+            // 每个内容分块先完整同步；清单可靠后才把引用交给工作区索引发布入口。
+            _ = try FileStorage.save(data, to: target, expected: nil, permit: permit)
+        }
         return RecoveryReference(
             id: record.id,
             file: filename,
-            checksum: FileStorage.digest(data),
+            checksum: checksum,
             name: record.name
         )
     }

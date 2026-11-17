@@ -50,14 +50,7 @@ final class WorkspaceDocument {
         dirtyHint || encoding != savedEncoding
     }
     var recoveryMetadataKey: String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        // 相同正文摘要仍可能对应新的文件身份；完整元数据按原字节编码，分隔符与 Unicode 规范等价不参与判等。
-        guard let data = try? encoder.encode(recoveryDocument()) else {
-            // 无法编码的状态不能冒用旧检查点；每次保持不同身份，让持久化入口继续报告真实失败。
-            return UUID().uuidString
-        }
-        return FileStorage.digest(data)
+        recoveryDocument().metadataKey
     }
 
     /// 业务作用：建立标签元数据，正文身份不随路径改变。

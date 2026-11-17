@@ -45,7 +45,7 @@ extension ApplicationController {
                             self.scheduleSave(document)
                         }
                     }
-                    self.scheduleRecovery()
+                    self.scheduleRecovery(force: self.initialRecoveryConfirmation)
                 }
                 self.refreshUI()
                 next = next.advanced(by: .seconds(1))
@@ -269,6 +269,7 @@ extension ApplicationController {
             $0.buffer.text.byteCount
         }
         let executor = recoveryIO
+        initialRecoveryConfirmation = false
         lastRecoverySucceeded = false
         recoveryTask = Task {
             [weak self] in

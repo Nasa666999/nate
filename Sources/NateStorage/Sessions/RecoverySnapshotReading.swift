@@ -90,7 +90,7 @@ extension RecoveryStore {
             }
             let tree = PieceTree(record.text)
             record.text = ""
-            return RecoveredSnapshot(metadata: record, text: tree)
+            return RecoveredSnapshot(metadata: record, text: tree, reference: reference)
         }
         let manifest = try readManifest(reference)
         guard manifest.byteCount <= maximumBytes else {
@@ -124,7 +124,7 @@ extension RecoveryStore {
         guard text.byteCount == manifest.byteCount, text.utf16Count == manifest.utf16Count else {
             throw NateError.message("恢复正文总长度不符合清单。")
         }
-        return RecoveredSnapshot(metadata: manifest.metadata, text: text)
+        return RecoveredSnapshot(metadata: manifest.metadata, text: text, reference: reference)
     }
 
     /// 业务作用：恢复前只读取声明和必要的旧式正文长度，先阻止超出工作区预算的分配。
@@ -217,15 +217,34 @@ extension RecoveryStore {
     /// - reference: 待验证的记录身份、路径和摘要。
     /// 返回：文件名结构和摘要合法时继续，否则拒绝访问。
     func validateReference(_ reference: RecoveryReference) throws {
-        let path = reference.file as NSString
-        let ext = path.pathExtension
-        let base = path.deletingPathExtension
-        guard ext == "json" || ext == "snapshot", base.count == 73,
-            base.hasPrefix(reference.id.uuidString + "-"),
-            UUID(uuidString: String(base.suffix(36))) != nil, validChecksum(reference.checksum)
+        guard validChecksum(reference.checksum),
+            isRecoveryRecordFilename(reference.file, id: reference.id, checksum: reference.checksum)
         else {
             throw NateError.message("恢复引用不是合法的文档记录路径。")
         }
+    }
+
+    /// 业务作用：只识别恢复记录自身的精确命名，内容地址清单同时验证文件名与索引摘要一致。
+    /// 参数说明:
+    /// - name: 当前目录中的文件名，不能含父路径。
+    /// - id: 有索引引用时必须匹配的文档身份。
+    /// - checksum: 内容地址清单必须匹配的摘要；清理无引用候选时可为空。
+    /// 返回：兼容独立 UUID 记录与内容地址清单，其它命名不作为恢复材料访问或清理。
+    func isRecoveryRecordFilename(_ name: String, id: UUID? = nil, checksum: String? = nil) -> Bool {
+        let path = name as NSString
+        let ext = path.pathExtension
+        let base = path.deletingPathExtension
+        guard ext == "json" || ext == "snapshot", base.count == 73 || base.count == 101,
+            let documentID = UUID(uuidString: String(base.prefix(36))), id == nil || documentID == id,
+            base[base.index(base.startIndex, offsetBy: 36)] == "-"
+        else {
+            return false
+        }
+        let suffix = String(base.dropFirst(37))
+        if base.count == 73 {
+            return UUID(uuidString: suffix) != nil
+        }
+        return ext == "snapshot" && validChecksum(suffix) && (checksum == nil || checksum == suffix)
     }
 
     /// 业务作用：内容地址只允许固定长度十六进制摘要和有界非空长度。

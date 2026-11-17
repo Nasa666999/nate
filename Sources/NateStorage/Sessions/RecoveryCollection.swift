@@ -84,11 +84,7 @@ extension RecoveryStore {
                 }
             )
             let name = url.lastPathComponent
-            let base = url.deletingPathExtension().lastPathComponent
-            guard !records.contains(name), url.pathExtension == "json" || url.pathExtension == "snapshot",
-                base.count == 73, UUID(uuidString: String(base.prefix(36))) != nil,
-                base[base.index(base.startIndex, offsetBy: 36)] == "-",
-                UUID(uuidString: String(base.suffix(36))) != nil,
+            guard !records.contains(name), isRecoveryRecordFilename(name),
                 try expiredRecoveryFile(url, retention: retention)
             else {
                 continue

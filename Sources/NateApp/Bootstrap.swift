@@ -52,7 +52,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var lastRecoverySucceeded = false
     var nextRecoveryRetry = ContinuousClock.now
     var recoveryFailureCount = 0
-    var nextRecoveryCollection = ContinuousClock.now.advanced(by: .seconds(60))
+    var nextRecoveryCollection = ContinuousClock.now
+    var initialRecoveryConfirmation = true
     var searchTask: Task<Void, Never>?
     var externalObservationTask: Task<Void, Never>?
     var externalStamps: [UUID: FileStamp] = [:]
@@ -166,7 +167,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 let result = try store.restoreSnapshots()
                 return (
                     documents: result.documents.map {
-                        (record: $0.metadata, tree: $0.text)
+                        (record: $0.metadata, tree: $0.text, reference: $0.reference)
                     }, active: result.active
                 )
             }
@@ -190,7 +191,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 SystemIntegration.alert("函数列表资源未载入", error.localizedDescription)
             }
             await loadUserLanguages()
-            for (record, tree) in restored.documents {
+            for (record, tree, reference) in restored.documents {
                 let document = WorkspaceDocument(
                     name: record.name,
                     text: record.text,
@@ -210,6 +211,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 }
                 document.buffer.bookmarks = record.bookmarks
                 document.buffer.isReadOnly = record.readOnly
+                document.recoveryReference = reference
+                document.recoveryRevision = record.revision
+                // 已恢复引用已经通过完整依赖校验；按原元数据记账，不能把随后默认化的视图状态冒充持久化。
+                document.lastRecoveryMetadata = record.metadataKey
+                document.state = "恢复正文已载入 · 尚未选择原文件"
                 if let path = record.path {
                     // 恢复正文先显示，原路径核验完成前不授予自动写入权。
                     document.pendingOriginalPath = path
