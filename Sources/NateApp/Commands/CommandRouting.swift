@@ -322,6 +322,8 @@ extension ApplicationController {
             recentFiles = []
             buildMenus()
         case "folder": chooseFolder()
+        case "refreshFolder": directoryWorkspace?.refresh()
+        case "closeFolder": directoryWorkspace?.stop()
         case "monitor":
             Task {
                 await toggleMonitoring()

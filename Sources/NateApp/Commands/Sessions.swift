@@ -144,19 +144,21 @@ extension ApplicationController {
         }
     }
 
-    /// 业务作用：读取有界真实目录清单，包、隐藏目录和符号链接不递归展开。
+    /// 业务作用：真实目录进入独立树侧栏，按需展开并观察变化，不覆盖搜索结果或改动虚拟项目。
     /// 参数说明:
     /// - url: 用户明确选择的根目录。
-    /// 返回：可导航的文件列表，不改变项目虚拟分组或文档正文。
+    /// 返回：新根取得目录树展示权，非法 URL 保留原树；文件仅在用户激活时进入统一打开流程。
     func showFolder(_ url: URL) async {
         do {
-            let files = try await fileIO.run {
-                try DirectoryTraversal.files(under: url, limit: 20_000)
+            // 退出已固定工作区，不能再建立会打开文件或改变焦点的新目录入口。
+            guard !closing, let mainWindow else {
+                return
             }
-            resultNavigation = files.map {
-                ResultNavigation(documentID: nil, revision: nil, url: $0, range: ByteRange(0, 0))
+            if directoryWorkspace?.window !== mainWindow {
+                directoryWorkspace?.stop()
+                directoryWorkspace = DirectoryWorkspaceController(application: self, window: mainWindow)
             }
-            mainWindow?.showResults(files.map(\.path).joined(separator: "\n"), navigable: true)
+            try directoryWorkspace?.start(url)
         }
         catch {
             SystemIntegration.alert("目录工作区", error.localizedDescription)

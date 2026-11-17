@@ -124,7 +124,8 @@ extension ApplicationController: NSMenuItemValidation {
             ("重置缩放", "zoomReset"), ("浅色主题", "themeLight"), ("深色主题", "themeDark"), ("系统主题", "themeSystem"),
             ("左右分屏 / 克隆", "splitVertical"), ("上下分屏 / 克隆", "splitHorizontal"), ("关闭分屏", "unsplit"),
             ("从右到左", "rtl"), ("固定标签", "pin"), ("编辑器只读", "readOnly"), ("监视文件", "monitor"),
-            ("打开目录工作区…", "folder"), ("函数列表", "symbolsList"), ("文档统计", "statistics"), ("全屏", "fullscreen"),
+            ("打开目录工作区…", "folder"), ("刷新目录工作区", "refreshFolder"), ("关闭目录工作区", "closeFolder"),
+            ("函数列表", "symbolsList"), ("文档统计", "statistics"), ("全屏", "fullscreen"),
         ] {
             add(view, title, id)
         }

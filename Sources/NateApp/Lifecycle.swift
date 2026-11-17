@@ -42,6 +42,7 @@ extension ApplicationController {
         closing = true
         // 退出即将固定恢复元数据，先撤销只读查询的光标发布权。
         cancelIncrementalSearch(resetOrigin: true)
+        directoryWorkspace?.pause()
         if let findWindow {
             scheduleSearchSettings(findWindow.state)
         }
@@ -145,6 +146,7 @@ extension ApplicationController {
     /// 返回：原有保存周期继续推进，仍未返回的任务保持登记。
     func restoreAfterCancelledExit(_ protectedDocuments: [WorkspaceDocument]) {
         closing = false
+        directoryWorkspace?.resume()
         fileOperations.resumePublications()
         for document in protectedDocuments + documents {
             document.setEditingSuspension(.applicationTermination, active: false)

@@ -52,6 +52,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onIncrementalOptions: ((IncrementalSearchOptions) -> Void)?
     public var onIncrementalSuspend: (() -> Bool)?
     public let incrementalSearch = IncrementalSearchBar(frame: .zero)
+    public let directoryPanel = DirectoryTreePanel(frame: .zero)
     var incrementalHeight: NSLayoutConstraint?
     public internal(set) var editor: EditorView
     public let status = SaveStatusField(labelWithString: "")
@@ -165,10 +166,13 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         editorSplit.addArrangedSubview(scroll)
         workspaceSplit.isVertical = true
         workspaceSplit.dividerStyle = .thin
+        workspaceSplit.addArrangedSubview(directoryPanel)
         workspaceSplit.addArrangedSubview(editorSplit)
         workspaceSplit.addArrangedSubview(structurePanel)
         // 尺寸保持优先级低于系统拖动约束，侧栏才能保留初始宽度并允许用户调整。
-        workspaceSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
+        workspaceSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 0)
+        workspaceSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 2)
+        directoryPanel.isHidden = true
         structurePanel.isHidden = true
         structurePanel.onRefresh = {
             [weak self] in self?.onCommand?("refreshStructure")
@@ -316,7 +320,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         window?.contentView?.layoutSubtreeIfNeeded()
         workspaceSplit.adjustSubviews()
         if visible {
-            workspaceSplit.setPosition(max(280, workspaceSplit.bounds.width - 280), ofDividerAt: 0)
+            workspaceSplit.setPosition(max(280, workspaceSplit.bounds.width - 280), ofDividerAt: 1)
         }
         refreshEditors()
     }

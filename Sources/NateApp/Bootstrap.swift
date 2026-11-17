@@ -22,6 +22,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var completionCatalog: CompletionCatalog?
     var functionListCatalog: FunctionListCatalog?
     var structureTask: Task<Void, Never>?
+    var directoryWorkspace: DirectoryWorkspaceController?
     var structureGeneration = UUID()
     var structureRequestKey: String?
     var completionTask: Task<Void, Never>?
