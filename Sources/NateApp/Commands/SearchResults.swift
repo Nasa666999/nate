@@ -38,6 +38,7 @@ extension ApplicationController {
     /// - files: 按来源顺序排列的完整结果分组。
     /// - notes: 真实跳过、无法定位或零匹配说明。
     /// - destinations: 显示命中与原文档或磁盘证据的完整对应集合。
+    /// - condition: 本次实际执行的匹配选项，不依赖后来变化的搜索控件。
     /// 返回：为满足二十批、十万命中和 64 MiB 容量而移除的旧批次数；失败保留原历史。
     func publishSearchResults(
         id: UUID,
@@ -45,14 +46,16 @@ extension ApplicationController {
         scope: String,
         files: [SearchResultFilePresentation],
         notes: [String],
-        destinations: [(UUID, ResultNavigation)]
+        destinations: [(UUID, ResultNavigation)],
+        condition: SearchResultCondition = SearchResultCondition()
     ) throws -> Int {
         let presentation = SearchResultBatchPresentation(
             id: id,
             query: query,
             scope: scope,
             files: files,
-            notes: notes
+            notes: notes,
+            condition: condition
         )
         let footprint = try presentation.validatedFootprint()
         var mapping: [UUID: ResultNavigation] = [:]
@@ -82,11 +85,10 @@ extension ApplicationController {
             presentation: presentation,
             destinations: mapping,
             footprint: footprint,
-            matchCount: files.reduce(0) {
-                $0 + $1.matchCount
-            }
+            matchCount: presentation.initialMatchCount
         )
-        var candidate = [batch] + resultBatches
+        let preferences = findWindow?.resultPreferences ?? searchSettingsState.results
+        var candidate = preferences.clearPrevious ? [batch] : [batch] + resultBatches
         var bytes = candidate.reduce(0) {
             $0 + $1.footprint
         }

@@ -406,7 +406,8 @@ extension ApplicationController {
                         scope: actualScope,
                         files: files,
                         notes: notes,
-                        destinations: navigation
+                        destinations: navigation,
+                        condition: SearchResultCondition(captured.first?.scope.options ?? options)
                     )
                     if removed > 0 {
                         self.findWindow?.feedback.stringValue += "结果容量已满，已移除 \(removed) 个最旧批次。"

@@ -7,6 +7,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     public var onDismiss: (() -> Void)?
     public var onSelectionContextRequest: (() -> Void)?
     public var presentationPreferences = SearchPresentationPreferences()
+    public internal(set) var resultPreferences = SearchResultPreferences()
     public var isEditingInput: Bool {
         [query, replacement, directory, filters].contains {
             $0.isEditingInput

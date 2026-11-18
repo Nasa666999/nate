@@ -31,6 +31,8 @@ public struct SearchResultBatchPresentation: Sendable {
     public let scope: String
     public let files: [SearchResultFilePresentation]
     public let notes: [String]
+    public let condition: SearchResultCondition
+    public let initialMatchCount: Int
 
     /// 业务作用：保存一轮已完成查询的独立范围和结果，多轮查询不会互相借用行号身份。
     /// 参数说明:
@@ -39,19 +41,34 @@ public struct SearchResultBatchPresentation: Sendable {
     /// - scope: 实际文档、目录或所选面板范围说明。
     /// - files: 原请求顺序排列的命中文件分组。
     /// - notes: 未读取、无法定位或零命中的真实说明。
+    /// - condition: 本批实际执行的匹配选项。
+    /// - initialMatchCount: 删除展示条目前的原始匹配数，省略时从完整文件集合计算。
     /// 返回：可独立保留、复制和筛选的不可变批次，发布前须检查完整容量与行身份。
     public init(
         id: UUID,
         query: String,
         scope: String,
         files: [SearchResultFilePresentation],
-        notes: [String]
+        notes: [String],
+        condition: SearchResultCondition = SearchResultCondition(),
+        initialMatchCount: Int? = nil
     ) {
         self.id = id
         self.query = query
         self.scope = scope
         self.files = files
         self.notes = notes
+        self.condition = condition
+        self.initialMatchCount =
+            initialMatchCount
+            ?? files.reduce(0) {
+                count,
+                file in
+                guard count <= 100_000, file.matchCount >= 0, file.matchCount <= 100_000 - count else {
+                    return 100_001
+                }
+                return count + file.matchCount
+            }
     }
 
     /// 业务作用：树形结果在呈现前整体验证身份、容量和高亮坐标，不接受会造成半棵树或越界着色的输入。
@@ -59,7 +76,8 @@ public struct SearchResultBatchPresentation: Sendable {
     /// 返回：完整结果的 UTF-8 元数据容量；超过十万匹配、64 MiB 或存在重复身份时明确失败。
     public func validatedFootprint() throws -> Int {
         guard query.utf8.count <= 1024 * 1024, scope.utf8.count <= 16_384,
-            files.count <= 100_000, notes.count <= 10_000
+            files.count <= 100_000, notes.count <= 10_000,
+            (0...100_000).contains(initialMatchCount)
         else {
             throw NateError.message("搜索结果批次的范围、文件数或说明超过容量，未发布部分树。")
         }
@@ -107,6 +125,9 @@ public struct SearchResultBatchPresentation: Sendable {
                 throw NateError.message("搜索结果元数据超过 64 MiB，未发布部分树。")
             }
             bytes += count
+        }
+        guard matches <= initialMatchCount else {
+            throw NateError.message("搜索结果超过原始匹配数量，未发布部分树。")
         }
         guard bytes <= 64 * 1024 * 1024 else {
             throw NateError.message("搜索结果元数据超过 64 MiB，未发布部分树。")

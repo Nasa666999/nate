@@ -18,15 +18,7 @@ extension SearchResultsPanel {
             expanded.removeAll()
             outline.collapseItem(nil, collapseChildren: true)
         case "remove":
-            let retained = Set(batches.map(\.id))
-            let selected = Set(selectedKeys().map(\.batch)).intersection(retained)
-            if !selected.isEmpty {
-                onRemoveBatches?(
-                    batches.map(\.id).filter {
-                        selected.contains($0)
-                    }
-                )
-            }
+            removeSelectedResults()
         case "clear": onRemoveBatches?(batches.map(\.id))
         case "close": onClose?()
         default: break
@@ -132,7 +124,7 @@ extension SearchResultsPanel {
                 }
                 if !openedBatch {
                     try appendExport(
-                        "查找：\(result.batch.query)\n范围：\(result.batch.scope)",
+                        "查找：\(result.batch.query)\n范围：\(result.batch.scope)\n选项：\(result.batch.condition.summary)",
                         into: &output,
                         remaining: &remaining
                     )
@@ -149,7 +141,7 @@ extension SearchResultsPanel {
             {
                 if !openedBatch {
                     try appendExport(
-                        "查找：\(result.batch.query)\n范围：\(result.batch.scope)",
+                        "查找：\(result.batch.query)\n范围：\(result.batch.scope)\n选项：\(result.batch.condition.summary)",
                         into: &output,
                         remaining: &remaining
                     )
@@ -241,7 +233,7 @@ extension SearchResultsPanel {
     /// 参数说明: 无。
     /// 返回：批次清除按钮反映实际选择与历史状态，不修改结果。
     func updateCommands() {
-        clearBatch.isEnabled = !selectedKeys().isEmpty
+        clearBatch.isEnabled = !selectedKeys().isEmpty && filterTask == nil && !filter.isEditingInput
         clearAll.isEnabled = !batches.isEmpty
     }
 

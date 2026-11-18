@@ -121,7 +121,10 @@ extension SearchResultsPanel {
                 scroll.reflectScrolledClipView(scroll.contentView)
             }
         }
-        feedback.stringValue = "保留 \(batches.count) 个批次 · 当前显示 \(output.visibleRows) 个可定位命中"
+        let original = batches.reduce(0) {
+            $0 + $1.initialMatchCount
+        }
+        feedback.stringValue = "保留 \(batches.count) 个批次 · 原始 \(original) 处 · 显示 \(output.visibleRows) 项"
         updateCommands()
         onPresentationChange?()
     }
@@ -203,8 +206,9 @@ extension SearchResultsPanel {
         switch item.value {
         case .batch(let batch):
             field.stringValue =
-                "查找 “\(SearchResultLabel.display(batch.query, limit: 96))” · \(SearchResultLabel.display(batch.scope, limit: 160))"
+                "查找 “\(SearchResultLabel.display(batch.query, limit: 96))” · \(batch.condition.options.mode.rawValue) · 原始 \(batch.initialMatchCount) 处 · \(SearchResultLabel.display(batch.scope, limit: 160))"
             field.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+            field.toolTip = batch.condition.summary
         case .file(let file):
             field.stringValue =
                 "\(SearchResultLabel.display(file.path ?? file.name)) · \(file.matchCount) 处，显示 \(file.rows.count) 项"

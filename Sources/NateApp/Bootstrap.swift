@@ -407,6 +407,21 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             }
             self.removeSearchResultBatches(ids)
         }
+        window.searchResults.onRemove = {
+            [weak self, weak window] requests in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.removeSearchResults(requests)
+        }
+        window.searchResults.setPreferences(searchSettingsState.results)
+        window.searchResults.onPreferencesChange = {
+            [weak self, weak window] preferences in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.setSearchResultPreferences(preferences)
+        }
     }
 
     /// 业务作用：建立临时文档，不在用户尚未选择路径时擅自创建文件。

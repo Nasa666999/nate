@@ -257,7 +257,8 @@ extension ApplicationController {
                         scope: source.summary,
                         files: files,
                         notes: output,
-                        destinations: navigation
+                        destinations: navigation,
+                        condition: SearchResultCondition(options)
                     )
                 }
                 if replacing {

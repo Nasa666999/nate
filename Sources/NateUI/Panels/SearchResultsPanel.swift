@@ -37,6 +37,9 @@ final class SearchResultTreeItem {
 public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate {
     public var onActivate: ((UUID, UUID) -> Void)?
     public var onRemoveBatches: (([UUID]) -> Void)?
+    public var onRemove: (([SearchResultRemoval]) -> Void)?
+    public var onPreferencesChange: ((SearchResultPreferences) -> Void)?
+    public internal(set) var preferences = SearchResultPreferences()
     public var onClose: (() -> Void)?
     public var onPresentationChange: (() -> Void)?
     public private(set) var batches: [SearchResultBatchPresentation] = []
@@ -60,8 +63,9 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
     var presentation = UUID()
     var filterTask: Task<Void, Never>?
     var rebuilding = false
-    let clearBatch = NSButton(title: "清除所选批次", target: nil, action: nil)
+    let clearBatch = NSButton(title: "删除所选", target: nil, action: nil)
     let clearAll = NSButton(title: "清空", target: nil, action: nil)
+    let clearPrevious = NSButton(checkboxWithTitle: "清除旧结果", target: nil, action: nil)
 
     /// 业务作用：提供独立的多批次结果树和筛选入口，结果呈现不占用文档标签或正文输入。
     /// 参数说明:
@@ -97,6 +101,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
             button.bezelStyle = .rounded
         }
         root.addArrangedSubview(toolbar)
+        clearBatch.toolTip = "只删除所选展示条目；批次或文件分组包含被筛选隐藏的后代，不修改源文件。"
         filter.placeholderString = "筛选已有结果的路径和上下文（区分大小写）"
         filter.toolTip = "区分大小写，按原始路径和已显示上下文逐字筛选；最多 16 KiB，不重读源文件。"
         filter.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -124,7 +129,14 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
         filter.onFeedback = {
             [weak self] message in self?.feedback.stringValue = message
         }
-        root.addArrangedSubview(filter)
+        clearPrevious.controlSize = .small
+        clearPrevious.target = self
+        clearPrevious.action = #selector(resultPreferencesChanged)
+        clearPrevious.toolTip = "后续查询完整发布时清除旧批次；失败或取消保留历史。"
+        clearPrevious.setContentHuggingPriority(.required, for: .horizontal)
+        let filterRow = NSStackView(views: [filter, clearPrevious])
+        filterRow.spacing = 6
+        root.addArrangedSubview(filterRow)
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("search-result"))
         column.resizingMask = .autoresizingMask
         outline.addTableColumn(column)
@@ -144,6 +156,9 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
         outline.onCopy = {
             [weak self] in self?.copyResults()
         }
+        outline.onRemove = {
+            [weak self] in self?.removeSelectedResults()
+        }
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
@@ -155,7 +170,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
         feedback.textColor = .secondaryLabelColor
         feedback.lineBreakMode = .byTruncatingTail
         root.addArrangedSubview(feedback)
-        for view in [toolbar, filter, scroll, feedback] {
+        for view in [toolbar, filterRow, scroll, feedback] {
             view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
         }
         updateCommands()
@@ -185,12 +200,10 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
                 throw NateError.message("结果历史超过 64 MiB，既有结果保留。")
             }
             bytes += footprint
-            for file in batch.files {
-                guard file.matchCount <= 100_000 - rows else {
-                    throw NateError.message("结果历史超过十万个匹配，既有结果保留。")
-                }
-                rows += file.matchCount
+            guard batch.initialMatchCount <= 100_000 - rows else {
+                throw NateError.message("结果历史超过十万个匹配，既有结果保留。")
             }
+            rows += batch.initialMatchCount
         }
         self.batches = batches
         if batches.isEmpty {
@@ -307,14 +320,18 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
 final class SearchResultOutline: NSOutlineView {
     var onActivate: (() -> Void)?
     var onCopy: (() -> Void)?
+    var onRemove: (() -> Void)?
 
     /// 业务作用：Enter 与双击采用同一稳定结果激活入口，其余导航保留原生树表行为。
     /// 参数说明:
     /// - event: 当前键盘输入。
-    /// 返回：Enter 请求当前命中，其它按键由原生树表处理。
+    /// 返回：Enter 请求当前命中，Delete 删除所选展示条目，其它按键由原生树表处理。
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 36 || event.keyCode == 76 {
             onActivate?()
+        }
+        else if event.keyCode == 51 || event.keyCode == 117 {
+            onRemove?()
         }
         else {
             super.keyDown(with: event)

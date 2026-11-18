@@ -35,6 +35,7 @@ extension ApplicationController {
                 return (state, bytes.baseline)
             }
             searchSettingsState = state
+            mainWindow?.searchResults.setPreferences(state.results)
             searchSettingsBaseline = baseline
             searchSettingsReady = true
             searchSettingsError = nil

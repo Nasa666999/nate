@@ -71,6 +71,7 @@ extension FindReplaceWindow {
         result.presentation = presentationPreferences
         result.inputFont = inputFontConfiguration
         result.projectPanels = preferredProjectPanels.sorted()
+        result.results = resultPreferences
         return result
     }
 
@@ -88,6 +89,7 @@ extension FindReplaceWindow {
         try applyInputFont(state.inputFont, notify: false)
         query.stringValue = state.options.query
         presentationPreferences = state.presentation
+        resultPreferences = state.results
         replacement.stringValue = state.options.replacement
         directory.stringValue = state.directory
         filters.stringValue = state.filters
@@ -127,6 +129,15 @@ extension FindReplaceWindow {
             return
         }
         onStateChange?(state)
+    }
+
+    /// 业务作用：结果历史策略进入同一持久配置，显示偏好变化不撤销仍合法的正文查询。
+    /// 参数说明:
+    /// - preferences: 用户确认的结果保留策略。
+    /// 返回：偏好更新并通知设置保存入口，已有结果保持可用。
+    public func setResultPreferences(_ preferences: SearchResultPreferences) {
+        resultPreferences = preferences
+        stateChanged()
     }
 
     /// 业务作用：勾选选项后同步当前持久配置，不启动正文搜索或修改文档。

@@ -17,11 +17,13 @@ public struct SearchWindowState: Codable, Sendable {
     public var presentation = SearchPresentationPreferences()
     public var inputFont = SearchInputFont()
     public var projectPanels: [Int] = []
+    public var results = SearchResultPreferences()
 
     enum CodingKeys: String, CodingKey {
         case format, options, directory, filters
         case queryHistory, replacementHistory, directoryHistory, filterHistory
         case page, stayAfterReplace, confirmsOpenReplacement, presentation, inputFont, projectPanels
+        case results
     }
 
     /// 业务作用：建立独立于文档和窗口对象的搜索配置快照，供启动恢复与后台保存使用。
@@ -52,6 +54,9 @@ public struct SearchWindowState: Codable, Sendable {
             ?? SearchPresentationPreferences()
         inputFont = try values.decodeIfPresent(SearchInputFont.self, forKey: .inputFont) ?? SearchInputFont()
         projectPanels = try values.decodeIfPresent([Int].self, forKey: .projectPanels) ?? []
+        results =
+            try values.decodeIfPresent(SearchResultPreferences.self, forKey: .results)
+            ?? SearchResultPreferences()
     }
 
     /// 业务作用：在归档解析后和编码前限定配置格式、历史条目和完整文本容量，拒绝无界配置分配。
