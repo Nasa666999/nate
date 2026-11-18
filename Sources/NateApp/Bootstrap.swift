@@ -113,6 +113,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var resultNavigationGeneration = UUID()
     var resultExportTask: Task<Void, Never>?
     var resultExportGeneration = UUID()
+    var resultPathOpenTask: Task<Void, Never>?
+    var resultPathOpenGeneration = UUID()
     var recentFiles: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: "recentFiles") ?? []
@@ -483,6 +485,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
+        cancelSearchResultPathOpen()
         // 新正文已提交，原目录打开不再拥有旧修订与原光标的发布资格。
         directoryWorkspace?.cancelOpen()
         cancelCompletion()

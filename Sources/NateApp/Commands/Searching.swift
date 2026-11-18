@@ -11,6 +11,7 @@ extension ApplicationController {
     /// 返回：请求身份先失效，再取消计算并收回句柄；正文、查询原文和历史不变。
     func suspendSearchForInput() {
         cancelSearchResultExport()
+        cancelSearchResultPathOpen()
         let hadSearch = searchTask != nil
         projectSearchScope = nil
         directoryWorkspace?.cancelOpen()

@@ -3,10 +3,10 @@ import NateCore
 import NateUI
 
 extension ApplicationController {
-    /// 业务作用：当前编辑窗口的结果选择与来源复制共享取消入口，旧窗口回调不拥有当前剪贴板权限。
+    /// 业务作用：当前编辑窗口的结果选择与来源操作共享取消入口，旧窗口回调不拥有当前剪贴板或焦点权限。
     /// 参数说明:
     /// - window: 正在装配操作回调的实际编辑窗口。
-    /// 返回：保留原结果呈现通知，并连接弱窗口与弱拥有者的复制入口。
+    /// 返回：保留原结果呈现通知，并连接弱窗口与弱拥有者的来源操作入口。
     func connectSearchResultSources(_ window: EditorWindow) {
         let previous = window.searchResults.onPresentationChange
         window.searchResults.onPresentationChange = {
@@ -16,6 +16,7 @@ extension ApplicationController {
                 return
             }
             self.cancelSearchResultExport()
+            self.cancelSearchResultPathOpen()
         }
         window.searchResults.onCopyLines = {
             [weak self, weak window] selection in
@@ -23,6 +24,13 @@ extension ApplicationController {
                 return
             }
             self.copySearchResultLines(selection)
+        }
+        window.searchResults.onOpenPaths = {
+            [weak self, weak window] selection in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.openSearchResultPaths(selection)
         }
     }
 

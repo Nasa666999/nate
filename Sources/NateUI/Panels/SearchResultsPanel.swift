@@ -42,6 +42,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
     public internal(set) var preferences = SearchResultPreferences()
     public var onClose: (() -> Void)?
     public var onCopyLines: (([SearchResultHitSelection]) -> Void)?
+    public var onOpenPaths: (([SearchResultFileSelection]) -> Void)?
     public var onPresentationChange: (() -> Void)?
     public private(set) var batches: [SearchResultBatchPresentation] = []
     public internal(set) var visibleMatchCount = 0

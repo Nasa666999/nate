@@ -45,6 +45,7 @@ extension ApplicationController {
         }
         closing = true
         cancelSearchResultExport()
+        cancelSearchResultPathOpen()
         // 退出即将固定恢复元数据，先撤销只读查询的光标发布权。
         cancelIncrementalSearch(resetOrigin: true)
         cancelProjectOpen()
