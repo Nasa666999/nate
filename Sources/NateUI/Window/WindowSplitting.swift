@@ -45,6 +45,14 @@ extension EditorWindow {
         }
         clone.showSymbols = editor.showSymbols
         clone.wrapLines = editor.wrapLines
+        clone.copyLineWithoutSelection = editor.copyLineWithoutSelection
+        clone.adaptClipboardLineEndings = editor.adaptClipboardLineEndings
+        clone.onClipboardCapture = {
+            [weak self] in self?.onClipboardCapture?($0)
+        }
+        clone.onClipboardPaste = {
+            [weak self] in self?.onClipboardPaste?($0, $1)
+        }
         clone.onChange = {
             [weak self, weak clone] in
             guard let self, let clone else {
@@ -90,6 +98,22 @@ extension EditorWindow {
         let extent = vertical ? editorSplit.bounds.width : editorSplit.bounds.height
         editorSplit.setPosition(max(1, extent / 2), ofDividerAt: 0)
         clone.refresh()
+    }
+
+    /// 业务作用：剪贴板选项在同一窗口的独立克隆之间一致生效，不能留下旧视图的隐式换行规则。
+    /// 参数说明:
+    /// - copyLine: 无普通选区是否复制和剪切主光标所在行。
+    /// - adaptEndings: 粘贴时是否明确适配插入内容的换行。
+    /// 返回：所有当前编辑视图采用新规则，等待旧规则的动作先失权。
+    public func setClipboardOptions(copyLine: Bool, adaptEndings: Bool) {
+        for view in editorSplit.arrangedSubviews {
+            guard let editor = (view as? NSScrollView)?.documentView as? EditorView else {
+                continue
+            }
+            editor.cancelClipboardOperation()
+            editor.copyLineWithoutSelection = copyLine
+            editor.adaptClipboardLineEndings = adaptEndings
+        }
     }
 
     /// 业务作用：关闭克隆只释放该视图，原文档与保存任务继续有效。

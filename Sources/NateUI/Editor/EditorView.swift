@@ -7,6 +7,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var document: DocumentBuffer {
         didSet {
             if oldValue !== document {
+                clipboard.cancel()
                 // 文档生命周期改变后，旧候选和拖选不能沿用相同修订号写入另一个正文。
                 composition = nil
                 inputContext?.discardMarkedText()
@@ -98,13 +99,36 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var syntaxFailedLines: Range<Int>?
     public var onChange: (() -> Void)?
     public var onTextInput: ((String) -> Void)?
+    public var onClipboardCapture: ((ClipboardPayload) -> Void)?
+    public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
+    public var copyLineWithoutSelection = true
+    public var adaptClipboardLineEndings = false
+    let clipboard = ClipboardRuntime()
     public var onSelection: (() -> Void)?
     public var onCommand: ((String) -> Void)?
     public var onOpenURLs: (([URL]) -> Void)?
-    public var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    public var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) {
+        didSet {
+            if oldValue != font {
+                clipboard.cancel()
+            }
+        }
+    }
     public var showSymbols = false
-    public var wrapLines = false
-    public var rtl = false
+    public var wrapLines = false {
+        didSet {
+            if oldValue != wrapLines {
+                clipboard.cancel()
+            }
+        }
+    }
+    public var rtl = false {
+        didSet {
+            if oldValue != rtl {
+                clipboard.cancel()
+            }
+        }
+    }
     public var overwrite = false
     public var newline: String {
         document.format.lineEnding.text
@@ -492,6 +516,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public override func resignFirstResponder() -> Bool {
         // 交出焦点即收回等待中的导航权，后续候选收束和焦点返回不能复活旧请求。
         focusGeneration = UUID()
+        clipboard.cancel()
         finishComposition()
         dismissCompletion()
         // 焦点即使稍后返回同一光标，也不能重新执行此前尚未确认的导航意图。
@@ -508,6 +533,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         super.viewDidMoveToWindow()
         observeBracketFocus()
         if window == nil {
+            clipboard.cancel()
             cancelSelectedTextHighlights()
             brackets.pending = nil
             folds.pending = nil

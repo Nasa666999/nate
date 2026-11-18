@@ -48,6 +48,8 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onTabAction: ((UUID, String) -> Void)?
     public var onEdit: (() -> Void)?
     public var onTextInput: ((String) -> Void)?
+    public var onClipboardCapture: ((ClipboardPayload) -> Void)?
+    public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
     public var onWindowClose: (() -> Void)?
     public var onIncrementalQuery: ((String, IncrementalSearchOptions) -> Void)?
     public var onIncrementalOptions: ((IncrementalSearchOptions) -> Void)?
@@ -265,6 +267,12 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         }
         editor.onTextInput = {
             [weak self] in self?.onTextInput?($0)
+        }
+        editor.onClipboardCapture = {
+            [weak self] in self?.onClipboardCapture?($0)
+        }
+        editor.onClipboardPaste = {
+            [weak self] in self?.onClipboardPaste?($0, $1)
         }
         editor.onSelection = {
             [weak self] in self?.onCommand?("selectionChanged")

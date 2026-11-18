@@ -43,6 +43,7 @@ extension EditorView {
     /// 参数说明: 无。
     /// 返回：完整记录新几何；无效集合撤销稳定状态并提示原因，后续输入不使用旧文档选择。
     func synchronizeLegacyViewSelectionState() {
+        clipboard.cancel()
         selectionGeneration = UUID()
         do {
             if let viewSelectionState {
@@ -93,6 +94,7 @@ extension EditorView {
         viewSelectionState = state
         selectionStateRevision = document.revision
         if changed {
+            clipboard.cancel()
             selectionGeneration = UUID()
         }
         needsDisplay = true

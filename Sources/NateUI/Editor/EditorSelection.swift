@@ -219,66 +219,6 @@ extension EditorView {
         onSelection?()
     }
 
-    /// 业务作用：复制多选正文并保留片段元数据，NUL 不被截断。
-    /// 参数说明:
-    /// - sender: 命令来源。
-    /// 返回：系统剪贴板包含普通文本及本应用片段。
-    @objc public func copy(_ sender: Any?) {
-        let selections = document.normalizedSelections()
-        let pieces = selections.map {
-            document.text.text(in: $0.range)
-        }
-        let board = NSPasteboard.general
-        board.clearContents()
-        board.setString(pieces.joined(separator: newline), forType: .string)
-        if let data = try? JSONEncoder().encode(pieces) {
-            board.setData(data, forType: NSPasteboard.PasteboardType("org.nate.text-fragments"))
-        }
-        onCommand?("rememberClipboard")
-    }
-
-    /// 业务作用：剪切先成功复制，再通过统一事务删除当前选区。
-    /// 参数说明:
-    /// - sender: 命令来源。
-    /// 返回：形成一个可撤销删除动作。
-    @objc public func cut(_ sender: Any?) {
-        guard !document.isReadOnly else {
-            return
-        }
-        copy(sender)
-        insertText("", replacementRange: NSRange(location: NSNotFound, length: 0))
-    }
-
-    /// 业务作用：多片段与多目标等量时逐项粘贴，否则完整文本用于每个目标。
-    /// 参数说明:
-    /// - sender: 命令来源。
-    /// 返回：一个完整撤销单元，不静默丢弃片段。
-    @objc public func paste(_ sender: Any?) {
-        finishComposition()
-        let board = NSPasteboard.general
-        let targets = document.normalizedSelections()
-        if let data = board.data(forType: NSPasteboard.PasteboardType("org.nate.text-fragments")),
-            let pieces = try? JSONDecoder().decode([String].self, from: data), pieces.count == targets.count
-        {
-            do {
-                try document.commit(
-                    zip(targets, pieces).map {
-                        TextEdit($0.0.range, $0.1)
-                    },
-                    name: "粘贴"
-                )
-                refresh(reveal: true)
-                onChange?()
-            }
-            catch {
-                NSSound.beep()
-            }
-        }
-        else if let value = board.string(forType: .string) {
-            insertText(value, replacementRange: NSRange(location: NSNotFound, length: 0))
-        }
-    }
-
     /// 业务作用：让 VoiceOver 获取唯一已提交正文。
     /// 参数说明: 无。
     /// 返回：不包含预编辑的正文。

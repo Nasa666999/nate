@@ -7,6 +7,7 @@ enum MacroAction: Codable, Sendable {
     case input(String)
     case command(String)
     case lineSort(LineSortOptions)
+    case clipboard(ClipboardPayload, adaptLineEndings: Bool)
 }
 
 extension ApplicationController {
@@ -19,6 +20,20 @@ extension ApplicationController {
             return
         }
         macroActions.append(.input(value))
+    }
+
+    /// 业务作用：粘贴宏记录实际载荷与明确换行选项，目标 Tab 保留或定位空白不会变成输入内容。
+    /// 参数说明:
+    /// - payload: 本次实际成功粘贴的完整内容与形态。
+    /// - adapting: 本次明确采用的插入换行适配。
+    /// 返回：仅同一录制控制代次内的成功动作追加一次。
+    func recordClipboardPaste(_ payload: ClipboardPayload, adapting: Bool) {
+        guard macroRecording, !macroPlaying, clipboardRecordingGeneration == macroRecordingGeneration,
+            quickFindContext() != nil
+        else {
+            return
+        }
+        macroActions.append(.clipboard(payload, adaptLineEndings: adapting))
     }
 
     /// 业务作用：按有界次数播放语义动作，循环间让出主事件循环。
@@ -63,6 +78,12 @@ extension ApplicationController {
                     }
                 case .lineSort(let options):
                     guard await playLineSort(options) else {
+                        return
+                    }
+                case .clipboard(let payload, let adapt):
+                    guard let editor = quickFindContext()?.2,
+                        await editor.pastePayload(payload, adaptLineEndings: adapt)
+                    else {
                         return
                     }
                 }

@@ -37,6 +37,7 @@ extension EditorView {
             return
         }
         if composition == nil {
+            clipboard.cancel()
             guard synchronizeDocumentSelectionState() else {
                 return
             }

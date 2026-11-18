@@ -85,41 +85,6 @@ extension ApplicationController {
         )
     }
 
-    /// 业务作用：查看和复用仅由本应用主动收集的剪贴板历史。
-    /// 参数说明: 无。
-    /// 返回：选中历史作为普通可撤销粘贴。
-    func showClipboardHistory() {
-        guard !clipboardHistory.isEmpty else {
-            SystemIntegration.alert("剪贴板历史", "本次会话尚未复制文本。历史仅在 Nate 主动复制时记录。 ")
-            return
-        }
-        let menu = NSMenu()
-        for (index, text) in clipboardHistory.enumerated() {
-            let item = NSMenuItem(
-                title: "\(index + 1). " + String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ↵ "),
-                action: #selector(pasteHistory(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.tag = index
-            menu.addItem(item)
-        }
-        if let view = mainWindow?.editor {
-            menu.popUp(positioning: nil, at: NSPoint(x: 100, y: 50), in: view)
-        }
-    }
-
-    /// 业务作用：历史文本插入当前有效选区，沿用文档撤销和只读规则。
-    /// 参数说明:
-    /// - sender: 历史菜单选择。
-    /// 返回：一次普通粘贴事务。
-    @objc func pasteHistory(_ sender: NSMenuItem) {
-        guard clipboardHistory.indices.contains(sender.tag) else {
-            return
-        }
-        insert(clipboardHistory[sender.tag])
-    }
-
     /// 业务作用：转换编码先完整验证可表示性，再一次发布保存参数。
     /// 参数说明:
     /// - index: 编码菜单中的明确代码页。

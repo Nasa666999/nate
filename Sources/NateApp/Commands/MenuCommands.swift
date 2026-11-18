@@ -56,6 +56,11 @@ extension ApplicationController: NSMenuItemValidation {
             edit.addItem(NSMenuItem(title: title, action: selector, keyEquivalent: key))
         }
         add(edit, "剪贴板历史…", "clipboardHistory")
+        add(edit, "清空剪贴板历史", "clearClipboardHistory")
+        add(edit, "无选区复制与剪切整行", "clipboardCopyLine")
+        add(edit, "粘贴换行适配当前文档", "clipboardAdaptEndings")
+        add(edit, "粘贴为纯文本", "pasteAsPlainText", key: "V")
+        add(edit, "取消剪贴板准备", "cancelClipboard")
         let cases = NSMenu(title: "大小写")
         for (title, command) in [
             ("大写", TextCommand.uppercase), ("小写", .lowercase), ("首字母大写", .titlecase),
@@ -305,6 +310,9 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if let enabled = validateClipboardMenu(menuItem, id: id) {
+            return enabled
         }
         if id == "resetSidebarRecovery" {
             return !closing && recovery != nil && !sidebarRecovery.loading && sidebarRecovery.task == nil

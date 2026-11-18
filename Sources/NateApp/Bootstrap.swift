@@ -108,7 +108,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var initialized = false
     var pendingURLs: [URL] = []
     var recentClosed: [ClosedTab] = []
-    var clipboardHistory: [String] = []
+    var clipboardHistory: [ClipboardHistoryRecord] = []
+    var clipboardDefaults: UserDefaults?
+    var copyLineWithoutSelection = true
+    var adaptClipboardLineEndings = false
+    var clipboardRecordingGeneration: UUID?
     var autosaveEnabled = true
     var macroRecording = false {
         didSet {
@@ -207,6 +211,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             loadIncrementalOptions(from: .standard)
             loadSelectedTextHighlightOptions(from: .standard)
             loadMultipleSelectionOptions(from: .standard)
+            loadClipboardOptions(from: .standard)
             await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
@@ -420,6 +425,16 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.onTextInput = {
             [weak self] in self?.recordTextInput($0)
         }
+        window.onClipboardCapture = {
+            [weak self] in self?.rememberClipboard($0)
+        }
+        window.onClipboardPaste = {
+            [weak self] in self?.recordClipboardPaste($0, adapting: $1)
+        }
+        window.setClipboardOptions(
+            copyLine: copyLineWithoutSelection,
+            adaptEndings: adaptClipboardLineEndings
+        )
         window.onWindowClose = {
             NSApp.terminate(nil)
         }

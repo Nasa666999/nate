@@ -24,6 +24,25 @@ extension EditorView {
         if value.isEmpty && shape.zeroWidth {
             return try PreparedTextInsertion(snapshot: snapshot, value: value).transaction
         }
+        return try PreparedSelectionInsertion(
+            snapshot: snapshot,
+            targets: rectangularInsertionTargets(value, overwrite: overwrite)
+        ).transaction
+    }
+
+    /// 业务作用：只在主执行域完成原生边缘计算，剪切和粘贴可把不可变目标交给后台构建正文。
+    /// 参数说明:
+    /// - value: 此轮每个目标接收的完整文字。
+    /// - overwrite: 单行值是否覆盖零宽矩形中的既有列。
+    /// 返回：全部真实字节替换及 Tab 保留空白；布局或选择失效时不返回部分目标。
+    func rectangularInsertionTargets(_ value: String, overwrite: Bool = false) throws
+        -> [SelectionInsertionTarget]
+    {
+        guard let state = viewSelectionState, state == document.selectionState,
+            selectionStateRevision == document.revision, case .rectangle(let shape) = state.shape
+        else {
+            throw NateError.message("列目标缺少当前完整选择证据。")
+        }
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         let replace = overwrite && !value.isEmpty && !value.utf8.contains(10) && !value.utf8.contains(13)
         var targets: [SelectionInsertionTarget] = []
@@ -45,7 +64,100 @@ extension EditorView {
         guard ContinuousClock.now < deadline else {
             throw NateError.message("矩形输入边缘准备超过两秒，原正文与选择保留。")
         }
-        return try PreparedSelectionInsertion(snapshot: snapshot, targets: targets).transaction
+        return targets
+    }
+
+    /// 业务作用：矩形复制只提取实际选中的 Tab 列与真实原文，虚拟定位和尾部由原形态独立提供。
+    /// 参数说明: 无。
+    /// 返回：普通选择为空，矩形返回完整逐行投影；超时、取消或失效时保留原剪贴板与选择。
+    func rectangularCopyProjections() throws -> [ClipboardCopyProjection]? {
+        guard let state = viewSelectionState, case .rectangle(let shape) = state.shape else {
+            return nil
+        }
+        guard state == document.selectionState, selectionStateRevision == document.revision else {
+            throw NateError.message("矩形复制缺少当前完整选择证据。")
+        }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        var projections: [ClipboardCopyProjection] = []
+        for entry in state.entries {
+            try Task.checkCancellation()
+            guard ContinuousClock.now < deadline else {
+                throw NateError.message("矩形复制边缘准备超过两秒，原剪贴板保留。")
+            }
+            let row = document.text.lineNumber(at: entry.selection.range.lower)
+            var a = try rectangleEditingEdge(row: row, x: shape.anchorX)
+            var b = try rectangleEditingEdge(row: row, x: shape.headX)
+            if a.position > b.position || a.position == b.position && a.offset > b.offset {
+                swap(&a, &b)
+            }
+            if let tab = a.tab, a.tab == b.tab {
+                projections.append(
+                    ClipboardCopyProjection(
+                        selectionID: entry.id,
+                        range: ByteRange(tab.upper, tab.upper),
+                        leadingSpaces: b.offset - a.offset
+                    )
+                )
+            }
+            else {
+                let range = ByteRange(a.tab?.upper ?? a.position, b.tab?.lower ?? b.position)
+                guard range.lower <= range.upper else {
+                    throw NateError.message("矩形复制边缘不能确定完整原文顺序。")
+                }
+                projections.append(
+                    ClipboardCopyProjection(
+                        selectionID: entry.id,
+                        range: range,
+                        leadingSpaces: a.tab == nil ? 0 : a.columns - a.offset,
+                        trailingSpaces: b.tab == nil ? 0 : b.offset
+                    )
+                )
+            }
+        }
+        guard ContinuousClock.now < deadline else {
+            throw NateError.message("矩形复制边缘准备超过两秒，原剪贴板保留。")
+        }
+        return projections
+    }
+
+    /// 业务作用：块粘贴保留空行经过的未选中 Tab，只有实际输入或正宽替换才展开两侧列。
+    /// 参数说明:
+    /// - entry: 本行已明确的选择与虚拟定位。
+    /// - shape: 此行实际采用的原生视觉边缘。
+    /// - value: 当前真实载荷行，不包含末尾扩展分隔符。
+    /// 返回：单行不可变边缘及空操作留在 Tab 内时的横坐标。
+    func clipboardBlockTarget(
+        _ entry: SelectionEntry,
+        shape: RectangleSelectionShape,
+        value: String
+    ) throws -> (target: ClipboardBlockTarget, tabX: Double?) {
+        if shape.zeroWidth, value.isEmpty {
+            let row = document.text.lineNumber(at: entry.selection.range.lower)
+            let edge = try rectangleEditingEdge(row: row, x: shape.headX)
+            return (
+                ClipboardBlockTarget(
+                    range: ByteRange(edge.position, edge.position),
+                    virtualColumn: entry.selection.virtualColumn
+                ),
+                edge.tab == nil ? nil : shape.headX
+            )
+        }
+        let target = try rectangleInsertionTarget(
+            entry,
+            shape: shape,
+            value: value,
+            padEmpty: false,
+            overwrite: false
+        )
+        return (
+            ClipboardBlockTarget(
+                range: target.range,
+                leadingSpaces: target.leadingSpaces,
+                trailingSpaces: target.trailingSpaces,
+                virtualColumn: target.virtualColumnAfter
+            ),
+            nil
+        )
     }
 
     /// 业务作用：候选覆盖层只计算主项的 Tab 两侧与虚拟定位空白，不提前改写已提交正文。

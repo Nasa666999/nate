@@ -354,16 +354,18 @@ extension ApplicationController {
             cancelColumnInsertion()
             refreshUI()
         case "statistics": statistics()
-        case "rememberClipboard":
-            if let text = NSPasteboard.general.string(forType: .string), text.utf8.count <= 1_048_576 {
-                clipboardHistory = Array(
-                    ([text]
-                        + clipboardHistory.filter {
-                            !$0.utf8.elementsEqual(text.utf8)
-                        }).prefix(20)
-                )
-            }
+        case "clipboardBegan":
+            cancelLineSort()
+            cancelColumnInsertion()
+            cancelMultipleSelection()
+            cancelHistoryAction()
+            cancelQuickFind()
+            clipboardRecordingGeneration = macroRecording && !macroPlaying ? macroRecordingGeneration : nil
         case "clipboardHistory": showClipboardHistory()
+        case "clearClipboardHistory": clipboardHistory = []
+        case "clipboardCopyLine", "clipboardAdaptEndings": toggleClipboardOption(id)
+        case "pasteAsPlainText": quickFindContext()?.2.pasteAsPlainText(nil)
+        case "cancelClipboard": mainWindow?.editor.cancelClipboardOperation()
         case "recordMacro":
             macroRecording.toggle()
             if macroRecording {
