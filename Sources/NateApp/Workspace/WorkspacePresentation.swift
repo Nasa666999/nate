@@ -77,14 +77,23 @@ extension ApplicationController {
         let recoveryState =
             active.url != nil && recoveryReady && active.recoveryError == nil
             ? " · " + (active.recoveryRevision == active.buffer.revision ? "恢复正文已保存" : "恢复正文待保存") : ""
-        let structureState =
-            window.editor.document.id == active.buffer.id
-            ? (window.editor.bracketAnalysisStatus ?? window.editor.foldingAnalysisStatus
-                ?? window.editor.syntaxAnalysisStatus ?? window.editor.markDisplayStatus
-                ?? window.editor.textHighlightDisplayStatus ?? window.editor.selectedTextHighlightStatus
-                ?? selectedTextPreferences.failure).map {
+        let structureState: String
+        if window.editor.document.id == active.buffer.id {
+            let editor = window.editor
+            let structure: String? = editor.bracketAnalysisStatus ?? editor.foldingAnalysisStatus
+            let syntax: String? = structure ?? editor.syntaxAnalysisStatus
+            let marks: String? = syntax ?? editor.markDisplayStatus
+            let temporary: String? = marks ?? editor.textHighlightDisplayStatus
+            let selected: String? = temporary ?? editor.selectedTextHighlightStatus
+            let status: String? = selected ?? selectedTextPreferences.failure
+            structureState =
+                status.map {
                     " · " + $0
-                } ?? "" : ""
+                } ?? ""
+        }
+        else {
+            structureState = ""
+        }
         let folded = window.editor.foldedRegionCount
         let foldState = folded > 0 ? " · 已收起 \(folded) 处" : ""
         window.status.stringValue =
