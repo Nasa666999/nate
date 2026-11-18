@@ -258,7 +258,12 @@ public final class DocumentBuffer {
             if let update = transaction.bookmarkUpdate {
                 bookmarks = update.lines
             }
+            // 相同文字覆盖仍应收束选择；这次只发布已验证元数据，不制造正文修订或消耗撤销历史。
+            if let update = transaction.selectionUpdate {
+                publishSelectionState(update.after)
+            }
             lastEdits = []
+            lastChanges = []
             lastActionName = ""
             return false
         }
@@ -379,22 +384,28 @@ public final class DocumentBuffer {
     /// 参数说明:
     /// - value: 插入文字，不解释剪贴板转义。
     /// - name: 撤销动作名称。
-    /// 返回：原子提交结果；只读时拒绝。
-    public func insert(_ value: String, name: String = "输入") throws {
-        let targets = normalizedSelections()
-        var delta = 0
-        let after = targets.map {
-            selection -> TextSelection in
-            let position = selection.range.lower + delta + value.utf8.count + selection.virtualColumn
-            delta += value.utf8.count + selection.virtualColumn - selection.range.count
-            return TextSelection(anchor: position, head: position)
+    /// - replacementRange: 可选的主选区系统替换范围，不提前改变原选择。
+    /// - overwrite: 是否覆盖各空光标所在行内的完整字形簇。
+    /// 返回：实际正文变化时为真；相同文字只收束选择，失败保留正文与原选择。
+    @discardableResult
+    public func insert(
+        _ value: String,
+        name: String = "输入",
+        replacementRange: ByteRange? = nil,
+        overwrite: Bool = false
+    ) throws -> Bool {
+        // 权限拒绝先于大批目标与空白准备，保护期间不能开始另一轮输入工作。
+        guard !isReadOnly, !isEditingSuspended else {
+            throw NateError.message("文档只读或处于编辑保护，未接受输入。")
         }
-        try commit(
-            targets.map {
-                TextEdit($0.range, String(repeating: " ", count: $0.virtualColumn) + value)
-            },
-            selectionsAfter: after,
-            name: name
+        return try commit(
+            PreparedTextInsertion(
+                snapshot: snapshot,
+                value: value,
+                replacementRange: replacementRange,
+                overwrite: overwrite,
+                name: name
+            ).transaction
         )
     }
 

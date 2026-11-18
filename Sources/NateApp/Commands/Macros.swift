@@ -12,19 +12,13 @@ enum MacroAction: Codable, Sendable {
 extension ApplicationController {
     /// 业务作用：只记录已提交的语义输入，预编辑和磁盘保存不进入宏。
     /// 参数说明:
-    /// - document: 刚完成事务的文档。
+    /// - value: 用户实际确认的文字，不含虚拟列补齐空白。
     /// 返回：追加可在新光标位置重放的输入动作。
-    func recordTextChange(_ document: WorkspaceDocument) {
-        guard ["输入", "粘贴"].contains(document.buffer.lastActionName),
-            let first = document.buffer.lastEdits.first
-        else {
+    func recordTextInput(_ value: String) {
+        guard macroRecording, !macroPlaying, quickFindContext() != nil else {
             return
         }
-        if document.buffer.lastEdits.allSatisfy({
-            $0.text.utf8.elementsEqual(first.text.utf8)
-        }) {
-            macroActions.append(.input(first.text))
-        }
+        macroActions.append(.input(value))
     }
 
     /// 业务作用：按有界次数播放语义动作，循环间让出主事件循环。

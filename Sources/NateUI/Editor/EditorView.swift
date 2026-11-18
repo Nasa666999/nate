@@ -97,6 +97,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var syntaxFailure: String?
     var syntaxFailedLines: Range<Int>?
     public var onChange: (() -> Void)?
+    public var onTextInput: ((String) -> Void)?
     public var onSelection: (() -> Void)?
     public var onCommand: ((String) -> Void)?
     public var onOpenURLs: (([URL]) -> Void)?

@@ -120,7 +120,6 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var macroRecordingGeneration = UUID()
     var macroActions: [MacroAction] = []
     var macroPlaying = false
-    var previousTextForMacro = PieceTree()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []
@@ -418,6 +417,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.onEdit = {
             [weak self] in self?.didEdit()
         }
+        window.onTextInput = {
+            [weak self] in self?.recordTextInput($0)
+        }
         window.onWindowClose = {
             NSApp.terminate(nil)
         }
@@ -507,7 +509,6 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         if mainWindow?.isIncrementalSearchVisible == true {
             mainWindow?.incrementalSearch.feedback.stringValue = "文档已切换，可继续查找。"
         }
-        previousTextForMacro = document.buffer.text
         refreshUI()
     }
 
@@ -538,10 +539,6 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             mainWindow?.incrementalSearch.feedback.stringValue = "正文已改变，可继续查找。"
         }
         active.dirtyHint = true
-        if macroRecording && !macroPlaying {
-            recordTextChange(active)
-        }
-        previousTextForMacro = active.buffer.text
         mainWindow?.refreshEditors()
         refreshUI()
         refreshVisibleIncrementalHighlights()

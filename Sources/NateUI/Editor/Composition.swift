@@ -4,7 +4,7 @@ import NateCore
 struct CompositionSession {
     let revision: UInt64
     let originalRange: ByteRange
-    let selections: [TextSelection]
+    let replacementOverride: ByteRange?
     let selectionState: SelectionState?
     let selectionGeneration: UUID
     let documentSelectionGeneration: UUID
@@ -47,7 +47,7 @@ extension EditorView {
             composition = CompositionSession(
                 revision: document.revision,
                 originalRange: range,
-                selections: viewSelections,
+                replacementOverride: replacementRange.location == NSNotFound ? nil : range,
                 selectionState: viewSelectionState,
                 selectionGeneration: selectionGeneration,
                 documentSelectionGeneration: document.selectionGeneration,
@@ -74,70 +74,59 @@ extension EditorView {
     /// 参数说明:
     /// - string: 系统确认的文字。
     /// - replacementRange: 无组合时可指定的 UTF-16 替换范围。
-    /// 返回：一次撤销单元；失效组合不修改正文，覆盖输入无法取得全部完整字形边界时保留原选择和正文。
+    /// 返回：实际正文变化形成一次撤销单元，相同文字只收束选择；失效组合或准备失败保留原正文与选择。
     public func insertText(_ string: Any, replacementRange: NSRange) {
         let value = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+        guard !document.isReadOnly, !document.isEditingSuspended else {
+            composition = nil
+            refresh()
+            return
+        }
+        let hadComposition = composition != nil
+        var replacement: ByteRange?
         if let session = composition {
             composition = nil
             guard session.revision == document.revision,
                 session.selectionGeneration == selectionGeneration,
+                session.selectionState == viewSelectionState,
                 session.documentSelectionGeneration == document.selectionGeneration,
                 session.editingGeneration == document.editingAuthorityGeneration
             else {
                 refresh()
                 return
             }
-            if let state = session.selectionState {
-                adoptViewSelectionState(state)
-            }
-            else {
-                viewSelections = session.selections
-            }
-            if session.selections.count == 1 {
-                viewSelections = [
-                    TextSelection(anchor: session.originalRange.lower, head: session.originalRange.upper)
-                ]
-            }
+            replacement = session.replacementOverride
         }
         else if replacementRange.location != NSNotFound {
             guard let range = document.text.byteRange(replacementRange) else {
                 return
             }
-            viewSelections = [TextSelection(anchor: range.lower, head: range.upper)]
-        }
-        else if overwrite && !value.contains("\n") {
-            do {
-                var navigation = try GraphemeNavigation(text: document.text)
-                let targets = try viewSelections.map {
-                    if $0.range.isEmpty {
-                        let range = try navigation.range(at: $0.head, forward: true)
-                        return TextSelection(
-                            anchor: range.lower,
-                            head: range.upper
-                        )
-                    }
-                    return $0
-                }
-                // 覆盖必须先准备全部完整字形，再发布选择并进入事务，不能让后一个目标超限后退化为普通插入。
-                viewSelections = targets
-            }
-            catch {
-                onStatus?(error.localizedDescription)
-                return
-            }
+            replacement = range
         }
         do {
             guard synchronizeDocumentSelectionState() else {
                 return
             }
-            try document.insert(value)
+            let changed = try document.insert(
+                value,
+                replacementRange: replacement,
+                overwrite: !hadComposition && overwrite
+            )
             refresh(reveal: true)
-            onChange?()
-            if value.utf16.count <= 2 {
+            // 语义输入与实际字节变化分别通知，宏记录原确认文字，元数据收束不触发保存写盘。
+            onTextInput?(value)
+            if changed {
+                onChange?()
+            }
+            else {
+                onSelection?()
+            }
+            if !value.isEmpty && value.utf16.count <= 2 {
                 onCommand?("typingAssistance")
             }
         }
         catch {
+            onStatus?(error.localizedDescription)
             NSSound.beep()
         }
     }

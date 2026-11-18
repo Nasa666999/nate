@@ -47,6 +47,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onCloseTab: ((UUID) -> Void)?
     public var onTabAction: ((UUID, String) -> Void)?
     public var onEdit: (() -> Void)?
+    public var onTextInput: ((String) -> Void)?
     public var onWindowClose: (() -> Void)?
     public var onIncrementalQuery: ((String, IncrementalSearchOptions) -> Void)?
     public var onIncrementalOptions: ((IncrementalSearchOptions) -> Void)?
@@ -261,6 +262,9 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         split.setContentHuggingPriority(.defaultLow, for: .vertical)
         editor.onChange = {
             [weak self] in self?.onEdit?()
+        }
+        editor.onTextInput = {
+            [weak self] in self?.onTextInput?($0)
         }
         editor.onSelection = {
             [weak self] in self?.onCommand?("selectionChanged")
