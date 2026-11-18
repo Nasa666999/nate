@@ -44,6 +44,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
     public var onPresentationChange: (() -> Void)?
     public private(set) var batches: [SearchResultBatchPresentation] = []
     public internal(set) var visibleMatchCount = 0
+    public internal(set) var visibleRowCount = 0
     /// 业务作用：面板拥有未确认筛选时保留原生输入上下文，拥有者不能隐藏该视图以结束候选。
     /// 参数说明: 无。
     /// 返回：存在候选或全文筛选草稿时为真。
@@ -59,6 +60,11 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
     var filtered: [FilteredSearchResultBatch] = []
     var hitOrder: [SearchResultTreeKey] = []
     var hitIndices: [SearchResultTreeKey: Int] = [:]
+    var hitValues: [SearchPreviewRow] = []
+    var hitDisplayKeys: [SearchResultTreeKey: SearchResultTreeKey] = [:]
+    var displayMembers: [SearchResultTreeKey: [SearchResultTreeKey]] = [:]
+    var fileDisplayCounts: [SearchResultTreeKey: Int] = [:]
+    var lastActivatedHit: SearchResultTreeKey?
     var expanded: Set<SearchResultTreeKey> = []
     var presentation = UUID()
     var filterTask: Task<Void, Never>?
@@ -66,6 +72,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
     let clearBatch = NSButton(title: "删除所选", target: nil, action: nil)
     let clearAll = NSButton(title: "清空", target: nil, action: nil)
     let clearPrevious = NSButton(checkboxWithTitle: "清除旧结果", target: nil, action: nil)
+    let oneRowPerLine = NSButton(checkboxWithTitle: "每行一项", target: nil, action: nil)
 
     /// 业务作用：提供独立的多批次结果树和筛选入口，结果呈现不占用文档标签或正文输入。
     /// 参数说明:
@@ -89,6 +96,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
             command("↑", "previous", "上一命中"), command("↓", "next", "下一命中"),
             command("复制结果", "copy", "复制所选分组或全部可见结果"),
             command("复制路径", "paths", "复制所选文件的完整原始路径"),
+            oneRowPerLine,
             command("展开", "expand", "展开全部结果"), command("折叠", "collapse", "折叠全部结果"),
             clearBatch, clearAll, command("关闭", "close", "隐藏结果并保留已有批次"),
         ])
@@ -134,6 +142,11 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
         clearPrevious.action = #selector(resultPreferencesChanged)
         clearPrevious.toolTip = "后续查询完整发布时清除旧批次；失败或取消保留历史。"
         clearPrevious.setContentHuggingPriority(.required, for: .horizontal)
+        oneRowPerLine.controlSize = .small
+        oneRowPerLine.target = self
+        oneRowPerLine.action = #selector(resultPreferencesChanged)
+        oneRowPerLine.toolTip = "按匹配起始行合并展示；上下命中仍遍历每个完整匹配，删除合并项包含该行全部可见匹配。"
+        oneRowPerLine.setContentHuggingPriority(.required, for: .horizontal)
         let filterRow = NSStackView(views: [filter, clearPrevious])
         filterRow.spacing = 6
         root.addArrangedSubview(filterRow)

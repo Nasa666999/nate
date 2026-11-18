@@ -49,8 +49,9 @@ extension SearchResultsPanel {
         else {
             return
         }
-        if let hit = item.key.hit {
-            onActivate?(item.key.batch, hit)
+        if case .hit(let hit, _) = item.value {
+            lastActivatedHit = SearchResultTreeKey(batch: item.key.batch, file: item.key.file, hit: hit.id)
+            onActivate?(item.key.batch, hit.id)
         }
         else if !item.children.isEmpty {
             if outline.isItemExpanded(item) {
@@ -74,14 +75,24 @@ extension SearchResultsPanel {
             outline.selectedRow >= 0
             ? (outline.item(atRow: outline.selectedRow) as? SearchResultTreeItem)?.key : nil
         let index: Int
-        if let selected, let current = hitIndices[selected] {
+        let currentKey = selected.flatMap {
+            key in
+            if let lastActivatedHit, hitDisplayKeys[lastActivatedHit] == key {
+                return lastActivatedHit
+            }
+            return key
+        }
+        if let currentKey, let current = hitIndices[currentKey] {
             index = (current + (backwards ? hitOrder.count - 1 : 1)) % hitOrder.count
         }
         else {
             index = backwards ? hitOrder.count - 1 : 0
         }
         let key = hitOrder[index]
-        guard let item = items[key], let file = item.parent, let batch = file.parent else {
+        guard let display = hitDisplayKeys[key], let item = items[display],
+            let file = item.parent, let batch = file.parent,
+            let index = hitIndices[key], index < hitValues.count
+        else {
             return
         }
         outline.expandItem(batch)
@@ -92,6 +103,10 @@ extension SearchResultsPanel {
         }
         outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         outline.scrollRowToVisible(row)
+        if case .hit(_, let path) = item.value {
+            item.value = .hit(hitValues[index], path: path)
+            outline.reloadItem(item)
+        }
         activateItem(at: row)
     }
 
@@ -218,13 +233,13 @@ extension SearchResultsPanel {
     /// 返回：当前合法选择的稳定身份集合。
     func selectedKeys() -> Set<SearchResultTreeKey> {
         Set(
-            outline.selectedRowIndexes.compactMap {
+            outline.selectedRowIndexes.flatMap {
                 row in
                 guard let item = outline.item(atRow: row) as? SearchResultTreeItem, items[item.key] === item
                 else {
-                    return nil
+                    return [] as [SearchResultTreeKey]
                 }
-                return item.key
+                return displayMembers[item.key] ?? [item.key]
             }
         )
     }

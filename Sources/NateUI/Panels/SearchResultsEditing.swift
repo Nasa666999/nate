@@ -6,15 +6,23 @@ extension SearchResultsPanel {
     /// - preferences: 当前完整结果偏好。
     /// 返回：控件与内存快照一致，既有批次不立即清除。
     public func setPreferences(_ preferences: SearchResultPreferences) {
+        let changedGrouping = self.preferences.oneRowPerLine != preferences.oneRowPerLine
         self.preferences = preferences
         clearPrevious.state = preferences.clearPrevious ? .on : .off
+        oneRowPerLine.state = preferences.oneRowPerLine ? .on : .off
+        if changedGrouping {
+            applyFilter(filter.committedStringValue)
+        }
     }
 
     /// 业务作用：用户明确切换后续查询的结果保留方式，通知拥有者持久化而不触碰源文件。
     /// 参数说明: 无。
     /// 返回：新策略供下一次完整查询发布使用，当前历史仍保留。
     @objc func resultPreferencesChanged() {
-        preferences.clearPrevious = clearPrevious.state == .on
+        var next = preferences
+        next.clearPrevious = clearPrevious.state == .on
+        next.oneRowPerLine = oneRowPerLine.state == .on
+        setPreferences(next)
         onPreferencesChange?(preferences)
     }
 

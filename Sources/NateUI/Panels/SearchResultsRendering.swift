@@ -6,11 +6,7 @@ extension SearchResultsPanel {
     /// - output: 同一历史快照生成的完整筛选树。
     /// 返回：原生树表完整刷新，正文焦点、源选区及文档内容保持不变。
     func publish(_ output: SearchResultFilterOutput) {
-        let selected = Set(
-            outline.selectedRowIndexes.compactMap {
-                (outline.item(atRow: $0) as? SearchResultTreeItem)?.key
-            }
-        )
+        let selected = selectedKeys()
         let topRow = outline.row(at: NSPoint(x: 1, y: scroll.contentView.bounds.minY + 1))
         let top = topRow >= 0 ? (outline.item(atRow: topRow) as? SearchResultTreeItem)?.key : nil
         let topOffset = topRow >= 0 ? scroll.contentView.bounds.minY - outline.rect(ofRow: topRow).minY : 0
@@ -34,6 +30,10 @@ extension SearchResultsPanel {
         var nextItems: [SearchResultTreeKey: SearchResultTreeItem] = [:]
         var nextRoots: [SearchResultTreeItem] = []
         var order: [SearchResultTreeKey] = []
+        var values: [SearchPreviewRow] = []
+        var displayKeys: [SearchResultTreeKey: SearchResultTreeKey] = [:]
+        var members: [SearchResultTreeKey: [SearchResultTreeKey]] = [:]
+        var fileCounts: [SearchResultTreeKey: Int] = [:]
         for result in output.batches {
             let root = resultItem(
                 key: SearchResultTreeKey(batch: result.batch.id),
@@ -50,17 +50,34 @@ extension SearchResultsPanel {
                     into: &nextItems
                 )
                 root.children.append(group)
-                for row in file.rows {
+                let groups = resultGroups(file.rows)
+                fileCounts[group.key] = groups.count
+                for rows in groups {
+                    guard let row = rows.first else {
+                        continue
+                    }
                     let key = SearchResultTreeKey(batch: result.batch.id, file: file.id, hit: row.id)
+                    let active = rows.first {
+                        $0.id == lastActivatedHit?.hit && key.batch == lastActivatedHit?.batch
+                    }
                     group.children.append(
                         resultItem(
                             key: key,
-                            value: .hit(row, path: file.path),
+                            value: .hit(active ?? row, path: file.path),
                             parent: group,
                             into: &nextItems
                         )
                     )
-                    order.append(key)
+                    for match in rows {
+                        let hit = SearchResultTreeKey(batch: result.batch.id, file: file.id, hit: match.id)
+                        displayKeys[hit] = key
+                        members[key, default: []].append(hit)
+                    }
+                }
+                // 展示分组不能改变搜索引擎的实际命中顺序，连续导航仍覆盖同一行中的每个匹配。
+                for row in file.rows {
+                    order.append(SearchResultTreeKey(batch: result.batch.id, file: file.id, hit: row.id))
+                    values.append(row)
                 }
             }
             for note in result.notes {
@@ -88,12 +105,20 @@ extension SearchResultsPanel {
         roots = nextRoots
         items = nextItems
         hitOrder = order
+        hitValues = values
+        hitDisplayKeys = displayKeys
+        displayMembers = members
+        fileDisplayCounts = fileCounts
+        if let lastActivatedHit, displayKeys[lastActivatedHit] == nil {
+            self.lastActivatedHit = nil
+        }
         hitIndices = Dictionary(
             uniqueKeysWithValues: order.enumerated().map {
                 ($0.element, $0.offset)
             }
         )
         visibleMatchCount = output.visibleRows
+        visibleRowCount = members.count
         outline.deselectAll(nil)
         outline.reloadData()
         for root in roots where expanded.contains(root.key) {
@@ -105,7 +130,7 @@ extension SearchResultsPanel {
         let selectedRows = IndexSet(
             selected.compactMap {
                 key in
-                guard let item = items[key] else {
+                guard let item = items[displayKeys[key] ?? key] else {
                     return nil
                 }
                 let row = outline.row(forItem: item)
@@ -113,7 +138,7 @@ extension SearchResultsPanel {
             }
         )
         outline.selectRowIndexes(selectedRows, byExtendingSelection: false)
-        if let top, let item = items[top] {
+        if let top, let item = items[displayKeys[top] ?? top] {
             let row = outline.row(forItem: item)
             if row >= 0 {
                 let y = max(0, outline.rect(ofRow: row).minY + topOffset)
@@ -124,7 +149,8 @@ extension SearchResultsPanel {
         let original = batches.reduce(0) {
             $0 + $1.initialMatchCount
         }
-        feedback.stringValue = "保留 \(batches.count) 个批次 · 原始 \(original) 处 · 显示 \(output.visibleRows) 项"
+        feedback.stringValue =
+            "\(batches.count) 批 · 原始 \(original) 处 · 可见 \(output.visibleRows) 处 / \(visibleRowCount) 项"
         updateCommands()
         onPresentationChange?()
     }
@@ -211,10 +237,12 @@ extension SearchResultsPanel {
             field.toolTip = batch.condition.summary
         case .file(let file):
             field.stringValue =
-                "\(SearchResultLabel.display(file.path ?? file.name)) · \(file.matchCount) 处，显示 \(file.rows.count) 项"
+                "\(SearchResultLabel.display(file.path ?? file.name)) · \(file.matchCount) 处，显示 \(fileDisplayCounts[item.key] ?? file.rows.count) 项"
             field.toolTip = SearchResultLabel.display(file.path ?? file.name, limit: 16_384)
         case .hit(let row, _):
-            let prefix = "行 \(row.line) · UTF-16 列 \(row.column)  "
+            let count = displayMembers[item.key]?.count ?? 1
+            let group = count > 1 ? " · 本行 \(count) 处" : ""
+            let prefix = "行 \(row.line) · UTF-16 列 \(row.column)\(group)  "
             let text = NSMutableAttributedString(
                 string: prefix + row.context,
                 attributes: [.font: font, .foregroundColor: NSColor.labelColor]
@@ -245,6 +273,7 @@ extension SearchResultsPanel {
     public func outlineViewSelectionDidChange(_ notification: Notification) {
         updateCommands()
         if !rebuilding {
+            lastActivatedHit = nil
             onPresentationChange?()
         }
     }

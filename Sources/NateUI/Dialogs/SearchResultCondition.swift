@@ -37,11 +37,26 @@ public struct SearchResultCondition: Sendable {
 
 public struct SearchResultPreferences: Codable, Sendable, Equatable {
     public var clearPrevious = false
+    public var oneRowPerLine = false
+
+    enum CodingKeys: String, CodingKey {
+        case clearPrevious, oneRowPerLine
+    }
 
     /// 业务作用：结果默认保留多批历史，清除策略独立于正文搜索条件。
     /// 参数说明: 无。
     /// 返回：新查询追加历史的默认偏好。
     public init() {}
+
+    /// 业务作用：既有结果设置缺少显示合并偏好时保留逐匹配展示，错误类型不静默更改用户设置。
+    /// 参数说明:
+    /// - decoder: 搜索归档中的结果偏好字段。
+    /// 返回：可选字段采用既有默认值，存在但类型不符时整体解码失败。
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        clearPrevious = try values.decodeIfPresent(Bool.self, forKey: .clearPrevious) ?? false
+        oneRowPerLine = try values.decodeIfPresent(Bool.self, forKey: .oneRowPerLine) ?? false
+    }
 }
 
 public enum SearchResultRemoval: Sendable {
