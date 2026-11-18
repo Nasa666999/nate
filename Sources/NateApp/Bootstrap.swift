@@ -96,6 +96,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var externalStamps: [UUID: FileStamp] = [:]
     var targetReservations: [String: UUID] = [:]
     var queryGeneration = UUID()
+    var quickFindGeneration: UUID?
     var closing = false
     var closingDocumentIDs: Set<UUID> = []
     var initialized = false
@@ -503,6 +504,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return
         }
         cancelBookmarkAction()
+        cancelQuickFind()
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
         cancelSearchResultPathOpen()

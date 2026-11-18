@@ -103,6 +103,14 @@ extension ApplicationController: NSMenuItemValidation {
         let search = NSMenu(title: "搜索")
         add(search, "增量查找", "incrementalSearch", key: "i")
         search.items.last?.keyEquivalentModifierMask = [.command, .option]
+        add(search, "选中并查找下一处", "selectFindNext", key: "e")
+        add(search, "选中并查找上一处", "selectFindPrevious", key: "e")
+        search.items.last?.keyEquivalentModifierMask = [.command, .shift]
+        add(search, "临时查找下一处", "volatileFindNext", key: "e")
+        search.items.last?.keyEquivalentModifierMask = [.command, .option]
+        add(search, "临时查找上一处", "volatileFindPrevious", key: "e")
+        search.items.last?.keyEquivalentModifierMask = [.command, .option, .shift]
+        add(search, "取消快捷查找", "cancelQuickFind")
         add(search, "跳转到匹配括号", "matchingBracket", key: "b")
         add(search, "选择整对括号", "selectBracketPair", key: "b")
         search.items.last?.keyEquivalentModifierMask = [.command, .option]
@@ -272,6 +280,9 @@ extension ApplicationController: NSMenuItemValidation {
             return enabled
         }
         if let enabled = validateSelectedTextHighlightMenu(menuItem, id: id) {
+            return enabled
+        }
+        if let enabled = validateQuickFindMenu(id) {
             return enabled
         }
         if let action = foldAction(for: id) {

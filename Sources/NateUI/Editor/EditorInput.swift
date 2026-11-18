@@ -16,6 +16,16 @@ extension EditorView {
             let commands = [
                 "h": "replace", "f": "find", "s": "save", "n": "new", "o": "open", "w": "close", "g": "goto",
             ]
+            if let functionKey = UnicodeScalar(NSF3FunctionKey), key == String(functionKey) {
+                let previous = event.modifierFlags.contains(.shift)
+                let temporary = event.modifierFlags.contains(.option)
+                onCommand?(
+                    temporary
+                        ? (previous ? "volatileFindPrevious" : "volatileFindNext")
+                        : (previous ? "selectFindPrevious" : "selectFindNext")
+                )
+                return
+            }
             if key == "\t" {
                 onCommand?(event.modifierFlags.contains(.shift) ? "previousTab" : "nextTab")
                 return

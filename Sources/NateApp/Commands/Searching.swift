@@ -48,45 +48,7 @@ extension ApplicationController {
         guard findWindow?.isEditingInput != true, mainWindow?.hasMarkedEditorInput != true else {
             return
         }
-        if findWindow == nil {
-            let window = FindReplaceWindow()
-            do {
-                try window.restore(searchSettingsState)
-            }
-            catch {
-                searchSettingsError = error.localizedDescription
-            }
-            if searchSettingsURL != nil {
-                window.onStateChange = {
-                    [weak self] state in
-                    self?.scheduleSearchSettings(state)
-                    self?.mainWindow?.refreshSelectedTextHighlights()
-                }
-                window.onResetSavedState = {
-                    [weak self] state in
-                    self?.resetSearchSettings(state)
-                }
-            }
-            window.onAction = {
-                [weak self] action, options, directory, filters in
-                self?.search(action, options: options, directory: directory, filters: filters)
-            }
-            window.onInputBegan = {
-                [weak self] in self?.suspendSearchForInput()
-            }
-            window.onSelectionContextRequest = {
-                [weak self] in
-                _ = self?.refreshSearchPresentation()
-            }
-            window.onDismiss = {
-                [weak self] in
-                self?.mainWindow?.window?.makeKeyAndOrderFront(nil)
-                if let editor = self?.mainWindow?.editor {
-                    self?.mainWindow?.window?.makeFirstResponder(editor)
-                }
-            }
-            findWindow = window
-        }
+        _ = ensureFindWindow()
         let selection = refreshSearchPresentation(filling: true)
         refreshProjectSearchAvailability()
         findWindow?.present(

@@ -62,7 +62,7 @@ extension EditorView {
     /// 业务作用：失去焦点立即撤销尚未执行的导航，重新激活不重新授予旧请求执行资格。
     /// 参数说明:
     /// - notification: 当前窗口或应用的失焦通知。
-    /// 返回：只取消属于本视图的导航意图，已确认的结构缓存仍可复用。
+    /// 返回：属于本视图的焦点身份与导航意图失效，已确认的结构缓存仍可复用。
     @objc func bracketFocusLost(_ notification: Notification) {
         // 其它窗口的焦点事件不属于本视图，不能撤销当前用户的导航动作。
         if notification.name == NSWindow.didResignKeyNotification,
@@ -70,6 +70,7 @@ extension EditorView {
         {
             return
         }
+        focusGeneration = UUID()
         brackets.pending = nil
         folds.pending = nil
     }

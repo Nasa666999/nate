@@ -28,6 +28,10 @@ extension ApplicationController {
         if id.hasPrefix("smartHighlight"), toggleSelectedTextHighlightOption(id) {
             return
         }
+        if let action = QuickFindAction(rawValue: id) {
+            quickFind(action)
+            return
+        }
         if id.hasPrefix("language:"), let active {
             active.language = String(id.dropFirst(9))
             active.languageExplicit = true
@@ -72,6 +76,9 @@ extension ApplicationController {
             return
         }
         switch id {
+        case "cancelQuickFind":
+            cancelQuickFind()
+            mainWindow?.status.stringValue = "快捷查找已取消。"
         case "matchingBracket": mainWindow?.editor.navigateBracket(.jump)
         case "selectBracketPair": mainWindow?.editor.navigateBracket(.selectPair)
         case "selectInsideBracket": mainWindow?.editor.navigateBracket(.selectInside)

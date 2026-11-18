@@ -46,6 +46,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var onFocus: (() -> Void)?
     public private(set) var selectionGeneration = UUID()
+    public internal(set) var focusGeneration = UUID()
     public var selectedTextHighlightContext: (() -> SelectedTextHighlightContext?)?
     let selectedTextHighlights = SelectedTextHighlightRuntime()
     var observedRevision: UInt64 = 0
@@ -436,6 +437,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 参数说明: 无。
     /// 返回：成为系统文本输入目标并通知窗口。
     public override func becomeFirstResponder() -> Bool {
+        focusGeneration = UUID()
         document.selections = viewSelections
         onFocus?()
         needsDisplay = true
@@ -446,6 +448,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 参数说明: 无。
     /// 返回：遵循原生焦点交接，已确认内容只进入一次事务。
     public override func resignFirstResponder() -> Bool {
+        // 交出焦点即收回等待中的导航权，后续候选收束和焦点返回不能复活旧请求。
+        focusGeneration = UUID()
         finishComposition()
         dismissCompletion()
         // 焦点即使稍后返回同一光标，也不能重新执行此前尚未确认的导航意图。

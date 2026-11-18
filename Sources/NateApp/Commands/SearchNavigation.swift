@@ -66,13 +66,16 @@ extension ApplicationController {
     /// - afterReplacement: 是否保留刚完成的单次替换反馈。
     /// 返回：一个可见命中、单次原子替换或明确边界；迟到结果不移动新光标。
     func navigateSearch(_ action: String, options: SearchOptions, afterReplacement: Bool) {
-        guard let document = active, let editor = mainWindow?.editor, editor.document === document.buffer
+        // 关闭等保护已固定选区元数据，只读导航同样不能在保护阶段改动这份状态。
+        guard let document = active, let editor = mainWindow?.editor, editor.document === document.buffer,
+            !document.buffer.isEditingSuspended
         else {
             return
         }
         let buffer = document.buffer
         let snapshot = buffer.snapshot
         let selections = editor.viewSelections
+        let focus = editor.focusGeneration
         let selection = selections.first?.range ?? ByteRange(0, 0)
         let input = SearchRequestInput(findWindow)
         let continuing =
@@ -123,7 +126,7 @@ extension ApplicationController {
                     }
                 )
                 try Task.checkCancellation()
-                // 文档身份相同仍不足以移动光标；用户切换克隆、改选区或关闭重开后原导航权已失效。
+                // 相同文档与光标不足以恢复旧导航权；克隆、焦点往返、修订及保护变化都须重新取得位置证据。
                 guard generation == self.queryGeneration,
                     navigationGeneration == self.searchNavigationGeneration,
                     self.findWindow?.isEditingInput != true,
@@ -131,6 +134,7 @@ extension ApplicationController {
                     input.matches(self.findWindow), self.findWindow?.options == options,
                     let editor, self.mainWindow?.editor === editor, self.active?.buffer === buffer,
                     editor.document === buffer, buffer.revision == snapshot.revision,
+                    editor.focusGeneration == focus, !buffer.isEditingSuspended,
                     editor.viewSelections == selections
                 else {
                     return

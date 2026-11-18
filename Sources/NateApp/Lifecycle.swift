@@ -44,6 +44,7 @@ extension ApplicationController {
             return .terminateCancel
         }
         closing = true
+        cancelQuickFind()
         mainWindow?.refreshSelectedTextHighlights()
         cancelBookmarkAction()
         cancelSearchResultExport()
