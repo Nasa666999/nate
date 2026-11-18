@@ -23,6 +23,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 syntaxFailure = nil
                 syntaxFailedLines = nil
                 invalidateBracketAnalysis()
+                markDisplayStatus = nil
             }
             viewSelections = document.selections
             observedRevision = document.revision
@@ -91,6 +92,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var dragColumn: CGFloat?
     var blinkTimer: Timer?
     var caretVisible = true
+    public internal(set) var markDisplayStatus: String?
     var completionPanel: CompletionPanel?
     var hiddenLines = HiddenLineRanges()
     var lineHeight: CGFloat {
@@ -229,7 +231,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         return layout
     }
 
-    /// 业务作用：绘制视口内正文、选区、行号、书签和输入法覆盖层。
+    /// 业务作用：绘制视口内正文、独立颜色标记、选区、行号、书签和输入法覆盖层。
     /// 参数说明:
     /// - dirtyRect: 系统要求重绘的区域。
     /// 返回：呈现当前已提交快照及独立预编辑，不改动文档。
@@ -251,6 +253,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         }
         let active = tree.lineNumber(at: min(viewSelections.first?.head ?? 0, tree.byteCount))
         let visibleLines = projection.visibleLines(in: first...last)
+        var markBudget = 4096
+        markDisplayStatus = nil
         for line in visibleLines {
             let layout = layoutLine(line)
             let y = projection.y(of: line) + 8
@@ -258,6 +262,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 NSColor.controlAccentColor.withAlphaComponent(0.05).setFill()
                 NSRect(x: gutterWidth, y: y, width: bounds.width - gutterWidth, height: lineHeight).fill()
             }
+            drawDocumentMarks(in: layout, line: line, y: y, budget: &markBudget)
             for selection in viewSelections where !selection.range.isEmpty && composition == nil {
                 let a = max(selection.range.lower, layout.range.lower)
                 let b = min(selection.range.upper, layout.range.upper)

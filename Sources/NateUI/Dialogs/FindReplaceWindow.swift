@@ -64,6 +64,9 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     let replacementActions = NSStackView()
     let fileActions = NSStackView()
     let markActions = NSStackView()
+    let markOptions = NSStackView()
+    let clearPreviousMarks = NSButton(checkboxWithTitle: "每次清除旧查找标记", target: nil, action: nil)
+    let markBookmarkLines = NSButton(checkboxWithTitle: "同时添加匹配行书签", target: nil, action: nil)
     let projectChoices = NSStackView()
     let projectActions = NSStackView()
     var availableProjectPanels: Set<Int> = []
@@ -253,7 +256,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         fileActions.addArrangedSubview(button("replaceFiles", "文件中替换"))
         projectActions.addArrangedSubview(button("projects", "所选项目中查找"))
         projectActions.addArrangedSubview(button("replaceProjects", "所选项目中替换"))
-        markActions.addArrangedSubview(button("mark", "添加匹配行书签"))
+        installMarkControls(in: root)
         for actions in [navigationActions, replacementActions, fileActions, projectActions, markActions] {
             actions.spacing = 5
             root.addArrangedSubview(actions)
@@ -389,6 +392,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         replacementActions.isHidden = !replacing
         fileActions.isHidden = !files
         markActions.isHidden = page != .mark
+        markOptions.isHidden = page != .mark
         window?.title = page.rawValue + " — Nate"
         updateInputMinimumSize()
         window?.contentView?.layoutSubtreeIfNeeded()
@@ -460,7 +464,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         submit(id)
     }
 
-    /// 业务作用：按钮和键盘使用同一请求入口，完整历史更新不改变实际执行文本，取消不增加历史。
+    /// 业务作用：按钮和键盘使用同一请求入口，完整历史更新不改变执行文本，取消、颜色清除和标记复制不增加查找历史。
     /// 参数说明:
     /// - id: 已确定方向和范围的动作标识。
     /// 返回：已确认输入按最近使用顺序保留最多 30 项后提交；候选或全文草稿期间不执行，也不记录历史。
@@ -474,7 +478,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
             feedback.stringValue = "请勾选至少一个已载入且可用的项目面板。"
             return
         }
-        if id != "cancel" {
+        if !["cancel", "clearSearchMarks", "copySearchMarks"].contains(id) {
             remember(query, history: &queryHistory)
             remember(replacement, history: &replaceHistory)
             if id == "files" || id == "replaceFiles" {

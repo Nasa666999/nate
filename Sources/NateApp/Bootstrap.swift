@@ -115,6 +115,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var resultExportGeneration = UUID()
     var resultPathOpenTask: Task<Void, Never>?
     var resultPathOpenGeneration = UUID()
+    var markCopyTask: Task<Void, Never>?
+    var markCopyGeneration = UUID()
+    var markSearchGeneration: UUID?
     var recentFiles: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: "recentFiles") ?? []
@@ -486,6 +489,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
         cancelSearchResultPathOpen()
+        cancelDocumentMarkCopy()
+        cancelSearchMarking()
         // 新正文已提交，原目录打开不再拥有旧修订与原光标的发布资格。
         directoryWorkspace?.cancelOpen()
         cancelCompletion()
@@ -577,7 +582,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         let structureState =
             window.editor.document.id == active.buffer.id
             ? (window.editor.bracketAnalysisStatus ?? window.editor.foldingAnalysisStatus
-                ?? window.editor.syntaxAnalysisStatus).map {
+                ?? window.editor.syntaxAnalysisStatus ?? window.editor.markDisplayStatus).map {
                     " · " + $0
                 } ?? "" : ""
         let folded = window.editor.foldedRegionCount

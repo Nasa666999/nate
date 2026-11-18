@@ -28,13 +28,17 @@ extension FindReplaceWindow {
         ]
     }
 
-    /// 业务作用：原生短字段与完整输入摘要使用同一提交入口，项目页执行所选集合，其余页按方向导航。
+    /// 业务作用：原生短字段与完整输入摘要使用同一提交入口，项目页执行所选集合，标记页执行当前标记，其余页按方向导航。
     /// 参数说明:
     /// - reversing: 是否临时反转已保存的查找方向。
-    /// 返回：项目页提交完整集合查询，其余页按当前方向提交；反向选项本身保持原值。
+    /// 返回：对应页的主要动作使用完整已确认条件执行；临时反向不改写保存选项。
     func submitFromInput(reversing: Bool) {
         if page == .projects {
             submit("projects")
+            return
+        }
+        if page == .mark {
+            submit("highlight")
             return
         }
         var previous = backwards.state == .on
@@ -72,6 +76,7 @@ extension FindReplaceWindow {
         result.inputFont = inputFontConfiguration
         result.projectPanels = preferredProjectPanels.sorted()
         result.results = resultPreferences
+        result.marking = markPreferences
         return result
     }
 
@@ -114,6 +119,8 @@ extension FindReplaceWindow {
             (recursive, state.options.recursive), (includeHidden, state.options.includeHidden),
             (diskBuffers, state.options.ignoreOpenBuffers), (stay, state.stayAfterReplace),
             (confirmOpen, state.confirmsOpenReplacement),
+            (clearPreviousMarks, state.marking.clearPrevious),
+            (markBookmarkLines, state.marking.bookmarkLines),
         ] {
             button.state = enabled ? .on : .off
         }

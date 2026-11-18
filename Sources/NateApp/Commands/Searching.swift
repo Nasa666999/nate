@@ -117,6 +117,19 @@ extension ApplicationController {
         filters: String,
         afterReplacement: Bool = false
     ) {
+        if action == "clearSearchMarks" || action == "copySearchMarks" {
+            guard !closing, findWindow?.isEditingInput != true, mainWindow?.hasMarkedEditorInput != true
+            else {
+                return
+            }
+            if action == "clearSearchMarks" {
+                clearSearchMarks()
+            }
+            else {
+                copyDocumentMarks(styles: [.search])
+            }
+            return
+        }
         // 明确的完整查找或替换取代增量输入，先撤销旧导航的发布资格。
         cancelIncrementalSearch()
         searchTask?.cancel()
@@ -157,6 +170,10 @@ extension ApplicationController {
             return
         }
         guard let active else {
+            return
+        }
+        if action == "highlight" {
+            highlightSearchMatches(active, options: options, input: input, generation: generation)
             return
         }
         if options.mode == .regex && (action == "previous" || options.backwards) {
