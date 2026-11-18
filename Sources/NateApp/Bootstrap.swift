@@ -108,6 +108,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []
+    var projectSearchScope: (generation: UUID, panels: Set<Int>)?
     var resultNavigationTask: Task<Void, Never>?
     var resultNavigationGeneration = UUID()
     var recentFiles: [String] {

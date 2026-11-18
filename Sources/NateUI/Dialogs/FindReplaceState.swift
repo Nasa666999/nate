@@ -2,6 +2,22 @@ import AppKit
 import NateSearch
 
 extension FindReplaceWindow {
+    /// 业务作用：固定执行请求的四类完整原文身份，正常字段结束编辑不撤销同一份确认。
+    /// 参数说明: 无。
+    /// 返回：查找、替换、目录和过滤内容身份，顺序固定，不复制长表达式。
+    public var contentIdentities: [UUID] {
+        [
+            query.contentIdentity, replacement.contentIdentity, directory.contentIdentity,
+            filters.contentIdentity,
+        ]
+    }
+
+    /// 业务作用：搜索配置变化或未确认输入开始后保持旧请求失效，独立项目的载入状态不改变此身份。
+    /// 参数说明: 无。
+    /// 返回：当前通用搜索配置身份，只在本次窗口运行期有效。
+    public var configurationIdentity: UUID {
+        configurationGeneration
+    }
     /// 业务作用：窗口外的文件导航通过轻量输入身份识别新查询意图，不保留或比较完整搜索原文。
     /// 参数说明: 无。
     /// 返回：查找、替换、目录及过滤字段的当前运行期身份，顺序固定，不产生持久化副作用。
@@ -115,9 +131,11 @@ extension FindReplaceWindow {
 
     /// 业务作用：勾选选项后同步当前持久配置，不启动正文搜索或修改文档。
     /// 参数说明: 无。
-    /// 返回：选项快照进入配置保存入口。
+    /// 返回：旧条件身份失效，新选项快照进入保存入口，尚未发布的旧文件动作收到取消。
     @objc func optionsChanged() {
+        configurationGeneration = UUID()
         projectRequestGeneration = UUID()
+        onInputBegan?()
         stateChanged()
     }
 

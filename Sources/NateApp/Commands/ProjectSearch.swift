@@ -5,6 +5,20 @@ import NateStorage
 import NateUI
 
 extension ApplicationController {
+    /// 业务作用：当前所选项目开始定义动作时收回旧搜索和排队写入，其他面板的操作保持独立。
+    /// 参数说明:
+    /// - index: 将要改变定义或进入忙碌状态的面板索引。
+    /// 返回：只有仍属本次项目范围的活动搜索被撤销，普通文档和目录查询不受影响。
+    func cancelProjectSearch(changing index: Int) {
+        guard let scope = projectSearchScope, scope.generation == queryGeneration,
+            scope.panels.contains(index), searchTask != nil
+        else {
+            return
+        }
+        // 定义尚未改变前先撤销队列中的文件发布权，不能只等下一份文件开始时才发现旧范围失效。
+        suspendSearchForInput()
+    }
+
     /// 业务作用：搜索界面只展示已载入且当前没有定义动作的项目面板，隐藏树不等于卸载定义。
     /// 参数说明: 无。
     /// 返回：可用面板选择同步，不解释引用路径或触发磁盘读取。
@@ -37,7 +51,7 @@ extension ApplicationController {
             projectPanelStates[$0].generation
         }
         let identity = findWindow.projectRequestIdentity
-        let inputs = findWindow.inputIdentities
+        let inputs = findWindow.contentIdentities
         let current: @MainActor () -> Bool = {
             [weak self, weak findWindow] in
             guard let self, let findWindow, !self.closing,

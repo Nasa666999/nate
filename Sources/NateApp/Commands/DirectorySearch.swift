@@ -19,6 +19,7 @@ extension ApplicationController {
             findWindow?.feedback.stringValue = "搜索目录不能包含 NUL。"
             return
         }
+        let input = SearchRequestInput(findWindow)
         searchFiles(
             source: .directory(URL(fileURLWithPath: directory, isDirectory: true)),
             filters: filters,
@@ -26,7 +27,10 @@ extension ApplicationController {
             replacing: replacing,
             current: {
                 [weak self] in
-                self?.findWindow?.matchesDirectoryRequest(
+                guard let self, input.matches(self.findWindow) else {
+                    return false
+                }
+                return self.findWindow?.matchesDirectoryRequest(
                     options: options,
                     directory: directory,
                     filters: filters

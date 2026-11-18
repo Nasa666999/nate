@@ -21,17 +21,23 @@ extension FindReplaceWindow {
     /// 业务作用：应用定义的载入与忙碌状态只更新选择资格，不探测任何文件引用。
     /// 参数说明:
     /// - indices: 已载入且当前没有定义动作的面板索引。
-    /// 返回：合法可用项更新；已保存的选择偏好保留，失去资格时立即撤销旧范围身份。
+    /// 返回：合法可用项更新；保留偏好，当前勾选集合变化时先撤销旧请求，未参与面板不影响原范围。
     public func setAvailableProjectPanels(_ indices: [Int]) {
         let available = Set(
             indices.filter {
                 projectChecks.indices.contains($0)
             }
         )
-        if available != availableProjectPanels {
+        let previous = preferredProjectPanels.intersection(availableProjectPanels)
+        let next = preferredProjectPanels.intersection(available)
+        if previous != next {
+            // 只有真正参与的集合改变才撤销动作，未参与面板的装卸不能中断当前查询。
             projectRequestGeneration = UUID()
-            availableProjectPanels = available
+            if page == .projects {
+                onInputBegan?()
+            }
         }
+        availableProjectPanels = available
         updateProjectChoices()
     }
 
@@ -53,7 +59,7 @@ extension FindReplaceWindow {
         page == .projects && !isEditingInput && self.options == options
             && self.filters.stringValue.utf8.elementsEqual(filters.utf8)
             && selectedProjectPanels == panels && projectRequestGeneration == identity
-            && inputIdentities == inputs
+            && contentIdentities == inputs
     }
 
     /// 业务作用：装配三个真实选择入口，用户未勾选范围前不授予查找或替换动作。
@@ -103,6 +109,7 @@ extension FindReplaceWindow {
             preferredProjectPanels.remove(sender.tag)
         }
         projectRequestGeneration = UUID()
+        onInputBegan?()
         updateProjectChoices()
         stateChanged()
     }

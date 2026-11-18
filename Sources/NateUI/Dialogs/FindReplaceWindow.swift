@@ -68,6 +68,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     var availableProjectPanels: Set<Int> = []
     var preferredProjectPanels: Set<Int> = []
     var projectRequestGeneration = UUID()
+    var configurationGeneration = UUID()
     let projectChecks = (1...3).map {
         NSButton(checkboxWithTitle: "项目面板 \($0)（未载入）", target: nil, action: nil)
     }
@@ -151,10 +152,16 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         filters.stringValue = "*.*"
         for input in [query, replacement, directory, filters] {
             input.delegate = self
+            input.onContentWillChange = {
+                [weak self] in self?.onInputBegan?()
+            }
             input.onEditingStateChange = {
                 [weak self] editing in
-                if editing {
-                    self?.onInputBegan?()
+                if editing, let self {
+                    // 候选或全文草稿开始就撤销旧配置，取消草稿也不能恢复原请求的执行资格。
+                    self.configurationGeneration = UUID()
+                    self.projectRequestGeneration = UUID()
+                    self.onInputBegan?()
                 }
             }
             input.onCancel = {
@@ -357,7 +364,10 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// 返回：可见动作与页签一致，查找、替换原文和目录输入保留。
     func selectPage(_ page: FindReplacePage, focus: Bool) {
         if self.page != page {
+            // 换页先收回旧范围，回到相同页签也不能让原计算重新取得发布或写入权。
+            configurationGeneration = UUID()
             projectRequestGeneration = UUID()
+            onInputBegan?()
         }
         self.page = page
         tabs.selectedSegment = FindReplacePage.allCases.firstIndex(of: page) ?? 0
@@ -423,7 +433,9 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// 参数说明: 无。
     /// 返回：界面选项与执行语义一致。
     @objc func modeChanged() {
+        configurationGeneration = UUID()
         projectRequestGeneration = UUID()
+        onInputBegan?()
         let regex = mode.indexOfSelectedItem == 2
         wholeWord.isEnabled = !regex
         backwards.isEnabled = !regex

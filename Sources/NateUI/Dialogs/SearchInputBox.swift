@@ -10,6 +10,13 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     private var raw = ""
     private var confirmedRaw = ""
     private var inputGeneration = UUID()
+    private var contentGeneration = UUID()
+    /// 业务作用：查询执行只依赖原文变化，正常结束编辑不把已确认的同一请求误记为新输入。
+    /// 参数说明: 无。
+    /// 返回：完整 UTF-8 原文改变时更新的运行期身份，字体、结束编辑和原样赋值保持此身份。
+    public var contentIdentity: UUID {
+        contentGeneration
+    }
     /// 业务作用：为原生导航复验提供完整输入身份，长表达式不必为焦点保护反复比较全部字节。
     /// 参数说明: 无。
     /// 返回：当前原始输入的运行期身份，赋值、原生文本变化或结束编辑时更新，不表示任何持久配置格式。
@@ -22,6 +29,10 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     public var onFeedback: ((String) -> Void)?
     public var onHistoryChange: (([String]) -> Void)?
     public var onCommittedChange: ((String) -> Void)?
+    /// 业务作用：原文替换前让拥有者撤销旧计算与尚未发布的文件动作，不把通知当作新查询提交。
+    /// 参数说明: 无。
+    /// 返回：通知时新原文身份已生效，原文内容尚未替换；回调只负责旧请求失权。
+    public var onContentWillChange: (() -> Void)?
     public var onEditingStateChange: ((Bool) -> Void)?
     public var onCancel: (() -> Void)?
     public var onSubmit: ((Bool) -> Void)?
@@ -51,6 +62,9 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
             field.placeholderString = newValue
         }
     }
+    /// 业务作用：读写完整搜索原文，赋值先结束旧短字段，再按真实字节变化撤销旧请求资格。
+    /// 参数说明: 无。
+    /// 返回：读取原文不使用摘要；赋值保留完整内容并发布已确认值，原样赋值不改变内容身份。
     public var stringValue: String {
         get {
             raw
@@ -60,7 +74,7 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
             if field.currentEditor() != nil {
                 window?.makeFirstResponder(edit)
             }
-            raw = newValue
+            assignRawContent(newValue)
             confirmedRaw = newValue
             inputGeneration = UUID()
             updatePresentation()
@@ -229,13 +243,13 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     public func controlTextDidChange(_ notification: Notification) {
         inputGeneration = UUID()
         guard let text = field.currentEditor() as? NSTextView else {
-            raw = field.stringValue
+            assignRawContent(field.stringValue)
             confirmedRaw = raw
             reportEditingState()
             onCommittedChange?(raw)
             return
         }
-        raw = text.string
+        assignRawContent(text.string)
         reportEditingState()
         // 输入法候选仍由原生字段持有，普通变更不重写控件或结束候选；确认后才切换长输入展示。
         guard requiresFullEditor, !text.hasMarkedText() else {
@@ -257,7 +271,7 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     /// - notification: 原生字段完成编辑的通知。
     /// 返回：后续执行读取完整原文，候选不会被摘要刷新抢先结束。
     public func controlTextDidEndEditing(_ notification: Notification) {
-        raw = field.stringValue
+        assignRawContent(field.stringValue)
         confirmedRaw = raw
         inputGeneration = UUID()
         updatePresentation()
@@ -270,6 +284,19 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
     /// 返回：全文附属窗口结束，当前已确认原文保持不变。
     public func cancelFullTextEditor() {
         editor?.cancelInput()
+    }
+
+    /// 业务作用：完整原文按 UTF-8 字节建立新身份，普通焦点结束不能撤销未变条件的确认资格。
+    /// 参数说明:
+    /// - value: 将要发布的完整原文。
+    /// 返回：字节变化先撤销旧动作再替换原文，规范等价但字节不同的表达式仍视为变化。
+    private func assignRawContent(_ value: String) {
+        if !raw.utf8.elementsEqual(value.utf8) {
+            // 先收回旧请求的计算和发布权，排队文件动作必须在新原文可见之前收到取消。
+            contentGeneration = UUID()
+            onContentWillChange?()
+        }
+        raw = value
     }
 
     /// 业务作用：把候选或全文草稿的进入、解除状态交给拥有者，允许撤销旧查询而不把草稿当作查询原文。

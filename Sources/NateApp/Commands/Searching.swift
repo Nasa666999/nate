@@ -6,10 +6,12 @@ import NateStorage
 import NateUI
 
 extension ApplicationController {
-    /// 业务作用：正文候选或搜索草稿开始时撤销既有请求，取消输入也不能恢复旧结果的选择或写入权限。
+    /// 业务作用：正文候选、搜索原文或配置改变时撤销既有请求，往返修改不能恢复旧结果的选择或写入权限。
     /// 参数说明: 无。
     /// 返回：请求身份先失效，再取消计算并收回句柄；正文、查询原文和历史不变。
     func suspendSearchForInput() {
+        let hadSearch = searchTask != nil
+        projectSearchScope = nil
         directoryWorkspace?.cancelOpen()
         cancelProjectOpen()
         // 先撤销发布资格再通知底层取消，已完成但仍等待主执行域的旧结果也必须失效。
@@ -23,6 +25,9 @@ extension ApplicationController {
         resultNavigationTask = nil
         searchNavigationEvidence = nil
         cancelCompletion()
+        if hadSearch {
+            findWindow?.feedback.stringValue = "输入状态已改变，请确认当前条件后重新执行。"
+        }
     }
 
     /// 业务作用：查找窗口与正文并行使用，选区填入和范围限制分别处理。
@@ -115,6 +120,7 @@ extension ApplicationController {
         searchTask?.cancel()
         resultNavigationTask?.cancel()
         if action == "cancel" {
+            projectSearchScope = nil
             findWindow?.feedback.stringValue =
                 searchTask == nil
                 ? "当前没有正在执行的搜索任务。" : "正在取消；已发布的文件修改会保留实际完成清单。"
@@ -122,6 +128,7 @@ extension ApplicationController {
         }
         // 新请求即使在参数校验时被拒绝，也不能继续把旧的已取消句柄当作当前搜索。
         searchTask = nil
+        projectSearchScope = nil
         queryGeneration = UUID()
         let generation = queryGeneration
         // 退出收束已经撤销新的正文发布权，后台搜索入口不能重新授予它。
@@ -133,6 +140,7 @@ extension ApplicationController {
             findWindow?.feedback.stringValue = "请先确认或取消输入法候选、全文草稿，再执行查找。"
             return
         }
+        let input = SearchRequestInput(findWindow)
         if action == "files" || action == "replaceFiles" {
             searchDirectory(
                 directory,
@@ -158,13 +166,31 @@ extension ApplicationController {
             return
         }
         if action == "replaceOpen", findWindow?.confirmsOpenReplacement == true {
+            let expectedTargets = documents.map {
+                SearchDocumentAuthority($0)
+            }
             let alert = NSAlert()
             alert.messageText = "替换全部打开文档"
             alert.informativeText = "将处理 \(documents.count) 个缓冲区；每个文档可独立撤销，可写文件将自动保存。"
             alert.addButton(withTitle: "替换")
             alert.addButton(withTitle: "取消")
-            guard alert.runModal() == .alertFirstButtonReturn else {
+            let choice = alert.runModal()
+            // 确认窗口运行嵌套事件循环，旧请求不能在新查询接管后重新登记为当前任务。
+            guard generation == queryGeneration, !closing else {
+                return
+            }
+            guard choice == .alertFirstButtonReturn else {
                 findWindow?.feedback.stringValue = "已取消，未开始替换打开文档。"
+                return
+            }
+            // 用户确认的是提示时的真实文档集合与正文，新增、重开或改写不能沿用这份修改许可。
+            guard input.matches(findWindow), expectedTargets.count == documents.count,
+                zip(expectedTargets, documents).allSatisfy({
+                    authority,
+                    document in authority.matches(document)
+                })
+            else {
+                findWindow?.feedback.stringValue = "条件、目标集合或正文已改变，未开始替换，请重新执行。"
                 return
             }
         }
@@ -279,7 +305,7 @@ extension ApplicationController {
                 guard !self.closing, generation == self.queryGeneration,
                     self.mainWindow?.hasMarkedEditorInput != true,
                     self.findWindow?.isEditingInput != true,
-                    self.findWindow?.options == options
+                    input.matches(self.findWindow), self.findWindow?.options == options
                 else {
                     return
                 }
@@ -393,7 +419,7 @@ extension ApplicationController {
                 // 错误反馈同样属于原查询，不能覆盖用户已经改写的表达式状态。
                 if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
                     self.mainWindow?.hasMarkedEditorInput != true,
-                    self.findWindow?.options == options
+                    input.matches(self.findWindow), self.findWindow?.options == options
                 {
                     self.findWindow?.feedback.stringValue = "已取消，未发布搜索计划。"
                 }
@@ -402,7 +428,7 @@ extension ApplicationController {
                 // 表达式失败也必须持有原输入的反馈权，不能覆盖已经改变的查找条件。
                 if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
                     self.mainWindow?.hasMarkedEditorInput != true,
-                    self.findWindow?.options == options
+                    input.matches(self.findWindow), self.findWindow?.options == options
                 {
                     self.findWindow?.feedback.stringValue = error.localizedDescription
                 }

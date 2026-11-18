@@ -50,6 +50,7 @@ extension ApplicationController {
         let documentSelections = active?.buffer.selections
         let presentation = mainWindow?.resultGeneration
         let inputs = findWindow?.inputIdentities
+        let input = SearchRequestInput(findWindow)
         let responder = mainWindow?.window?.firstResponder
         let keyWindow = NSApp.keyWindow
         let modalWindow = NSApp.modalWindow
@@ -63,7 +64,7 @@ extension ApplicationController {
                 self.findWindow?.isEditingInput != true,
                 self.mainWindow?.hasMarkedEditorInput != true,
                 self.resultNavigationGeneration == request, self.queryGeneration == query,
-                current(), self.findWindow?.inputIdentities == inputs,
+                current(), input.matches(self.findWindow), self.findWindow?.inputIdentities == inputs,
                 self.mainWindow?.window?.firstResponder === responder,
                 NSApp.keyWindow === keyWindow, NSApp.modalWindow === modalWindow,
                 self.searchNavigationGeneration == selectionGeneration,

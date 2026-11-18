@@ -10,6 +10,7 @@ final class SearchNavigationEvidence {
     let revision: UInt64
     let options: SearchOptions
     let selection: ByteRange
+    let input: SearchRequestInput
 
     /// 业务作用：保留已发布命中的继续证据，不延长关闭文档及视图的生命周期。
     /// 参数说明:
@@ -17,13 +18,21 @@ final class SearchNavigationEvidence {
     /// - editor: 接收命中的具体克隆视图。
     /// - options: 发布时的完整查找条件。
     /// - selection: 本次实际选中的匹配。
+    /// - input: 发布时完整原文和通用配置的运行期证据。
     /// 返回：同一对象、修订、条件与视图的短期导航证据。
-    init(buffer: DocumentBuffer, editor: EditorView, options: SearchOptions, selection: ByteRange) {
+    init(
+        buffer: DocumentBuffer,
+        editor: EditorView,
+        options: SearchOptions,
+        selection: ByteRange,
+        input: SearchRequestInput
+    ) {
         self.buffer = buffer
         self.editor = editor
         revision = buffer.revision
         self.options = options
         self.selection = selection
+        self.input = input
     }
 
     /// 业务作用：只有原空命中仍被原视图选中时才抑制起点空结果。
@@ -32,12 +41,20 @@ final class SearchNavigationEvidence {
     /// - editor: 本次请求所属视图。
     /// - options: 当前条件。
     /// - selection: 当前主选区。
+    /// - window: 当前实际查找窗口。
     /// 返回：完整证据一致且确为零长度命中时为真。
-    func continues(buffer: DocumentBuffer, editor: EditorView, options: SearchOptions, selection: ByteRange)
+    func continues(
+        buffer: DocumentBuffer,
+        editor: EditorView,
+        options: SearchOptions,
+        selection: ByteRange,
+        window: FindReplaceWindow?
+    )
         -> Bool
     {
         self.buffer === buffer && self.editor === editor && revision == buffer.revision
             && self.options == options && self.selection == selection && selection.isEmpty
+            && input.matches(window)
     }
 }
 
@@ -57,12 +74,14 @@ extension ApplicationController {
         let snapshot = buffer.snapshot
         let selections = editor.viewSelections
         let selection = selections.first?.range ?? ByteRange(0, 0)
+        let input = SearchRequestInput(findWindow)
         let continuing =
             searchNavigationEvidence?.continues(
                 buffer: buffer,
                 editor: editor,
                 options: options,
-                selection: selection
+                selection: selection,
+                window: findWindow
             ) ?? false
         searchNavigationEvidence = nil
         let generation = queryGeneration
@@ -109,7 +128,7 @@ extension ApplicationController {
                     navigationGeneration == self.searchNavigationGeneration,
                     self.findWindow?.isEditingInput != true,
                     self.mainWindow?.hasMarkedEditorInput != true,
-                    self.findWindow?.options == options,
+                    input.matches(self.findWindow), self.findWindow?.options == options,
                     let editor, self.mainWindow?.editor === editor, self.active?.buffer === buffer,
                     editor.document === buffer, buffer.revision == snapshot.revision,
                     editor.viewSelections == selections
@@ -143,7 +162,8 @@ extension ApplicationController {
                         buffer: buffer,
                         editor: editor,
                         options: options,
-                        selection: selected
+                        selection: selected,
+                        input: input
                     )
                 }
                 self.findWindow?.feedback.stringValue =
@@ -165,7 +185,7 @@ extension ApplicationController {
                 // 取消提示也需保留原表达式身份，输入已改变时不能覆盖当前反馈。
                 if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
                     self.mainWindow?.hasMarkedEditorInput != true,
-                    self.findWindow?.options == options
+                    input.matches(self.findWindow), self.findWindow?.options == options
                 {
                     self.findWindow?.feedback.stringValue = "已取消，未发布搜索计划。"
                 }
@@ -174,7 +194,7 @@ extension ApplicationController {
                 // 迟到的表达式错误不能借相同任务代次覆盖新输入。
                 if generation == self.queryGeneration, self.findWindow?.isEditingInput != true,
                     self.mainWindow?.hasMarkedEditorInput != true,
-                    self.findWindow?.options == options
+                    input.matches(self.findWindow), self.findWindow?.options == options
                 {
                     self.findWindow?.feedback.stringValue = error.localizedDescription
                 }

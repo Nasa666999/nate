@@ -20,6 +20,7 @@ extension ApplicationController {
             return
         }
         let state = projectPanelStates[index]
+        cancelProjectSearch(changing: index)
         let operation = UUID()
         // 新的虚拟编辑或定义 I/O 接管当前面板意图，等待中的旧文件打开不得抢回焦点。
         directoryWorkspace?.cancelOpen()

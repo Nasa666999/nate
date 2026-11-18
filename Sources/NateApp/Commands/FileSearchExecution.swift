@@ -27,6 +27,14 @@ extension ApplicationController {
         normalized.wrap = true
         let options = normalized
         let generation = queryGeneration
+        switch source {
+        case .directory:
+            projectSearchScope = nil
+        case .projectReferences(let captures):
+            projectSearchScope = (generation: generation, panels: Set(captures.map(\.index)))
+        case .projects(_, _, let panels):
+            projectSearchScope = (generation: generation, panels: Set(panels))
+        }
         let authorities = Dictionary(
             uniqueKeysWithValues: documents.map {
                 document in
@@ -56,6 +64,7 @@ extension ApplicationController {
             defer {
                 if generation == self.queryGeneration {
                     self.searchTask = nil
+                    self.projectSearchScope = nil
                 }
             }
             do {

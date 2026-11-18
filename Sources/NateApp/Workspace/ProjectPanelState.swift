@@ -79,6 +79,7 @@ extension ApplicationController {
     /// - reveal: 需要显式定位的虚拟节点。
     /// 返回：定义身份改变，旧菜单和文件打开请求失权；磁盘保存点保持原状。
     func publishProject(_ workspace: ProjectWorkspace, in index: Int, reveal: UUID? = nil) {
+        cancelProjectSearch(changing: index)
         let state = projectPanelStates[index]
         // 先撤销旧定义的打开资格，再发布完整新树，路径修改不能让旧读取落入新引用。
         cancelProjectOpen()
