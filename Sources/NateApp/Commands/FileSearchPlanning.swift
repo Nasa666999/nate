@@ -14,8 +14,8 @@ enum FileSearchSource: Sendable {
     /// 返回：与固定来源一致的范围说明。
     var summary: String {
         switch self {
-        case .directory:
-            return "目录范围"
+        case .directory(let root):
+            return "目录 · " + root.path
         case .projectReferences(let captures):
             return "项目面板 "
                 + captures.map {

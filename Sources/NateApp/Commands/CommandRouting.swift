@@ -160,6 +160,9 @@ extension ApplicationController {
                 inProjects: id == "findProjects"
             )
         case "incrementalSearch": showIncrementalSearch()
+        case "showSearchResults": mainWindow?.showSearchResultHistory()
+        case "showToolOutput": mainWindow?.showToolOutput()
+        case "hideResults": mainWindow?.setResultsVisible(false)
         case "closeIncrementalSearch": closeIncrementalSearch()
         case "incrementalNext", "incrementalPrevious":
             if let window = mainWindow, window.isIncrementalSearchVisible {

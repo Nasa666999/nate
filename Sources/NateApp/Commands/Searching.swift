@@ -311,8 +311,8 @@ extension ApplicationController {
                 }
                 var count = 0
                 var skipped = 0
-                var output: [String] = []
-                var navigation: [ResultNavigation] = []
+                var files: [SearchResultFilePresentation] = []
+                var navigation: [(UUID, ResultNavigation)] = []
                 for plan in batches {
                     let snapshot = plan.snapshot
                     guard let document = resolved[snapshot.id] else {
@@ -338,17 +338,26 @@ extension ApplicationController {
                     else {
                         count += plan.hitCount
                         if displaysResults {
-                            for row in plan.previews {
-                                output.append(row.text)
-                                navigation.append(
-                                    ResultNavigation(
-                                        documentID: document.buffer.id,
-                                        revision: snapshot.revision,
-                                        url: document.url,
-                                        range: row.range,
-                                        authority: authorities[snapshot.id]
+                            if plan.hitCount > 0 {
+                                files.append(
+                                    SearchResultFilePresentation(
+                                        id: snapshot.id,
+                                        name: document.name,
+                                        path: document.url?.path,
+                                        matchCount: plan.hitCount,
+                                        rows: plan.previews
                                     )
                                 )
+                            }
+                            for row in plan.previews {
+                                let destination = ResultNavigation(
+                                    documentID: document.buffer.id,
+                                    revision: snapshot.revision,
+                                    url: document.url,
+                                    range: row.range,
+                                    authority: authorities[snapshot.id]
+                                )
+                                navigation.append((row.id, destination))
                             }
                         }
                     }
@@ -358,12 +367,24 @@ extension ApplicationController {
                     + "\(action.hasPrefix("replace") ? "替换" : "匹配") \(count) 处。\(skipped > 0 ? "跳过 \(skipped) 个只读文档。" : "")"
                     + (unmapped > 0 ? "其中 \(unmapped) 个 UTF-16 命中无法无损定位。" : "")
                 if displaysResults {
-                    self.resultNavigation = navigation
-                    let text =
-                        output.isEmpty
-                        ? (unmapped > 0 ? "当前查询的 UTF-16 命中无法无损定位，请调整表达式。" : "当前查询没有可导航匹配。")
-                        : output.joined(separator: "\n")
-                    self.mainWindow?.showResults(text, navigable: !navigation.isEmpty)
+                    var notes: [String] = []
+                    if unmapped > 0 {
+                        notes.append("\(unmapped) 个 UTF-16 命中无法无损定位，请调整表达式。")
+                    }
+                    if files.isEmpty {
+                        notes.append("当前查询没有可导航匹配。")
+                    }
+                    let removed = try self.publishSearchResults(
+                        id: generation,
+                        query: options.query,
+                        scope: actualScope,
+                        files: files,
+                        notes: notes,
+                        destinations: navigation
+                    )
+                    if removed > 0 {
+                        self.findWindow?.feedback.stringValue += "结果容量已满，已移除 \(removed) 个最旧批次。"
+                    }
                 }
                 self.mainWindow?.refreshEditors()
                 self.refreshUI()

@@ -19,8 +19,20 @@ public enum SearchPreviewFailure: Error, LocalizedError, Sendable {
 }
 
 public struct SearchPreviewRow: Sendable {
+    public let id: UUID
     public let range: ByteRange
-    public let text: String
+    public let displayLabel: String
+    public let line: Int
+    public let column: Int
+    public let context: String
+    public let highlight: NSRange?
+
+    /// 业务作用：复制或文本输出时从有界展示字段生成完整单行结果，树形呈现不额外保存同一份拼接文字。
+    /// 参数说明: 无。
+    /// 返回：安全文件标签、从一开始的行号和 UTF-16 列号及原始上下文摘要。
+    public var text: String {
+        "\(displayLabel):\(line) [UTF-16 列 \(column)]  \(context)"
+    }
 }
 
 public struct SearchResultPreviewBuilder: Sendable {
@@ -113,13 +125,25 @@ public struct SearchResultPreviewBuilder: Sendable {
             if end < body.upper || shown.utf8.count < raw.utf8.count {
                 preview += "…"
             }
+            var highlight = try contextHighlight(
+                range,
+                text: text,
+                start: start,
+                upper: min(body.upper, start + shown.utf8.count),
+                leadingEllipsis: start > body.lower,
+                deadline: deadline
+            )
             if range.isEmpty {
+                highlight = NSRange(location: preview.utf16.count + 1, length: "[空匹配]".utf16.count)
                 preview += " [空匹配]"
                 if range.lower > body.upper {
                     preview += " [换行内]"
                 }
             }
             else if range.upper > body.upper {
+                if highlight == nil {
+                    highlight = NSRange(location: preview.utf16.count + 1, length: "[含换行]".utf16.count)
+                }
                 preview += " [含换行]"
             }
             guard let position = text.utf16Offset(byte: range.lower),
@@ -136,13 +160,48 @@ public struct SearchResultPreviewBuilder: Sendable {
             utf8Count += bytes + 1
             rows.append(
                 SearchPreviewRow(
+                    id: UUID(),
                     range: range,
-                    text: row
+                    displayLabel: label,
+                    line: line + 1,
+                    column: position - lineStart + 1,
+                    context: preview,
+                    highlight: highlight
                 )
             )
         }
         try checkpoint(deadline)
         return rows
+    }
+
+    /// 业务作用：结果高亮映射到转义后的可见上下文，控制字符不能使着色范围偏离实际命中。
+    /// 参数说明:
+    /// - range: 固定正文中的完整命中。
+    /// - text: 生成结果时的正文树。
+    /// - start: 有界上下文的起始字节。
+    /// - upper: 实际显示的首行正文终点。
+    /// - leadingEllipsis: 上下文前是否有省略号。
+    /// - deadline: 本轮预览的共享截止时刻。
+    /// 返回：可见交集在转义文本中的 UTF-16 范围；仅换行或空匹配由调用者显示明确标识。
+    private func contextHighlight(
+        _ range: ByteRange,
+        text: PieceTree,
+        start: Int,
+        upper: Int,
+        leadingEllipsis: Bool,
+        deadline: ContinuousClock.Instant
+    ) throws -> NSRange? {
+        let lower = max(start, range.lower)
+        let end = min(upper, range.upper)
+        guard lower < end else {
+            return nil
+        }
+        let prefix = try escaped(text.text(in: ByteRange(start, lower)), deadline: deadline)
+        let match = try escaped(text.text(in: ByteRange(lower, end)), deadline: deadline)
+        return NSRange(
+            location: prefix.utf16.count + (leadingEllipsis ? 1 : 0),
+            length: match.utf16.count
+        )
     }
 
     /// 业务作用：在片段和行边界限制实际计算，取消后不继续构建大批展示数据。

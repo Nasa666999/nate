@@ -61,7 +61,9 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     let results = ResultTextView()
     public var onOpenURLs: (([URL]) -> Void)?
     public var onResult: ((Int) -> Void)?
-    public private(set) var resultGeneration = UUID()
+    public internal(set) var resultGeneration = UUID()
+    public let searchResults = SearchResultsPanel(frame: .zero)
+    let resultHost = NSView()
     let tabs = TabStrip()
     let scroll = NSScrollView()
     let split = NSSplitView()
@@ -201,7 +203,25 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         resultsScroll.hasVerticalScroller = true
         resultsScroll.documentView = results
         resultsScroll.isHidden = true
-        split.addArrangedSubview(resultsScroll)
+        searchResults.isHidden = true
+        for view in [resultsScroll, searchResults] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            resultHost.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: resultHost.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: resultHost.trailingAnchor),
+                view.topAnchor.constraint(equalTo: resultHost.topAnchor),
+                view.bottomAnchor.constraint(equalTo: resultHost.bottomAnchor),
+            ])
+        }
+        searchResults.onPresentationChange = {
+            [weak self] in self?.resultGeneration = UUID()
+        }
+        searchResults.onClose = {
+            [weak self] in self?.setResultsVisible(false)
+        }
+        resultHost.isHidden = true
+        split.addArrangedSubview(resultHost)
         split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
         root.addSubview(split)
         status.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -302,21 +322,22 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         tabs.update(presentations)
     }
 
-    /// 业务作用：显示可复制的搜索或工具结果，关闭面板不销毁文档。
+    /// 业务作用：更新独立工具输出，正在操作搜索树时保留当前交互，不借后台输出结束筛选或抢走焦点。
     /// 参数说明:
     /// - text: 完整可读结果。
     /// - navigable: 是否存在与每行对应的有效定位证据。
-    /// 返回：底部结果面板可见。
+    /// 返回：完整工具输出保留；未在结果树中交互时显示工具输出，否则保留当前结果视图。
     public func showResults(_ text: String, navigable: Bool = false) {
         resultGeneration = UUID()
         results.navigationEnabled = navigable
         results.string = text
-        resultsScroll.isHidden = false
-        window?.contentView?.layoutSubtreeIfNeeded()
-        split.adjustSubviews()
-        split.setPosition(max(200, split.bounds.height - 190), ofDividerAt: 0)
-        window?.contentView?.layoutSubtreeIfNeeded()
-        refreshEditors()
+        if searchResults.isHidden
+            || (!searchResults.isEditingInput && !resultContainsResponder(searchResults))
+        {
+            resultsScroll.isHidden = false
+            searchResults.isHidden = true
+        }
+        revealResultArea()
     }
 
     /// 业务作用：侧栏与克隆编辑区分别占用独立分隔区域，关闭侧栏不改变共享正文关系。

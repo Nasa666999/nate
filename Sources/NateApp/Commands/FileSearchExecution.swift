@@ -98,7 +98,8 @@ extension ApplicationController {
                     return
                 }
                 var output: [String] = []
-                var navigation: [ResultNavigation] = []
+                var navigation: [(UUID, ResultNavigation)] = []
+                var files: [SearchResultFilePresentation] = []
                 var completedFiles = 0
                 var completedHits = 0
                 var unconfirmedFiles = 0
@@ -196,21 +197,28 @@ extension ApplicationController {
                     }
                     else {
                         let fromDisk = plan.documentID == nil
-                        for row in plan.previews {
-                            output.append(row.text)
-                            navigation.append(
-                                ResultNavigation(
-                                    documentID: plan.documentID,
-                                    revision: plan.revision,
-                                    url: plan.url,
-                                    range: row.range,
-                                    diskBaseline: fromDisk ? plan.baseline : nil,
-                                    diskEncoding: fromDisk ? plan.encoding : nil,
-                                    authority: plan.documentID.flatMap {
-                                        authorities[$0]
-                                    }
-                                )
+                        files.append(
+                            SearchResultFilePresentation(
+                                id: UUID(),
+                                name: plan.url.lastPathComponent,
+                                path: plan.url.path,
+                                matchCount: plan.hitCount,
+                                rows: plan.previews
                             )
+                        )
+                        for row in plan.previews {
+                            let destination = ResultNavigation(
+                                documentID: plan.documentID,
+                                revision: plan.revision,
+                                url: plan.url,
+                                range: row.range,
+                                diskBaseline: fromDisk ? plan.baseline : nil,
+                                diskEncoding: fromDisk ? plan.encoding : nil,
+                                authority: plan.documentID.flatMap {
+                                    authorities[$0]
+                                }
+                            )
+                            navigation.append((row.id, destination))
                         }
                     }
                 }
@@ -218,19 +226,31 @@ extension ApplicationController {
                 guard generation == self.queryGeneration else {
                     return
                 }
-                self.resultNavigation = navigation
                 output.append(
                     contentsOf: failures.map {
                         "跳过 · " + $0
                     }
                 )
-                if output.isEmpty {
+                if output.isEmpty && (replacing || files.isEmpty) {
                     output.append(unmapped > 0 ? "当前查询的 UTF-16 命中无法无损定位，请调整表达式。" : "当前查询没有匹配。")
                 }
-                self.mainWindow?.showResults(
-                    output.joined(separator: "\n"),
-                    navigable: !replacing && !navigation.isEmpty
-                )
+                var removed = 0
+                if replacing {
+                    self.mainWindow?.showResults(output.joined(separator: "\n"))
+                }
+                else {
+                    if unmapped > 0 {
+                        output.append("\(unmapped) 个 UTF-16 命中无法无损定位，请调整表达式。")
+                    }
+                    removed = try self.publishSearchResults(
+                        id: generation,
+                        query: options.query,
+                        scope: source.summary,
+                        files: files,
+                        notes: output,
+                        destinations: navigation
+                    )
+                }
                 if replacing {
                     let notStarted = plans.count - completedFiles - unconfirmedFiles
                     self.findWindow?.feedback.stringValue =
@@ -251,6 +271,9 @@ extension ApplicationController {
                 self.findWindow?.feedback.stringValue =
                     source.summary + " · " + (self.findWindow?.feedback.stringValue ?? "")
                     + " 读取成功 \(prepared.readFiles) 个不同文件；\(failures.count) 项未读取。"
+                if removed > 0 {
+                    self.findWindow?.feedback.stringValue += "结果容量已满，已移除 \(removed) 个最旧批次。"
+                }
                 self.mainWindow?.editor.refresh()
                 self.refreshUI()
             }

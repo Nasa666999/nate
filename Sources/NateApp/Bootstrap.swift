@@ -107,6 +107,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var previousTextForMacro = PieceTree()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
+    var resultBatches: [SearchResultBatchState] = []
     var resultNavigationTask: Task<Void, Never>?
     var resultNavigationGeneration = UUID()
     var recentFiles: [String] {
@@ -390,6 +391,20 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         window.onResult = {
             [weak self] index in self?.navigateResult(index)
+        }
+        window.searchResults.onActivate = {
+            [weak self, weak window] batch, hit in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.navigateSearchResult(batch: batch, hit: hit)
+        }
+        window.searchResults.onRemoveBatches = {
+            [weak self, weak window] ids in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.removeSearchResultBatches(ids)
         }
     }
 

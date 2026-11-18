@@ -9,19 +9,32 @@ extension ApplicationController {
     /// - index: 当前展示结果的条目序号。
     /// 返回：打开对应文档并选中完整命中；过期时保留正文并提示。
     func navigateResult(_ index: Int) {
+        if !resultNavigation.indices.contains(index) {
+            return
+        }
+        navigateResultTarget(
+            resultNavigation[index],
+            current: {
+                true
+            }
+        )
+    }
+
+    /// 业务作用：所有结果入口共用原文档、磁盘、输入与呈现权威，异步等待不能重新授予已清除批次的焦点。
+    /// 参数说明:
+    /// - target: 原查询实际命中的完整定位证据。
+    /// - current: 所属结果仍然存在且拥有本次定位资格的判定。
+    /// 返回：所有证据仍有效时激活来源并选中完整命中，失效时保留当前正文和输入。
+    func navigateResultTarget(_ target: ResultNavigation, current: @escaping @MainActor () -> Bool) {
         // 用户明确定位结果后，等待读取期间的旧增量计算也不能抢先改变被复验的光标。
         cancelIncrementalSearch(resetOrigin: true)
         resultNavigationTask?.cancel()
         resultNavigationTask = nil
         resultNavigationGeneration = UUID()
         // 退出已固定活动文档与恢复视图，迟到导航不能在最终确认期间切换这份状态。
-        guard !closing, mainWindow != nil else {
+        guard !closing, mainWindow != nil, current() else {
             return
         }
-        guard resultNavigation.indices.contains(index) else {
-            return
-        }
-        let target = resultNavigation[index]
         guard target.documentID != nil || target.url != nil else {
             return
         }
@@ -36,13 +49,23 @@ extension ApplicationController {
         let selections = mainWindow?.editor.viewSelections
         let documentSelections = active?.buffer.selections
         let presentation = mainWindow?.resultGeneration
+        let inputs = findWindow?.inputIdentities
+        let responder = mainWindow?.window?.firstResponder
+        let keyWindow = NSApp.keyWindow
+        let modalWindow = NSApp.modalWindow
         // 请求绑定原窗口和原光标证据；系统读取期间用户改选区、换视图或换结果后不能继续取得焦点。
         let permitted: @MainActor () -> Bool = {
-            [weak self, weak origin = active?.buffer, weak editor = mainWindow?.editor] in
+            [
+                weak self, weak origin = active?.buffer, weak editor = mainWindow?.editor,
+                weak responder, weak keyWindow, weak modalWindow
+            ] in
             guard let self, !self.closing, !Task.isCancelled,
                 self.findWindow?.isEditingInput != true,
                 self.mainWindow?.hasMarkedEditorInput != true,
                 self.resultNavigationGeneration == request, self.queryGeneration == query,
+                current(), self.findWindow?.inputIdentities == inputs,
+                self.mainWindow?.window?.firstResponder === responder,
+                NSApp.keyWindow === keyWindow, NSApp.modalWindow === modalWindow,
                 self.searchNavigationGeneration == selectionGeneration,
                 self.mainWindow?.resultGeneration == presentation,
                 self.active?.buffer === origin, self.mainWindow?.editor === editor,
