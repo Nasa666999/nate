@@ -230,7 +230,6 @@ extension ApplicationController {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
         case "compositionBegan":
-            cancelMultipleSelection()
             suspendSearchForInput()
             mainWindow?.refreshSelectedTextHighlights()
         case "compositionEnded":
@@ -238,6 +237,7 @@ extension ApplicationController {
             mainWindow?.refreshSelectedTextHighlights()
         case "selectionChanged":
             cancelMultipleSelection()
+            cancelColumnInsertion()
             // 用户位置和克隆焦点属于新的导航意图，等待中的旧增量结果不得再选择原位置。
             if incrementalTask != nil {
                 cancelIncrementalSearch(resetOrigin: true)
@@ -329,6 +329,9 @@ extension ApplicationController {
         case "dateTime":
             insert(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .medium))
         case "columnEditor": columnEditor()
+        case "cancelColumnEditor":
+            cancelColumnInsertion()
+            refreshUI()
         case "statistics": statistics()
         case "rememberClipboard":
             if let text = NSPasteboard.general.string(forType: .string), text.utf8.count <= 1_048_576 {

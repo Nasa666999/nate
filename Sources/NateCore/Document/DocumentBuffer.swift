@@ -65,8 +65,23 @@ public final class DocumentBuffer {
     public private(set) var text: PieceTree
     public private(set) var format: DocumentFormat
     public var selections = [TextSelection(anchor: 0, head: 0)]
-    public var isReadOnly = false
-    public var isEditingSuspended = false
+    public var isReadOnly = false {
+        didSet {
+            if oldValue != isReadOnly {
+                // 权限恢复原值也属于新的控制状态，等待中的旧动作不能重新取得编辑资格。
+                editingAuthorityGeneration = UUID()
+            }
+        }
+    }
+    public var isEditingSuspended = false {
+        didSet {
+            if oldValue != isEditingSuspended {
+                // 进入和解除保护都收回旧资格，不能只在发布时比较最终布尔值。
+                editingAuthorityGeneration = UUID()
+            }
+        }
+    }
+    public private(set) var editingAuthorityGeneration = UUID()
     public var bookmarks: Set<Int> = [] {
         didSet {
             // 书签独立于正文修订，任何重新赋值或往返变动都撤销旧书签计划的发布资格。

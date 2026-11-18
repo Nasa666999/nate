@@ -46,6 +46,7 @@ extension ApplicationController {
         closing = true
         cancelPausedWorkspaceImport()
         cancelMultipleSelection()
+        cancelColumnInsertion()
         cancelQuickFind()
         mainWindow?.refreshSelectedTextHighlights()
         cancelBookmarkAction()

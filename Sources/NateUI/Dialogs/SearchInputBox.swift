@@ -143,6 +143,14 @@ public final class SearchInputBox: NSView, NSTextFieldDelegate {
         history.addItem(withTitle: "历史")
     }
 
+    /// 业务作用：没有历史语义的完整原文输入可隐藏历史菜单，正文与全文编辑能力保持一致。
+    /// 参数说明:
+    /// - visible: 是否展示历史入口。
+    /// 返回：仅改变菜单展示，不删除原文或历史数据。
+    public func setHistoryVisible(_ visible: Bool) {
+        history.isHidden = !visible
+    }
+
     /// 业务作用：为完整历史建立有界可见标签，弹出菜单不测量大段表达式。
     /// 参数说明:
     /// - items: 按最近使用顺序排列的完整原文。

@@ -27,14 +27,23 @@ public struct PreparedTransaction: Sendable {
     /// - selectionsAfter: 可选的最终选区。
     /// - formatAfter: 可选的最终编码和换行规则。
     /// - name: 撤销动作名称。
+    /// - permit: 整个准备过程仍有权限与时间，为假时停止且不返回部分正文。
     /// 返回：未发布的完整事务；交叠、非法边界或取消时不改变任何文档。
     public init(
         snapshot: DocumentSnapshot,
         edits: [TextEdit],
         selectionsAfter: [TextSelection]? = nil,
         formatAfter: DocumentFormat? = nil,
-        name: String = "编辑"
+        name: String = "编辑",
+        permit: @Sendable () -> Bool = {
+            true
+        }
     ) throws {
+        // 排序和正文构建都属于准备工作，调用方失权时不能先分配完整编辑索引再退出。
+        try Task.checkCancellation()
+        guard permit() else {
+            throw CancellationError()
+        }
         let ordered = edits.sorted {
             $0.range.lower == $1.range.lower
                 ? $0.range.upper < $1.range.upper : $0.range.lower < $1.range.lower
@@ -43,6 +52,9 @@ public struct PreparedTransaction: Sendable {
         for (index, edit) in ordered.enumerated() {
             if index % 256 == 0 {
                 try Task.checkCancellation()
+                guard permit() else {
+                    throw CancellationError()
+                }
             }
             guard edit.range.lower <= edit.range.upper, snapshot.text.isBoundary(edit.range.lower),
                 snapshot.text.isBoundary(edit.range.upper)
@@ -70,6 +82,9 @@ public struct PreparedTransaction: Sendable {
         for (index, edit) in unique.reversed().enumerated() {
             if index % 256 == 0 {
                 try Task.checkCancellation()
+                guard permit() else {
+                    throw CancellationError()
+                }
             }
             prepared = try prepared.replacing(edit.range, with: edit.text)
         }
@@ -94,6 +109,10 @@ public struct PreparedTransaction: Sendable {
         selections = selectionsAfter
         format = formatAfter
         self.name = name
+        try Task.checkCancellation()
+        guard permit() else {
+            throw CancellationError()
+        }
     }
 
     /// 业务作用：完整载入的正文直接共享后台构建的树，不为重新载入再复制一次全文。

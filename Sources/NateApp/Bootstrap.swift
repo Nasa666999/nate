@@ -26,6 +26,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let sidebarRecovery = SidebarRecoveryRuntime()
     let pausedWorkspace = PausedWorkspaceRuntime()
     let multipleSelection = MultipleSelectionRuntime()
+    let columnEditing = ColumnEditingRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -511,6 +512,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         cancelBookmarkAction()
         cancelMultipleSelection()
         cancelQuickFind()
+        cancelColumnInsertion()
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
         cancelSearchResultPathOpen()

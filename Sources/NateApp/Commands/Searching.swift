@@ -10,6 +10,9 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：请求身份先失效，再取消计算并收回句柄；正文、查询原文和历史不变。
     func suspendSearchForInput() {
+        let hadPreparation = columnEditing.task != nil || multipleSelection.task != nil
+        cancelColumnInsertion()
+        cancelMultipleSelection()
         cancelSearchResultExport()
         cancelSearchResultPathOpen()
         let hadSearch = searchTask != nil
@@ -27,6 +30,9 @@ extension ApplicationController {
         resultNavigationTask = nil
         searchNavigationEvidence = nil
         cancelCompletion()
+        if hadPreparation {
+            refreshUI()
+        }
         if hadSearch {
             findWindow?.feedback.stringValue = "输入状态已改变，请确认当前条件后重新执行。"
         }

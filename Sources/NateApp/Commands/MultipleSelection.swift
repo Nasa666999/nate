@@ -99,6 +99,7 @@ extension ApplicationController {
         let input = SearchRequestInput(findWindow)
         let authority = SearchDocumentAuthority(document)
         let snapshot = document.buffer.snapshot, options = runtime.options
+        let editing = document.buffer.editingAuthorityGeneration
         let current: @MainActor () -> Bool = {
             [weak self, weak window, weak editor] in
             guard let self, let window, let editor, !Task.isCancelled,
@@ -106,6 +107,7 @@ extension ApplicationController {
                 let (source, currentWindow, currentEditor) = self.quickFindContext(),
                 source === document, currentWindow === window, currentEditor === editor,
                 authority.matches(source), source.buffer.revision == revision,
+                source.buffer.editingAuthorityGeneration == editing,
                 editor.selectionGeneration == selections, editor.viewSelections == original,
                 editor.focusGeneration == focus,
                 self.searchNavigationGeneration == movement, self.queryGeneration == queryIdentity,

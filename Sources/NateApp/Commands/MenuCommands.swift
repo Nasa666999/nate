@@ -91,6 +91,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(edit, "切换行注释", "comment", key: "/")
         add(edit, "块注释", "blockComment")
         add(edit, "列编辑器…", "columnEditor")
+        add(edit, "取消列编辑计算", "cancelColumnEditor")
         add(edit, "补全文档与语言", "complete")
         add(edit, "补全文档单词", "completeWords")
         add(edit, "补全语言关键字与函数", "completeLanguage")
@@ -289,6 +290,13 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "cancelPausedWorkspaceImport" {
             return !closing && pausedWorkspace.task != nil && !pausedWorkspace.published
+        }
+        if id == "columnEditor" {
+            return !closing && columnEditing.task == nil && quickFindContext() != nil
+                && active?.buffer.isReadOnly == false
+        }
+        if id == "cancelColumnEditor" {
+            return columnEditing.task != nil
         }
         if let enabled = validateStyleMarkMenu(menuItem, id: id) {
             return enabled
