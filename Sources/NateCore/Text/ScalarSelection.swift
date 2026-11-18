@@ -108,18 +108,11 @@ extension PieceTree {
         }
     }
 
-    /// 业务作用：为单词填入提供稳定的 Unicode 分类，标量宽度和可见字形数量不混入词边界。
+    /// 业务作用：单词填入使用固定 Unicode 17.0.0 分类，与搜索整词边界一致且不依赖系统库版本。
     /// 参数说明:
     /// - scalar: 当前正文标量。
     /// 返回：字母、数字、组合标记或 ASCII 下划线为真，其它标点和空白为假。
     private static func isWordScalar(_ scalar: Unicode.Scalar) -> Bool {
-        switch scalar.properties.generalCategory {
-        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
-            .nonspacingMark, .spacingMark, .enclosingMark,
-            .decimalNumber, .letterNumber, .otherNumber:
-            return true
-        default:
-            return scalar.value == 95
-        }
+        UnicodeWordClassification.contains(scalar.value)
     }
 }
