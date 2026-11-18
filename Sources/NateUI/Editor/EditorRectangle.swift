@@ -34,6 +34,7 @@ extension EditorView {
     /// - headX: 可选的活动正文视觉横坐标，不含边栏。
     /// - trailingColumns: 每行被选中的额外虚拟空白，省略时保留仍对应原身份的边缘。
     /// - primaryRow: 可选的明确活动逻辑行，用于拖选末端成为主项。
+    /// - anchorRow: 可选的固定逻辑行，反向延伸与收缩仍沿同一稳定锚点。
     /// 返回：全部目标有效时更新选择和形状身份；跨行、重复行、候选或保护期间保留原选择。
     @discardableResult
     public func setRectangularSelections(
@@ -42,7 +43,8 @@ extension EditorView {
         anchorX: Double? = nil,
         headX: Double? = nil,
         trailingColumns: [Int]? = nil,
-        primaryRow: Int? = nil
+        primaryRow: Int? = nil,
+        anchorRow: Int? = nil
     ) -> Bool {
         // 候选与保护仍持有当前输入或元数据，不能借列形状切换改变这份状态。
         guard composition == nil, !document.isEditingSuspended,
@@ -78,6 +80,7 @@ extension EditorView {
             var rows: Set<Int> = []
             var entries: [SelectionEntry] = []
             var primary: UUID?
+            var anchor: UUID?
             for selection in selections {
                 try Task.checkCancellation()
                 guard ContinuousClock.now < deadline else {
@@ -104,11 +107,16 @@ extension EditorView {
                 }
                 let entry = SelectionEntry(id: oldRows[row]?.id ?? UUID(), selection: selection)
                 entries.append(entry)
+                if row == anchorRow {
+                    anchor = entry.id
+                }
                 if row == primaryRow || primaryRow == nil && entry.id == viewSelectionState?.primaryID {
                     primary = entry.id
                 }
             }
-            guard let first = entries.first, primaryRow == nil || primary != nil else {
+            guard let first = entries.first, primaryRow == nil || primary != nil,
+                anchorRow == nil || anchor != nil
+            else {
                 throw NateError.invalidRange
             }
             let prior = Dictionary(
@@ -133,11 +141,34 @@ extension EditorView {
             let active =
                 headX ?? oldRectangle?.headX
                 ?? rectangleCaretX(at: first.selection.head, virtual: first.selection.virtualColumn)
+            let low =
+                entries.min {
+                    $0.selection.range.lower < $1.selection.range.lower
+                } ?? first
+            let high =
+                entries.max {
+                    $0.selection.range.lower < $1.selection.range.lower
+                } ?? first
+            let endpoints = [low.id, high.id]
+            let oldHead = oldRectangle?.headID.flatMap {
+                endpoints.contains($0) ? $0 : nil
+            }
+            let defaultHead =
+                primary.flatMap {
+                    endpoints.contains($0) ? $0 : nil
+                } ?? high.id
+            let head = primaryRow != nil ? primary ?? first.id : oldHead ?? defaultHead
+            let oldAnchor = oldRectangle?.anchorID.flatMap {
+                endpoints.contains($0) ? $0 : nil
+            }
+            let fixedID = anchor ?? oldAnchor ?? (head == low.id ? high.id : low.id)
             let shape = try RectangleSelectionShape(
                 anchorX: fixed,
                 headX: active,
                 zeroWidth: suffix,
-                edges: edges
+                edges: edges,
+                anchorID: fixedID,
+                headID: head
             )
             let state = try SelectionState(
                 entries: entries,
@@ -174,11 +205,18 @@ extension EditorView {
     /// - offset: 当前正文的合法端点。
     /// - virtual: 行尾之后尚未写入的空白列。
     /// 返回：相对正文左边缘的真实像素位置，虚拟部分使用当前字体的空格列宽。
-    private func rectangleCaretX(at offset: Int, virtual: Int) -> Double {
+    func rectangleCaretX(at offset: Int, virtual: Int) -> Double {
         let row = document.text.lineNumber(at: offset)
         let layout = layoutLine(row)
         let units = document.text.utf16Offset(byte: offset) ?? layout.originUTF16
         return Double(layout.caret(at: units - layout.originUTF16).minX)
-            + Double(virtual) * Double(max(1, font.maximumAdvancement.width))
+            + Double(virtual) * rectangleColumnWidth
+    }
+
+    /// 业务作用：虚拟列和键盘矩形步长使用当前字体的真实空格宽度，比例字体不取最宽字形估算。
+    /// 参数说明: 无。
+    /// 返回：至少一个像素的空格列宽，仅用于本视图的视觉坐标。
+    var rectangleColumnWidth: Double {
+        max(1, Double(NSAttributedString(string: " ", attributes: [.font: font]).size().width))
     }
 }

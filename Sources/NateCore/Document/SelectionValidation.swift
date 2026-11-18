@@ -74,6 +74,27 @@ extension SelectionState {
                 }
             }
         }
+        if case .rectangle(let rectangle) = shape,
+            let anchorID = rectangle.anchorID, let headID = rectangle.headID
+        {
+            // 纵向端点必须覆盖全部现存目标，不能用一个内部主项伪装成完整矩形的活动边缘。
+            guard
+                let anchor = entries.first(where: {
+                    $0.id == anchorID
+                }),
+                let head = entries.first(where: {
+                    $0.id == headID
+                }),
+                let first = rows.min(), let last = rows.max()
+            else {
+                throw NateError.invalidRange
+            }
+            let a = text.lineNumber(at: anchor.selection.range.lower)
+            let b = text.lineNumber(at: head.selection.range.lower)
+            guard min(a, b) == first, max(a, b) == last else {
+                throw NateError.message("矩形纵向端点未覆盖全部选择行，原状态保持不变。")
+            }
+        }
         if checkingCancellation {
             try Task.checkCancellation()
         }

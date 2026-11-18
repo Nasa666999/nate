@@ -7,6 +7,18 @@ extension EditorView {
     /// - event: 当前键盘事件。
     /// 返回：系统文本解释或统一命令分发，不重复插入键盘文字。
     public override func keyDown(with event: NSEvent) {
+        if composition == nil,
+            event.modifierFlags.intersection([.control, .option, .shift, .command]) == [
+                .control, .option, .shift,
+            ],
+            [123, 124, 125, 126].contains(event.keyCode)
+        {
+            extendRectangle(
+                horizontal: event.keyCode == 123 ? -1 : event.keyCode == 124 ? 1 : 0,
+                vertical: event.keyCode == 126 ? -1 : event.keyCode == 125 ? 1 : 0
+            )
+            return
+        }
         if composition == nil, completionPanel?.handle(event) == true {
             return
         }

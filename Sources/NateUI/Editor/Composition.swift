@@ -5,6 +5,7 @@ struct CompositionSession {
     let revision: UInt64
     let originalRange: ByteRange
     let replacementOverride: ByteRange?
+    let virtualPadding: Int
     let selectionState: SelectionState?
     let selectionGeneration: UUID
     let documentSelectionGeneration: UUID
@@ -48,6 +49,8 @@ extension EditorView {
                 revision: document.revision,
                 originalRange: range,
                 replacementOverride: replacementRange.location == NSNotFound ? nil : range,
+                virtualPadding: replacementRange.location == NSNotFound
+                    ? primarySelection?.virtualColumn ?? 0 : 0,
                 selectionState: viewSelectionState,
                 selectionGeneration: selectionGeneration,
                 documentSelectionGeneration: document.selectionGeneration,
@@ -162,7 +165,10 @@ extension EditorView {
     public func selectedRange() -> NSRange {
         if let session = composition {
             let start = document.text.utf16Offset(byte: session.originalRange.lower) ?? 0
-            return NSRange(location: start + session.selected.location, length: session.selected.length)
+            return NSRange(
+                location: start + session.virtualPadding + session.selected.location,
+                length: session.selected.length
+            )
         }
         return primarySelection.flatMap {
             document.text.nsRange($0.range)
@@ -178,7 +184,8 @@ extension EditorView {
             return NSRange(location: NSNotFound, length: 0)
         }
         return NSRange(
-            location: document.text.utf16Offset(byte: session.originalRange.lower) ?? 0,
+            location: (document.text.utf16Offset(byte: session.originalRange.lower) ?? 0)
+                + session.virtualPadding,
             length: session.text.utf16.count
         )
     }
@@ -221,6 +228,9 @@ extension EditorView {
         let units = tree.utf16Offset(byte: offset) ?? 0
         var rect = layout.caret(at: units - layout.originUTF16)
         rect.origin.x += gutterWidth
+        if composition == nil, let primarySelection, offset == primarySelection.head {
+            rect.origin.x += virtualCaretOffset(for: primarySelection)
+        }
         rect.origin.y += projection.y(of: line) + 8
         actualRange?.pointee = NSRange(location: units, length: 0)
         return window?.convertToScreen(convert(rect, to: nil)) ?? rect

@@ -43,6 +43,8 @@ public struct RectangleSelectionShape: Sendable, Codable, Equatable {
     public let headX: Double
     public let zeroWidth: Bool
     public let edges: [SelectionVirtualEdge]
+    public let anchorID: UUID?
+    public let headID: UUID?
 
     /// 业务作用：保留与当前视图字体绑定的矩形横向意图及每行虚拟边缘，不把像素当成字节列。
     /// 参数说明:
@@ -50,8 +52,17 @@ public struct RectangleSelectionShape: Sendable, Codable, Equatable {
     /// - headX: 相对正文左边缘的活动视觉横坐标。
     /// - zeroWidth: 交互明确确认的零宽模式，独立于实际空范围。
     /// - edges: 每个稳定行选区的完整虚拟边缘。
+    /// - anchorID: 可选的固定行身份，与活动行身份一并提供。
+    /// - headID: 可选的活动行身份，独立于后来切换的主选区角色。
     /// 返回：最多十万行的完整矩形形态；非法像素、重复行身份或容量超限时失败。
-    public init(anchorX: Double, headX: Double, zeroWidth: Bool, edges: [SelectionVirtualEdge]) throws {
+    public init(
+        anchorX: Double,
+        headX: Double,
+        zeroWidth: Bool,
+        edges: [SelectionVirtualEdge],
+        anchorID: UUID? = nil,
+        headID: UUID? = nil
+    ) throws {
         guard anchorX.isFinite, headX.isFinite, (0...1_000_000_000).contains(anchorX),
             (0...1_000_000_000).contains(headX), !edges.isEmpty, edges.count <= 100_000,
             Set(edges.map(\.selectionID)).count == edges.count,
@@ -63,10 +74,23 @@ public struct RectangleSelectionShape: Sendable, Codable, Equatable {
         else {
             throw NateError.message("矩形形态无效，未把部分行边缘作为完整选择。")
         }
+        let identities = Set(edges.map(\.selectionID))
+        guard (anchorID == nil) == (headID == nil),
+            anchorID.map({
+                identities.contains($0)
+            }) ?? true,
+            headID.map({
+                identities.contains($0)
+            }) ?? true
+        else {
+            throw NateError.message("矩形固定行和活动行必须同时对应现存选择。")
+        }
         self.anchorX = anchorX
         self.headX = headX
         self.zeroWidth = zeroWidth
         self.edges = edges
+        self.anchorID = anchorID
+        self.headID = headID
     }
 
     /// 业务作用：矩形恢复必须完整验证视觉位置和逐行边缘，超量输入不先构建全部行对象。
@@ -94,12 +118,14 @@ public struct RectangleSelectionShape: Sendable, Codable, Equatable {
             anchorX: container.decode(Double.self, forKey: .anchorX),
             headX: container.decode(Double.self, forKey: .headX),
             zeroWidth: container.decode(Bool.self, forKey: .zeroWidth),
-            edges: edges
+            edges: edges,
+            anchorID: container.decodeIfPresent(UUID.self, forKey: .anchorID),
+            headID: container.decodeIfPresent(UUID.self, forKey: .headID)
         )
     }
 
     private enum CodingKeys: String, CodingKey {
-        case anchorX, headX, zeroWidth, edges
+        case anchorX, headX, zeroWidth, edges, anchorID, headID
     }
 }
 

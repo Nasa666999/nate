@@ -160,53 +160,14 @@ extension EditorView {
         if let startX = dragColumn {
             let a = document.text.lineNumber(at: anchor)
             let b = document.text.lineNumber(at: position)
-            guard max(a, b) - min(a, b) < 100_000 else {
-                onStatus?("矩形选择跨度最多十万行，原选择保留。")
-                return
-            }
-            do {
-                let deadline = ContinuousClock.now.advanced(by: .seconds(2))
-                let zero = abs(startX - point.x) < 0.5
-                let targets = try projection.visibleLines(in: min(a, b)...max(a, b)).map {
-                    line -> (TextSelection, Int) in
-                    guard ContinuousClock.now < deadline else {
-                        throw NateError.message("矩形字形命中超过两秒，原选择保留。")
-                    }
-                    let y = projection.y(of: line) + 9
-                    let lower = bytePosition(at: NSPoint(x: min(startX, point.x), y: y))
-                    let upper = bytePosition(at: NSPoint(x: max(startX, point.x), y: y))
-                    let layout = layoutLine(line)
-                    let end = layout.caret(at: layout.content.rendered.length).minX + gutterWidth
-                    let width = max(1, font.maximumAdvancement.width)
-                    let leading = max(0, min(startX, point.x) - end) / width
-                    let trailing = max(0, max(startX, point.x) - end) / width
-                    guard leading.isFinite, trailing.isFinite, leading <= 1_000_000, trailing <= 1_000_000
-                    else {
-                        throw NateError.message("矩形虚拟位置超过一百万列，未建立部分目标。")
-                    }
-                    let forward = startX <= point.x
-                    let selected = TextSelection(
-                        anchor: forward ? lower : upper,
-                        head: forward ? upper : lower,
-                        virtualColumn: Int(leading)
-                    )
-                    return (selected, zero ? 0 : Int(trailing) - Int(leading))
-                }
-                guard
-                    setRectangularSelections(
-                        targets.map(\.0),
-                        zeroWidth: zero,
-                        anchorX: Double(max(0, startX - gutterWidth)),
-                        headX: Double(max(0, point.x - gutterWidth)),
-                        trailingColumns: targets.map(\.1),
-                        primaryRow: b
-                    )
-                else {
-                    return
-                }
-            }
-            catch {
-                onStatus?(error.localizedDescription)
+            guard
+                setVisualRectangle(
+                    anchorRow: a,
+                    headRow: b,
+                    anchorX: Double(max(0, startX - gutterWidth)),
+                    headX: Double(max(0, point.x - gutterWidth))
+                )
+            else {
                 return
             }
         }

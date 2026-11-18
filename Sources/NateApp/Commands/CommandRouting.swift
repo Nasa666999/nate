@@ -342,6 +342,14 @@ extension ApplicationController {
         case "dateTime":
             insert(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .medium))
         case "columnEditor": columnEditor()
+        case "rectangleLeft", "rectangleRight", "rectangleUp", "rectangleDown":
+            guard let (_, _, editor) = quickFindContext() else {
+                return
+            }
+            editor.extendRectangle(
+                horizontal: id == "rectangleLeft" ? -1 : id == "rectangleRight" ? 1 : 0,
+                vertical: id == "rectangleUp" ? -1 : id == "rectangleDown" ? 1 : 0
+            )
         case "cancelColumnEditor":
             cancelColumnInsertion()
             refreshUI()

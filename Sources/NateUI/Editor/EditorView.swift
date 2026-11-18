@@ -140,7 +140,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         guard let composition, composition.revision == document.revision else {
             return document.text
         }
-        return (try? document.text.replacing(composition.originalRange, with: composition.text))
+        // 候选前的虚拟定位只进入展示树，确认前的自动保存和撤销来源仍保持原正文。
+        let displayed = String(repeating: " ", count: composition.virtualPadding) + composition.text
+        return (try? document.text.replacing(composition.originalRange, with: displayed))
             ?? document.text
     }
 
@@ -222,7 +224,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         layoutMetrics = metrics
         setFrameSize(
             NSSize(
-                width: wrapLines ? viewport.width : max(viewport.width, frame.width),
+                width: max(
+                    virtualRectangleWidth,
+                    wrapLines ? viewport.width : max(viewport.width, frame.width)
+                ),
                 height: max(viewport.height, projection.y(of: displayTree.lineCount) + 60)
             )
         )
@@ -310,6 +315,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                     }
                 }
             }
+            drawVirtualRectangle(in: layout, line: line, y: y)
             drawBracketMatch(in: layout, y: y)
             for fragment in layout.fragments {
                 context.saveGState()
@@ -329,7 +335,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 for selection in viewSelections where tree.lineNumber(at: selection.head) == line {
                     if let offset = tree.utf16Offset(byte: selection.head) {
                         var rect = layout.caret(at: offset - layout.originUTF16)
-                        rect.origin.x += gutterWidth
+                        rect.origin.x += gutterWidth + virtualCaretOffset(for: selection)
                         rect.origin.y += y
                         rect.size.height = max(rect.height, lineHeight)
                         NSColor.controlAccentColor.setFill()
@@ -339,7 +345,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             }
             if let composition, line == tree.lineNumber(at: composition.originalRange.lower) {
                 let start = tree.utf16Offset(byte: composition.originalRange.lower) ?? 0
-                let caret = layout.caret(at: start - layout.originUTF16 + composition.selected.location)
+                let caret = layout.caret(
+                    at: start - layout.originUTF16 + composition.virtualPadding
+                        + composition.selected.location
+                )
                 NSColor.controlAccentColor.setFill()
                 NSRect(
                     x: gutterWidth + caret.minX,
@@ -450,9 +459,12 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let layout = layoutLine(line)
         let units = document.text.utf16Offset(byte: selection.head) ?? layout.originUTF16
         var rect = layout.caret(at: units - layout.originUTF16)
-        rect.origin.x += gutterWidth
+        rect.origin.x += gutterWidth + virtualCaretOffset(for: selection)
         rect.origin.y += projection.y(of: line) + 8
         rect.size.height = lineHeight
+        if rect.maxX + 20 > frame.width {
+            setFrameSize(NSSize(width: rect.maxX + 20, height: frame.height))
+        }
         scrollToVisible(rect.insetBy(dx: -20, dy: -20))
     }
 

@@ -64,7 +64,9 @@ public struct SelectionState: Sendable, Equatable, Codable {
                 anchorX: rectangle.anchorX,
                 headX: rectangle.headX,
                 zeroWidth: rectangle.zeroWidth,
-                edges: rectangle.edges
+                edges: rectangle.edges,
+                anchorID: rectangle.anchorID,
+                headID: rectangle.headID
             )
             let edges = Dictionary(
                 uniqueKeysWithValues: validated.edges.map {

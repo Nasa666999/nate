@@ -266,6 +266,26 @@ extension SelectionState {
         }
         let mappedShape: SelectionShape
         if preservingRectangle, case .rectangle(let rectangle) = shape {
+            var anchorID = rectangle.anchorID
+            var headID = rectangle.headID
+            if let anchor = entries.first(where: {
+                $0.id == anchorID
+            }),
+                let head = entries.first(where: {
+                    $0.id == headID
+                }),
+                let low = result.min(by: {
+                    $0.selection.range.lower < $1.selection.range.lower
+                }),
+                let high = result.max(by: {
+                    $0.selection.range.lower < $1.selection.range.lower
+                })
+            {
+                // 行置换移动各选择身份，但矩形纵向方向仍覆盖完整物理跨度，内部行不能成为新的外边缘。
+                let forward = anchor.selection.range.lower <= head.selection.range.lower
+                anchorID = forward ? low.id : high.id
+                headID = forward ? high.id : low.id
+            }
             let edges = try rectangle.edges.map {
                 try SelectionVirtualEdge(
                     selectionID: $0.selectionID,
@@ -278,7 +298,9 @@ extension SelectionState {
                     anchorX: rectangle.anchorX,
                     headX: rectangle.headX,
                     zeroWidth: rectangle.zeroWidth,
-                    edges: edges
+                    edges: edges,
+                    anchorID: anchorID,
+                    headID: headID
                 )
             )
         }

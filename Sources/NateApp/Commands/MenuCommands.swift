@@ -105,6 +105,17 @@ extension ApplicationController: NSMenuItemValidation {
         add(edit, "块注释", "blockComment")
         add(edit, "列编辑器…", "columnEditor")
         add(edit, "取消列编辑计算", "cancelColumnEditor")
+        let rectangle = NSMenu(title: "矩形扩展")
+        for (title, id, code) in [
+            ("向左", "rectangleLeft", NSLeftArrowFunctionKey),
+            ("向右", "rectangleRight", NSRightArrowFunctionKey),
+            ("向上", "rectangleUp", NSUpArrowFunctionKey),
+            ("向下", "rectangleDown", NSDownArrowFunctionKey),
+        ] {
+            add(rectangle, title, id, key: UnicodeScalar(code).map(String.init) ?? "")
+            rectangle.items.last?.keyEquivalentModifierMask = [.control, .option, .shift]
+        }
+        attach(rectangle, to: edit)
         add(edit, "补全文档与语言", "complete")
         add(edit, "补全文档单词", "completeWords")
         add(edit, "补全语言关键字与函数", "completeLanguage")
@@ -307,6 +318,9 @@ extension ApplicationController: NSMenuItemValidation {
         if id == "columnEditor" {
             return !closing && columnEditing.task == nil && quickFindContext() != nil
                 && active?.buffer.isReadOnly == false
+        }
+        if ["rectangleLeft", "rectangleRight", "rectangleUp", "rectangleDown"].contains(id) {
+            return !closing && quickFindContext()?.2.canExtendRectangle == true
         }
         if id == "cancelColumnEditor" {
             return columnEditing.task != nil
