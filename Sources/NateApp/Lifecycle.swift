@@ -44,6 +44,7 @@ extension ApplicationController {
             return .terminateCancel
         }
         closing = true
+        cancelSearchResultExport()
         // 退出即将固定恢复元数据，先撤销只读查询的光标发布权。
         cancelIncrementalSearch(resetOrigin: true)
         cancelProjectOpen()

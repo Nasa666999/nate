@@ -41,6 +41,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
     public var onPreferencesChange: ((SearchResultPreferences) -> Void)?
     public internal(set) var preferences = SearchResultPreferences()
     public var onClose: (() -> Void)?
+    public var onCopyLines: (([SearchResultHitSelection]) -> Void)?
     public var onPresentationChange: (() -> Void)?
     public private(set) var batches: [SearchResultBatchPresentation] = []
     public internal(set) var visibleMatchCount = 0
@@ -96,6 +97,7 @@ public final class SearchResultsPanel: NSView, NSOutlineViewDataSource, NSOutlin
             command("↑", "previous", "上一命中"), command("↓", "next", "下一命中"),
             command("复制结果", "copy", "复制所选分组或全部可见结果"),
             command("复制路径", "paths", "复制所选文件的完整原始路径"),
+            sourceActions(),
             oneRowPerLine,
             command("展开", "expand", "展开全部结果"), command("折叠", "collapse", "折叠全部结果"),
             clearBatch, clearAll, command("关闭", "close", "隐藏结果并保留已有批次"),

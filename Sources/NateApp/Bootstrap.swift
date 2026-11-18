@@ -111,6 +111,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var projectSearchScope: (generation: UUID, panels: Set<Int>)?
     var resultNavigationTask: Task<Void, Never>?
     var resultNavigationGeneration = UUID()
+    var resultExportTask: Task<Void, Never>?
+    var resultExportGeneration = UUID()
     var recentFiles: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: "recentFiles") ?? []
@@ -414,6 +416,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             }
             self.removeSearchResults(requests)
         }
+        connectSearchResultSources(window)
         window.searchResults.setPreferences(searchSettingsState.results)
         window.searchResults.onPreferencesChange = {
             [weak self, weak window] preferences in
@@ -478,6 +481,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         guard let active else {
             return
         }
+        // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
+        cancelSearchResultExport()
         // 新正文已提交，原目录打开不再拥有旧修订与原光标的发布资格。
         directoryWorkspace?.cancelOpen()
         cancelCompletion()
