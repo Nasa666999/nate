@@ -98,6 +98,12 @@ extension ApplicationController: NSMenuItemValidation {
         add(edit, "手动补全路径", "completePath")
         add(edit, "选择全部匹配", "selectMatches")
         add(edit, "追加下一个匹配", "addMatch", key: "d")
+        add(edit, "跳过当前匹配", "skipMatch")
+        add(edit, "撤回最近选区", "removeMatchSelection", key: "d")
+        edit.items.last?.keyEquivalentModifierMask = [.command, .shift]
+        add(edit, "多选匹配区分大小写", "multipleSelectionCase")
+        add(edit, "多选匹配仅全词", "multipleSelectionWord")
+        add(edit, "取消多选匹配计算", "cancelMultipleSelection")
         add(edit, "插入日期时间", "dateTime")
         add(edit, "插入 / 覆盖", "overwrite")
         attach(edit, to: bar)
@@ -294,6 +300,9 @@ extension ApplicationController: NSMenuItemValidation {
             return enabled
         }
         if let enabled = validateQuickFindMenu(id) {
+            return enabled
+        }
+        if let enabled = validateMultipleSelectionMenu(menuItem, id: id) {
             return enabled
         }
         if let action = foldAction(for: id) {

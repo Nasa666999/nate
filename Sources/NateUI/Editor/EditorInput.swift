@@ -102,8 +102,10 @@ extension EditorView {
                 onCommand?("compositionEnded")
             }
             else if let first = viewSelections.first {
+                // Esc 属于新的选择意图，必须通知工作区撤销等待读取，不能只重绘本视图。
                 viewSelections = [first]
                 needsDisplay = true
+                onSelection?()
             }
         default: NSSound.beep()
         }

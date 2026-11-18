@@ -230,12 +230,14 @@ extension ApplicationController {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
         case "compositionBegan":
+            cancelMultipleSelection()
             suspendSearchForInput()
             mainWindow?.refreshSelectedTextHighlights()
         case "compositionEnded":
             refreshVisibleIncrementalHighlights()
             mainWindow?.refreshSelectedTextHighlights()
         case "selectionChanged":
+            cancelMultipleSelection()
             // 用户位置和克隆焦点属于新的导航意图，等待中的旧增量结果不得再选择原位置。
             if incrementalTask != nil {
                 cancelIncrementalSearch(resetOrigin: true)
@@ -315,7 +317,14 @@ extension ApplicationController {
             "cancelBookmarkAction":
             bookmarkCommand(id)
         case "comment", "blockComment": comment(block: id == "blockComment")
-        case "selectMatches", "addMatch": selectMatches(all: id == "selectMatches")
+        case "selectMatches": selectMatches(.all)
+        case "addMatch": selectMatches(.next)
+        case "skipMatch": selectMatches(.skip)
+        case "removeMatchSelection": removeLastMatchSelection()
+        case "cancelMultipleSelection":
+            cancelMultipleSelection()
+            refreshUI()
+        case "multipleSelectionCase", "multipleSelectionWord": toggleMultipleSelectionOption(id)
         case "moveLineUp", "moveLineDown", "blankAbove", "blankBelow": lineCommand(id)
         case "dateTime":
             insert(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .medium))

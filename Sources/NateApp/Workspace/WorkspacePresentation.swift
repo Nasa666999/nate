@@ -88,7 +88,8 @@ extension ApplicationController {
             let preferences: String? = selected ?? selectedTextPreferences.failure
             let sidebar: String? = preferences ?? sidebarRecovery.failure
             let importing: String? = pausedWorkspace.task != nil ? "正在导入保留工作区…" : nil
-            let status: String? = sidebar ?? pausedWorkspace.failure ?? importing
+            let matching: String? = sidebar ?? multipleSelection.failure
+            let status: String? = matching ?? pausedWorkspace.failure ?? importing
             structureState =
                 status.map {
                     " · " + $0

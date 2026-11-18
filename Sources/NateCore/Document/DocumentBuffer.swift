@@ -300,7 +300,7 @@ public final class DocumentBuffer {
         return true
     }
 
-    /// 业务作用：将多光标相交或重复选区归并，正文每处只修改一次。
+    /// 业务作用：将相交、重复和落在非空选区起点的空光标归并，正文每处只修改一次。
     /// 参数说明: 无。
     /// 返回：按文档顺序排列的不交叠选区。
     public func normalizedSelections() -> [TextSelection] {
@@ -311,6 +311,7 @@ public final class DocumentBuffer {
         for selection in sorted {
             if let last = result.last,
                 selection.range.lower < last.range.upper || selection.range == last.range
+                    || last.range.isEmpty && selection.range.lower == last.range.lower
             {
                 result[result.count - 1] = TextSelection(
                     anchor: last.range.lower,

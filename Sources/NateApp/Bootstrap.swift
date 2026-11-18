@@ -25,6 +25,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var directoryWorkspace: DirectoryWorkspaceController?
     let sidebarRecovery = SidebarRecoveryRuntime()
     let pausedWorkspace = PausedWorkspaceRuntime()
+    let multipleSelection = MultipleSelectionRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -196,6 +197,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             loadSaveBackupPolicy()
             loadIncrementalOptions(from: .standard)
             loadSelectedTextHighlightOptions(from: .standard)
+            loadMultipleSelectionOptions(from: .standard)
             await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
@@ -507,6 +509,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return
         }
         cancelBookmarkAction()
+        cancelMultipleSelection()
         cancelQuickFind()
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()

@@ -416,13 +416,16 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
 
     /// 业务作用：主动导航时显示当前选区，后台保存不会调用此入口。
-    /// 参数说明: 无。
-    /// 返回：展开遮挡范围并滚动视口，不移动正文光标。
-    public func revealSelection() {
-        unfoldSelection()
-        guard let selection = viewSelections.first else {
+    /// 参数说明:
+    /// - selection: 明确需要显示的真实选区，为空时显示当前首选区。
+    /// 返回：有效目标展开遮挡范围并滚动视口，不移动正文光标；非法字节位置保持原视口。
+    public func revealSelection(_ selection: TextSelection? = nil) {
+        guard let selection = selection ?? viewSelections.first,
+            document.text.isBoundary(selection.anchor), document.text.isBoundary(selection.head)
+        else {
             return
         }
+        unfoldSelection(selection)
         let line = document.text.lineNumber(at: selection.head)
         let layout = layoutLine(line)
         let units = document.text.utf16Offset(byte: selection.head) ?? layout.originUTF16

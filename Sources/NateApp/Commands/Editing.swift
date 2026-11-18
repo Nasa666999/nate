@@ -154,52 +154,6 @@ extension ApplicationController {
         }
     }
 
-    /// 业务作用：从当前选词生成确定的多光标集合，不改变查找历史。
-    /// 参数说明:
-    /// - all: 是否选择所有匹配，否则追加下一个。
-    /// 返回：仅更新选区，正文仍未修改。
-    func selectMatches(all: Bool) {
-        guard let active, let selection = active.buffer.selections.first, !selection.range.isEmpty else {
-            return
-        }
-        let snapshot = active.buffer.snapshot
-        var options = SearchOptions()
-        options.query = snapshot.text.text(in: selection.range)
-        options.caseSensitive = true
-        let fixed = options
-        Task {
-            do {
-                let result = try await Task.detached {
-                    try SearchEngine.find(in: snapshot, options: fixed)
-                }
-                .value
-                guard active.buffer.revision == snapshot.revision else {
-                    return
-                }
-                let ranges = result.hits.compactMap(\.range)
-                if all {
-                    active.buffer.selections = ranges.map {
-                        TextSelection(anchor: $0.lower, head: $0.upper)
-                    }
-                }
-                else if let range = ranges.first(where: {
-                    candidate in
-                    !active.buffer.selections.contains {
-                        $0.range == candidate
-                    }
-                        && candidate.lower >= (active.buffer.selections.last?.range.upper ?? 0)
-                }) {
-                    active.buffer.selections.append(TextSelection(anchor: range.lower, head: range.upper))
-                }
-                mainWindow?.editor.needsDisplay = true
-                refreshUI()
-            }
-            catch {
-                SystemIntegration.alert("选择匹配", error.localizedDescription)
-            }
-        }
-    }
-
     /// 业务作用：在全部目标上插入固定列文本或按文档顺序生成进制数字。
     /// 参数说明: 无。
     /// 返回：虚拟列只在插入时补空白，全部目标共用一个撤销单元。
