@@ -70,7 +70,7 @@ extension EditorView {
     /// - row: 当前可见真实行。
     /// - x: 不含边栏的原生视觉横坐标。
     /// 返回：当前行内完整字形边界；共享上下文不足时失败，不返回近似标量边界。
-    private func rectangleHit(row: Int, x: Double) throws -> Int {
+    func rectangleHit(row: Int, x: Double) throws -> Int {
         let body = document.text.lineRange(row, includeEnding: false)
         let layout = layoutLine(row)
         let hitY = layout.caret(at: 0).midY

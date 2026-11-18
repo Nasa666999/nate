@@ -141,7 +141,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             return document.text
         }
         // 候选前的虚拟定位只进入展示树，确认前的自动保存和撤销来源仍保持原正文。
-        let displayed = String(repeating: " ", count: composition.virtualPadding) + composition.text
+        let displayed =
+            String(repeating: " ", count: composition.virtualPadding) + composition.text
+            + String(repeating: " ", count: composition.displaySuffix)
         return (try? document.text.replacing(composition.originalRange, with: displayed))
             ?? document.text
     }
@@ -305,13 +307,15 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             }
             drawDocumentMarks(in: layout, line: line, y: y, budget: &markBudget)
             drawTextHighlights(in: layout, line: line, y: y, budget: &markBudget)
-            for selection in viewSelections where !selection.range.isEmpty && composition == nil {
-                let a = max(selection.range.lower, layout.range.lower)
-                let b = min(selection.range.upper, layout.range.upper)
-                if a <= b {
-                    NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6).setFill()
-                    for rect in layout.selectionRects(ByteRange(a, b)) {
-                        rect.offsetBy(dx: gutterWidth, dy: y).fill()
+            if !drawRectangularSelection(in: layout, line: line, y: y) {
+                for selection in viewSelections where !selection.range.isEmpty && composition == nil {
+                    let a = max(selection.range.lower, layout.range.lower)
+                    let b = min(selection.range.upper, layout.range.upper)
+                    if a <= b {
+                        NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6).setFill()
+                        for rect in layout.selectionRects(ByteRange(a, b)) {
+                            rect.offsetBy(dx: gutterWidth, dy: y).fill()
+                        }
                     }
                 }
             }
@@ -335,7 +339,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 for selection in viewSelections where tree.lineNumber(at: selection.head) == line {
                     if let offset = tree.utf16Offset(byte: selection.head) {
                         var rect = layout.caret(at: offset - layout.originUTF16)
-                        rect.origin.x += gutterWidth + virtualCaretOffset(for: selection)
+                        rect.origin.x += gutterWidth + selectionCaretOffset(for: selection)
                         rect.origin.y += y
                         rect.size.height = max(rect.height, lineHeight)
                         NSColor.controlAccentColor.setFill()
@@ -459,7 +463,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let layout = layoutLine(line)
         let units = document.text.utf16Offset(byte: selection.head) ?? layout.originUTF16
         var rect = layout.caret(at: units - layout.originUTF16)
-        rect.origin.x += gutterWidth + virtualCaretOffset(for: selection)
+        rect.origin.x += gutterWidth + selectionCaretOffset(for: selection)
         rect.origin.y += projection.y(of: line) + 8
         rect.size.height = lineHeight
         if rect.maxX + 20 > frame.width {

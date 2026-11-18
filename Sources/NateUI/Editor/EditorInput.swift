@@ -138,6 +138,30 @@ extension EditorView {
     /// 返回：一个可撤销事务；虚拟空白删除不写入空格，完整字形边界无法在共享预算内确定时整次不执行。
     func delete(forward: Bool) {
         finishComposition()
+        if let state = viewSelectionState, case .rectangle(let shape) = state.shape, !shape.zeroWidth {
+            // 正宽矩形即使实际字节范围为空也仍有列意图，删除不能退化为移除下一字形或整份 Tab。
+            insertText("", replacementRange: NSRange(location: NSNotFound, length: 0))
+            return
+        }
+        if let state = viewSelectionState, case .rectangle = state.shape {
+            do {
+                guard synchronizeDocumentSelectionState() else {
+                    return
+                }
+                let changed = try document.commit(prepareRectangularDeletion(forward: forward))
+                refresh(reveal: true)
+                if changed {
+                    onChange?()
+                }
+                else {
+                    onSelection?()
+                }
+            }
+            catch {
+                onStatus?(error.localizedDescription)
+            }
+            return
+        }
         var navigation: GraphemeNavigation
         do {
             navigation = try GraphemeNavigation(text: document.text)

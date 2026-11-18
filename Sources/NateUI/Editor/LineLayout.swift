@@ -35,7 +35,8 @@ final class LineLayout {
         originUTF16 = snapshot.text.utf16Offset(byte: range.lower) ?? 0
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
-        paragraph.defaultTabInterval = font.maximumAdvancement.width * 4
+        paragraph.defaultTabInterval =
+            max(1, NSAttributedString(string: " ", attributes: [.font: font]).size().width) * 4
         paragraph.tabStops = []
         let value = NSMutableAttributedString(
             string: LineControlPresentation.render(snapshot.text.text(in: range)),

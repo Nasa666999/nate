@@ -6,6 +6,7 @@ struct CompositionSession {
     let originalRange: ByteRange
     let replacementOverride: ByteRange?
     let virtualPadding: Int
+    let displaySuffix: Int
     let selectionState: SelectionState?
     let selectionGeneration: UUID
     let documentSelectionGeneration: UUID
@@ -39,9 +40,24 @@ extension EditorView {
             guard synchronizeDocumentSelectionState() else {
                 return
             }
-            let range =
+            var range =
                 replacementRange.location == NSNotFound
                 ? primarySelection?.range : document.text.byteRange(replacementRange)
+            var padding = replacementRange.location == NSNotFound ? primarySelection?.virtualColumn ?? 0 : 0
+            var suffix = 0
+            if replacementRange.location == NSNotFound {
+                do {
+                    if let target = try rectangularCompositionTarget() {
+                        range = target.range
+                        padding = target.leadingSpaces
+                        suffix = target.trailingSpaces
+                    }
+                }
+                catch {
+                    onStatus?(error.localizedDescription)
+                    return
+                }
+            }
             guard let range else {
                 return
             }
@@ -49,8 +65,8 @@ extension EditorView {
                 revision: document.revision,
                 originalRange: range,
                 replacementOverride: replacementRange.location == NSNotFound ? nil : range,
-                virtualPadding: replacementRange.location == NSNotFound
-                    ? primarySelection?.virtualColumn ?? 0 : 0,
+                virtualPadding: padding,
+                displaySuffix: suffix,
                 selectionState: viewSelectionState,
                 selectionGeneration: selectionGeneration,
                 documentSelectionGeneration: document.selectionGeneration,
@@ -110,11 +126,19 @@ extension EditorView {
             guard synchronizeDocumentSelectionState() else {
                 return
             }
-            let changed = try document.insert(
-                value,
-                replacementRange: replacement,
-                overwrite: !hadComposition && overwrite
-            )
+            let changed: Bool
+            if replacement == nil, let state = viewSelectionState, case .rectangle = state.shape {
+                changed = try document.commit(
+                    prepareRectangularInput(value, overwrite: !hadComposition && overwrite)
+                )
+            }
+            else {
+                changed = try document.insert(
+                    value,
+                    replacementRange: replacement,
+                    overwrite: !hadComposition && overwrite
+                )
+            }
             refresh(reveal: true)
             // 语义输入与实际字节变化分别通知，宏记录原确认文字，元数据收束不触发保存写盘。
             onTextInput?(value)
@@ -229,7 +253,7 @@ extension EditorView {
         var rect = layout.caret(at: units - layout.originUTF16)
         rect.origin.x += gutterWidth
         if composition == nil, let primarySelection, offset == primarySelection.head {
-            rect.origin.x += virtualCaretOffset(for: primarySelection)
+            rect.origin.x += selectionCaretOffset(for: primarySelection)
         }
         rect.origin.y += projection.y(of: line) + 8
         actualRange?.pointee = NSRange(location: units, length: 0)
