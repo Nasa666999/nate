@@ -16,11 +16,12 @@ public struct SearchWindowState: Codable, Sendable {
     public var confirmsOpenReplacement = true
     public var presentation = SearchPresentationPreferences()
     public var inputFont = SearchInputFont()
+    public var projectPanels: [Int] = []
 
     enum CodingKeys: String, CodingKey {
         case format, options, directory, filters
         case queryHistory, replacementHistory, directoryHistory, filterHistory
-        case page, stayAfterReplace, confirmsOpenReplacement, presentation, inputFont
+        case page, stayAfterReplace, confirmsOpenReplacement, presentation, inputFont, projectPanels
     }
 
     /// 业务作用：建立独立于文档和窗口对象的搜索配置快照，供启动恢复与后台保存使用。
@@ -28,10 +29,10 @@ public struct SearchWindowState: Codable, Sendable {
     /// 返回：普通搜索、空历史和明确文件过滤的默认状态。
     public init() {}
 
-    /// 业务作用：读取既有搜索归档，新增加的输入偏好缺失时采用默认值，其它原字段保持严格解码。
+    /// 业务作用：读取既有搜索归档，可选输入偏好或项目选择缺失时采用默认值，其它原字段保持严格解码。
     /// 参数说明:
     /// - decoder: 当前归档的完整解码上下文。
-    /// 返回：可再次校验的配置值；错误字段失败，旧归档不会因缺少可选输入偏好而失效。
+    /// 返回：可再次校验的配置值；错误字段失败，缺少可选偏好不使既有归档失效。
     public init(from decoder: any Decoder) throws {
         self.init()
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -50,11 +51,12 @@ public struct SearchWindowState: Codable, Sendable {
             try values.decodeIfPresent(SearchPresentationPreferences.self, forKey: .presentation)
             ?? SearchPresentationPreferences()
         inputFont = try values.decodeIfPresent(SearchInputFont.self, forKey: .inputFont) ?? SearchInputFont()
+        projectPanels = try values.decodeIfPresent([Int].self, forKey: .projectPanels) ?? []
     }
 
     /// 业务作用：在归档解析后和编码前限定配置格式、历史条目和完整文本容量，拒绝无界配置分配。
     /// 参数说明: 无。
-    /// 返回：已知格式、每类至多 30 项且原文合计不超过 16 MiB 时通过，超限不截断任何输入。
+    /// 返回：已知格式、合法项目选择、每类至多 30 项且原文合计不超过 16 MiB 时通过，超限不截断输入。
     public func validate() throws {
         // 未识别的配置格式可能包含不同语义，不能按当前控件解释后再覆盖原归档。
         guard format == 1 else {
@@ -62,12 +64,27 @@ public struct SearchWindowState: Codable, Sendable {
         }
         try presentation.validate()
         try inputFont.validate()
+        guard projectPanels.count <= 3, Set(projectPanels).count == projectPanels.count,
+            projectPanels.allSatisfy({
+                (0..<3).contains($0)
+            })
+        else {
+            throw NateError.message("项目搜索面板选择无效，原归档已保留。")
+        }
         let histories = [queryHistory, replacementHistory, directoryHistory, filterHistory]
-        guard histories.allSatisfy({ $0.count <= 30 }) else {
+        guard
+            histories.allSatisfy({
+                $0.count <= 30
+            })
+        else {
             throw NateError.message("搜索历史每类最多 30 项，原归档已保留。")
         }
         var remaining = 16 * 1024 * 1024
-        for value in [options.query, options.replacement, directory, filters] + histories.flatMap({ $0 }) {
+        for value in [options.query, options.replacement, directory, filters]
+            + histories.flatMap({
+                $0
+            })
+        {
             let count = value.utf8.count
             guard count <= remaining else {
                 throw NateError.message("搜索设置完整文本合计超过 16 MiB，未保存；可清理历史后重试。")

@@ -12,11 +12,15 @@ extension FindReplaceWindow {
         ]
     }
 
-    /// 业务作用：原生短字段与完整输入摘要按同一方向规则执行查找，Shift 只临时反向。
+    /// 业务作用：原生短字段与完整输入摘要使用同一提交入口，项目页执行所选集合，其余页按方向导航。
     /// 参数说明:
     /// - reversing: 是否临时反转已保存的查找方向。
-    /// 返回：完整查询按当前方向提交，不改变反向选项本身。
+    /// 返回：项目页提交完整集合查询，其余页按当前方向提交；反向选项本身保持原值。
     func submitFromInput(reversing: Bool) {
+        if page == .projects {
+            submit("projects")
+            return
+        }
         var previous = backwards.state == .on
         if reversing {
             previous.toggle()
@@ -50,6 +54,7 @@ extension FindReplaceWindow {
         result.confirmsOpenReplacement = confirmsOpenReplacement
         result.presentation = presentationPreferences
         result.inputFont = inputFontConfiguration
+        result.projectPanels = preferredProjectPanels.sorted()
         return result
     }
 
@@ -74,6 +79,8 @@ extension FindReplaceWindow {
         replaceHistory = state.replacementHistory
         directoryHistory = state.directoryHistory
         filterHistory = state.filterHistory
+        preferredProjectPanels = Set(state.projectPanels)
+        updateProjectChoices()
         for (input, values) in [
             (query, queryHistory), (replacement, replaceHistory),
             (directory, directoryHistory), (filters, filterHistory),
@@ -110,6 +117,7 @@ extension FindReplaceWindow {
     /// 参数说明: 无。
     /// 返回：选项快照进入配置保存入口。
     @objc func optionsChanged() {
+        projectRequestGeneration = UUID()
         stateChanged()
     }
 

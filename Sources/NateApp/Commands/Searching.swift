@@ -29,8 +29,9 @@ extension ApplicationController {
     /// 参数说明:
     /// - replacing: 是否进入替换流程。
     /// - inFiles: 是否显示目录与过滤条件，进入跨文件范围。
+    /// - inProjects: 是否显示可用项目面板选择，进入显式文件引用范围。
     /// 返回：复用查找条件，保持既有历史。
-    func presentFind(replacing: Bool, inFiles: Bool = false) {
+    func presentFind(replacing: Bool, inFiles: Bool = false, inProjects: Bool = false) {
         // 查找界面接管新的输入意图，原目录读取不能在随后等待结束时抢回正文焦点。
         directoryWorkspace?.cancelOpen()
         cancelProjectOpen()
@@ -79,7 +80,11 @@ extension ApplicationController {
             findWindow = window
         }
         let selection = refreshSearchPresentation(filling: true)
-        findWindow?.present(selection: selection, page: inFiles ? .files : replacing ? .replace : .find)
+        refreshProjectSearchAvailability()
+        findWindow?.present(
+            selection: selection,
+            page: inProjects ? .projects : inFiles ? .files : replacing ? .replace : .find
+        )
         if let searchSettingsError {
             findWindow?.feedback.stringValue = searchSettingsError
         }
@@ -135,6 +140,10 @@ extension ApplicationController {
                 options: options,
                 replacing: action == "replaceFiles"
             )
+            return
+        }
+        if action == "projects" || action == "replaceProjects" {
+            searchProjects(filters: filters, options: options, replacing: action == "replaceProjects")
             return
         }
         guard let active else {

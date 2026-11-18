@@ -44,6 +44,7 @@ extension ApplicationController {
     /// - reveal: 用户明确新增或定位的节点，普通状态刷新为空。
     /// 返回：原面板完整更新；仅显式定位时展开并选择指定节点。
     func refreshProjectPanel(_ index: Int, reveal: UUID? = nil) {
+        refreshProjectSearchAvailability()
         guard projectPanelStates.indices.contains(index), let mainWindow else {
             return
         }

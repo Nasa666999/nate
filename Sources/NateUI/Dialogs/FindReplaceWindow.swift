@@ -63,6 +63,14 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     let replacementActions = NSStackView()
     let fileActions = NSStackView()
     let markActions = NSStackView()
+    let projectChoices = NSStackView()
+    let projectActions = NSStackView()
+    var availableProjectPanels: Set<Int> = []
+    var preferredProjectPanels: Set<Int> = []
+    var projectRequestGeneration = UUID()
+    let projectChecks = (1...3).map {
+        NSButton(checkboxWithTitle: "项目面板 \($0)（未载入）", target: nil, action: nil)
+    }
     public var stayAfterReplace: Bool {
         stay.state == .on
     }
@@ -198,6 +206,8 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         directoryRow = grid.row(at: 2)
         filterRow = grid.row(at: 3)
         root.addArrangedSubview(grid)
+        configureProjectChoices()
+        root.addArrangedSubview(projectChoices)
         grid.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -36).isActive = true
         query.widthAnchor.constraint(greaterThanOrEqualToConstant: 550).isActive = true
         mode.addItems(withTitles: SearchMode.allCases.map(\.rawValue))
@@ -233,11 +243,14 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         }
         fileActions.addArrangedSubview(button("files", "文件中查找"))
         fileActions.addArrangedSubview(button("replaceFiles", "文件中替换"))
+        projectActions.addArrangedSubview(button("projects", "所选项目中查找"))
+        projectActions.addArrangedSubview(button("replaceProjects", "所选项目中替换"))
         markActions.addArrangedSubview(button("mark", "添加匹配行书签"))
-        for actions in [navigationActions, replacementActions, fileActions, markActions] {
+        for actions in [navigationActions, replacementActions, fileActions, projectActions, markActions] {
             actions.spacing = 5
             root.addArrangedSubview(actions)
         }
+        updateProjectChoices()
         let swap = NSButton(title: "交换查找与替换", target: self, action: #selector(swapInputs))
         swap.controlSize = .small
         resetSavedState.controlSize = .small
@@ -297,7 +310,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// 参数说明:
     /// - selection: 可用于填充查找内容的完整短选区。
     /// - page: 菜单或快捷键请求的实际操作范围。
-    /// 返回：对应页签可见，焦点进入查找内容；无目录时文件操作仍由执行入口明确拒绝。
+    /// 返回：对应页签可见，焦点进入查找内容；目录或项目范围不完整时执行入口明确拒绝。
     public func present(selection: String?, page: FindReplacePage) {
         let valid: Bool
         do {
@@ -328,7 +341,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
 
     /// 业务作用：页签点击改变可见范围与对应动作，实际查找条件保持原值。
     /// 参数说明: 无。
-    /// 返回：文件页显示目录和过滤，其它页显示适用的缓冲区操作。
+    /// 返回：文件页显示目录和过滤，项目页显示面板选择，其余页显示适用的缓冲区操作。
     @objc func pageChanged() {
         guard FindReplacePage.allCases.indices.contains(tabs.selectedSegment) else {
             return
@@ -343,14 +356,22 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// - focus: 是否把键盘入口交给查找内容。
     /// 返回：可见动作与页签一致，查找、替换原文和目录输入保留。
     func selectPage(_ page: FindReplacePage, focus: Bool) {
+        if self.page != page {
+            projectRequestGeneration = UUID()
+        }
         self.page = page
         tabs.selectedSegment = FindReplacePage.allCases.firstIndex(of: page) ?? 0
         let files = page == .files
+        let projects = page == .projects
         let replacing = page == .replace
         directoryRow?.isHidden = !files
-        filterRow?.isHidden = !files
-        navigationOptions.isHidden = files
-        fileOptions.isHidden = !files
+        filterRow?.isHidden = !files && !projects
+        navigationOptions.isHidden = files || projects
+        fileOptions.isHidden = !files && !projects
+        recursive.isHidden = projects
+        includeHidden.isHidden = projects
+        projectChoices.isHidden = !projects
+        projectActions.isHidden = !projects
         stay.isHidden = !replacing
         confirmOpen.isHidden = !replacing
         navigationActions.isHidden = page != .find && !replacing
@@ -402,6 +423,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     /// 参数说明: 无。
     /// 返回：界面选项与执行语义一致。
     @objc func modeChanged() {
+        projectRequestGeneration = UUID()
         let regex = mode.indexOfSelectedItem == 2
         wholeWord.isEnabled = !regex
         backwards.isEnabled = !regex
@@ -435,11 +457,17 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
             feedback.stringValue = "请先确认或取消当前输入，再继续搜索。"
             return
         }
+        guard !["projects", "replaceProjects"].contains(id) || !selectedProjectPanels.isEmpty else {
+            feedback.stringValue = "请勾选至少一个已载入且可用的项目面板。"
+            return
+        }
         if id != "cancel" {
             remember(query, history: &queryHistory)
             remember(replacement, history: &replaceHistory)
             if id == "files" || id == "replaceFiles" {
                 remember(directory, history: &directoryHistory)
+            }
+            if ["files", "replaceFiles", "projects", "replaceProjects"].contains(id) {
                 remember(filters, history: &filterHistory)
             }
             feedback.stringValue =

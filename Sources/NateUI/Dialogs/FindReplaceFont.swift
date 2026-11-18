@@ -57,8 +57,10 @@ extension FindReplaceWindow {
         guard let window else {
             return
         }
-        let rows: CGFloat = page == .files ? 4 : 2
-        let height = 400 + rows * max(0, query.intrinsicContentSize.height - 28)
+        let rows: CGFloat = page == .files ? 4 : page == .projects ? 3 : 2
+        let height =
+            400 + rows * max(0, query.intrinsicContentSize.height - 28)
+            + (page == .projects ? 28 : 0)
         var frame = window.frame
         window.minSize = NSSize(width: 750, height: height)
         if frame.height < height {

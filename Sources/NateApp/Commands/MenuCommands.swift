@@ -110,6 +110,7 @@ extension ApplicationController: NSMenuItemValidation {
         search.addItem(.separator())
         for (title, id, key) in [
             ("查找…", "find", "f"), ("替换…", "replace", "H"), ("文件中查找…", "findFiles", "F"),
+            ("项目中查找…", "findProjects", ""),
             ("下一个匹配", "findNext", "g"), ("上一个匹配", "findPrevious", "G"), ("跳转行…", "goto", "l"),
             ("切换书签", "bookmark", ""), ("下一个书签", "nextBookmark", ""), ("上一个书签", "previousBookmark", ""),
             ("清空书签", "clearBookmarks", ""), ("反转书签", "invertBookmarks", ""), ("复制书签行", "copyBookmarks", ""),

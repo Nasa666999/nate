@@ -153,8 +153,12 @@ extension ApplicationController {
                 mainWindow?.editor.refresh(reveal: true)
                 didEdit()
             }
-        case "find", "replace", "findFiles":
-            presentFind(replacing: id == "replace", inFiles: id == "findFiles")
+        case "find", "replace", "findFiles", "findProjects":
+            presentFind(
+                replacing: id == "replace",
+                inFiles: id == "findFiles",
+                inProjects: id == "findProjects"
+            )
         case "incrementalSearch": showIncrementalSearch()
         case "closeIncrementalSearch": closeIncrementalSearch()
         case "incrementalNext", "incrementalPrevious":

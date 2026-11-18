@@ -22,7 +22,7 @@ public enum SearchScope {
         selections: [TextSelection]
     ) throws -> ResolvedSearchScope {
         var effective = options
-        if ["open", "replaceOpen", "files", "replaceFiles", "projects"].contains(action) {
+        if ["open", "replaceOpen", "files", "replaceFiles", "projects", "replaceProjects"].contains(action) {
             effective.selectionOnly = false
             effective.backwards = false
             effective.wrap = true
