@@ -10,8 +10,12 @@ private struct MappedChange: Sendable {
 
 public struct PositionMap: Sendable {
     private let entries: [MappedChange]
+    let permutation: TextPermutation?
     var changeCount: Int {
-        entries.count
+        permutation?.indexedCount ?? entries.count
+    }
+    var retainedBytes: Int {
+        entries.count * MemoryLayout<MappedChange>.stride + (permutation?.retainedBytes ?? 0)
     }
 
     /// 业务作用：无正文变化时保留全部位置，格式事务也可记录同一修订链。
@@ -19,6 +23,16 @@ public struct PositionMap: Sendable {
     /// 返回：恒等映射。
     public init() {
         entries = []
+        permutation = nil
+    }
+
+    /// 业务作用：行重排采用真实片段位置，不能把整个排序区间中的光标统一收拢到末尾。
+    /// 参数说明:
+    /// - permutation: 已验证完整覆盖的双向移动索引。
+    /// 返回：区间外恒等、区间内随原文移动的位置映射；恒等重排不保留多余索引。
+    public init(permutation: TextPermutation) {
+        entries = []
+        self.permutation = permutation.isIdentity ? nil : permutation
     }
 
     /// 业务作用：为原子修改建立二分位置索引，避免多光标与书签逐项扫描全部编辑。
@@ -62,6 +76,7 @@ public struct PositionMap: Sendable {
     /// - validatedChanges: 非交叠事务或已完成构造的反向位置变化。
     /// 返回：可在快照与历史之间共享的不可变索引。
     init(validatedChanges: [PositionChange]) {
+        permutation = nil
         var delta = 0
         entries = validatedChanges.map {
             change in
@@ -77,11 +92,14 @@ public struct PositionMap: Sendable {
         }
     }
 
-    /// 业务作用：删除范围内位置收拢到替换末端，邻接端点按原事务顺序优先属于前项。
+    /// 业务作用：普通替换内部位置收拢到末端，行重排中的位置跟随原片段与后侧边界。
     /// 参数说明:
     /// - position: 修改前的合法位置。
     /// 返回：修改后的字节位置，不重新解释 Unicode 或隐式夹断范围。
     public func map(_ position: Int) -> Int {
+        if let permutation {
+            return permutation.map(position)
+        }
         var lower = 0
         var upper = entries.count
         while lower < upper {
@@ -109,6 +127,9 @@ public struct PositionMap: Sendable {
     /// - affinity: 同点插入和被替换位置归属前侧或后侧。
     /// 返回：当前事务后的合法位置；后侧跨过同点后续修改，前侧保留替换结束边界。
     public func map(_ position: Int, affinity: PositionAffinity) -> Int {
+        if let permutation {
+            return permutation.map(position, affinity: affinity)
+        }
         var lower = 0
         var upper = entries.count
         if affinity == .after {

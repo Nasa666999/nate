@@ -12,6 +12,8 @@ public struct PreparedTransaction: Sendable {
     let format: DocumentFormat?
     let name: String
     var bookmarkUpdate: PreparedBookmarkUpdate?
+    var markUpdate: PreparedMarkRelocation?
+    var reversePositions: PositionMap?
 
     /// 业务作用：为关联行元数据提供已构建的结果正文，避免后台重复执行同一批编辑。
     /// 参数说明: 无。

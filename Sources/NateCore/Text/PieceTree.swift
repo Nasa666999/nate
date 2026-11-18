@@ -200,6 +200,48 @@ public struct PieceTree: Sendable {
         return PieceTree(root: Self.join(Self.join(before, PieceTree(text).root), after))
     }
 
+    /// 业务作用：从原快照结构共享取得完整范围，行重排与校验不为每段正文建立完整中间字符串。
+    /// 参数说明:
+    /// - range: 原快照中的完整 UTF-8 标量范围。
+    /// 返回：只切分边界叶片的新树；非法范围拒绝，原快照保持不变。
+    public func slicing(_ range: ByteRange) throws -> PieceTree {
+        guard range.lower <= range.upper, isBoundary(range.lower), isBoundary(range.upper) else {
+            throw NateError.invalidRange
+        }
+        let (_, tail) = Self.split(root, at: range.lower)
+        let (selected, _) = Self.split(tail, at: range.count)
+        return PieceTree(root: selected)
+    }
+
+    /// 业务作用：大段重排逐块验证真实字节，摘要相同不能代替完整复验，取消可在读取边界停止。
+    /// 参数说明:
+    /// - other: 需要比较的不可变正文片段。
+    /// - permit: 当前仍有时间和权限继续验证的资格。
+    /// 返回：全部字节相同时为真，不同则为假；取消或失权不返回未经完成的相等结论。
+    public func byteEqual(to other: PieceTree, permit: @Sendable () -> Bool) throws -> Bool {
+        try Task.checkCancellation()
+        guard permit() else {
+            throw CancellationError()
+        }
+        if root === other.root {
+            return true
+        }
+        guard byteCount == other.byteCount, root.contentFingerprint == other.root.contentFingerprint else {
+            return false
+        }
+        for start in stride(from: 0, to: byteCount, by: 8192) {
+            try Task.checkCancellation()
+            guard permit() else {
+                throw CancellationError()
+            }
+            let range = ByteRange(start, min(byteCount, start + 8192))
+            guard bytes(in: range) == other.bytes(in: range) else {
+                return false
+            }
+        }
+        return true
+    }
+
     /// 业务作用：准确判断磁盘保存点，避免 Swift 规范等价比较掩盖字节变化。
     /// 参数说明:
     /// - other: 要比较的已持久化快照。

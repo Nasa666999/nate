@@ -41,30 +41,20 @@ public struct DocumentSnapshot: Sendable {
     }
 }
 
-struct HistoryEntry {
-    var before: PieceTree
-    var after: PieceTree
-    var selectionsBefore: [TextSelection]
-    var selectionsAfter: [TextSelection]
-    var formatBefore: DocumentFormat
-    var formatAfter: DocumentFormat
-    var bookmarksBefore: Set<Int>
-    var bookmarksAfter: Set<Int>
-    var forwardChanges: [PositionChange]
-    var backwardChanges: [PositionChange]
-    var forwardPositions: PositionMap
-    var backwardPositions: PositionMap
-    var retainedBytes: Int
-    var name: String
-}
-
 @MainActor
 public final class DocumentBuffer {
     public let id: UUID
     public private(set) var revision: UInt64 = 0
     public private(set) var text: PieceTree
     public private(set) var format: DocumentFormat
-    public var selections = [TextSelection(anchor: 0, head: 0)]
+    public var selections = [TextSelection(anchor: 0, head: 0)] {
+        didSet {
+            if oldValue != selections {
+                selectionGeneration = UUID()
+            }
+        }
+    }
+    public private(set) var selectionGeneration = UUID()
     public var isReadOnly = false {
         didSet {
             if oldValue != isReadOnly {
@@ -106,6 +96,7 @@ public final class DocumentBuffer {
     public private(set) var lastEdits: [TextEdit] = []
     public private(set) var lastChanges: [PositionChange] = []
     public private(set) var lastActionName = ""
+    public private(set) var historyFailure: String?
     private var undoEntries: [HistoryEntry] = []
     private var redoEntries: [HistoryEntry] = []
     var positionJournal: [RevisionPositionMap] = []
@@ -212,6 +203,14 @@ public final class DocumentBuffer {
         else {
             throw NateError.staleRevision
         }
+        // 颜色独立于正文修订，不能在后台排序之后覆盖用户刚清除或重新设置的样式。
+        guard
+            transaction.markUpdate.map({
+                $0.generation == markGeneration
+            }) ?? true
+        else {
+            throw NateError.staleRevision
+        }
         let unique = transaction.edits
         let changes = transaction.changes
         let positions = transaction.positions
@@ -236,6 +235,8 @@ public final class DocumentBuffer {
             throw NateError.message("文档修订已达到上限，请保存后关闭并重新打开，建立新的文档生命周期。")
         }
         let prepared = transaction.after
+        let preparedMarks =
+            try transaction.markUpdate?.state ?? prepareDocumentMarkMapping(positions, in: prepared)
         let after =
             transaction.selections
             ?? normalizedSelections().map {
@@ -267,6 +268,7 @@ public final class DocumentBuffer {
                 }
             )
         let backwardChanges = Self.inverseChanges(changes)
+        let backwardPositions = transaction.reversePositions ?? PositionMap(validatedChanges: backwardChanges)
         let entry = HistoryEntry(
             before: text,
             after: prepared,
@@ -279,8 +281,8 @@ public final class DocumentBuffer {
             forwardChanges: changes,
             backwardChanges: backwardChanges,
             forwardPositions: positions,
-            backwardPositions: PositionMap(validatedChanges: backwardChanges),
-            retainedBytes: changes.reduce(512) {
+            backwardPositions: backwardPositions,
+            retainedBytes: changes.reduce(512 + positions.retainedBytes + backwardPositions.retainedBytes) {
                 $0 + $1.range.count + $1.insertedByteCount + 4096
             },
             name: name
@@ -292,6 +294,7 @@ public final class DocumentBuffer {
         lastChanges = entry.forwardChanges
         lastActionName = name
         selections = after
+        publishDocumentMarks(preparedMarks)
         recordPositions(positions)
         revision += 1
         undoEntries.append(entry)
@@ -306,6 +309,7 @@ public final class DocumentBuffer {
             discardedHistoryEntries += 1
         }
         redoEntries.removeAll()
+        historyFailure = nil
         bookmarks = bookmarksAfter
         modifiedLines.formUnion(
             changes.map {
@@ -365,42 +369,98 @@ public final class DocumentBuffer {
 
     /// 业务作用：撤销完整编辑并恢复操作前选区，保存不参与历史管理。
     /// 参数说明: 无。
-    /// 返回：恢复旧正文但使用新修订号；达到修订上限时保留正文与历史。
+    /// 返回：恢复旧正文但使用新修订号；权限或修订上限保留正文与历史，颜色映射失败还会提供具体原因。
     public func undo() {
-        // 上限检查必须先于弹出历史，不能以修订回绕或丢弃历史换取撤销。
-        guard !isReadOnly, !isEditingSuspended, revision < UInt64.max, let entry = undoEntries.popLast()
-        else {
-            return
-        }
-        text = entry.before
-        format = entry.formatBefore
-        bookmarks = entry.bookmarksBefore
-        lastEdits = []
-        lastChanges = entry.backwardChanges
-        selections = entry.selectionsBefore
-        recordPositions(entry.backwardPositions)
-        revision += 1
-        redoEntries.append(entry)
+        performHistory(backwards: true)
     }
 
     /// 业务作用：重做完整事务；新输入后旧分支不再可用。
     /// 参数说明: 无。
-    /// 返回：恢复事务结果和新修订号；达到修订上限时保留正文与历史。
+    /// 返回：恢复事务结果和新修订号；权限或修订上限保留正文与历史，颜色映射失败还会提供具体原因。
     public func redo() {
-        // 与普通提交使用相同单调门禁，达到上限后不消耗待重做事务。
-        guard !isReadOnly, !isEditingSuspended, revision < UInt64.max, let entry = redoEntries.popLast()
+        performHistory(backwards: false)
+    }
+
+    /// 业务作用：串行固定当前历史顶端及独立元数据，供后台准备而不提前消费撤销项。
+    /// 参数说明:
+    /// - backwards: 为真准备撤销，为假准备重做。
+    /// 返回：具备执行条件的不可变请求；无历史、只读、保护或修订上限时不产生请求。
+    public func historyRequest(backwards: Bool) -> DocumentHistoryRequest? {
+        historyFailure = nil
+        // 保护、权限与单调上限都先于历史读取，等待过程不能取得提前消费历史的权利。
+        guard !isReadOnly, !isEditingSuspended, revision < UInt64.max,
+            let entry = backwards ? undoEntries.last : redoEntries.last
         else {
+            return nil
+        }
+        return DocumentHistoryRequest(
+            documentID: id,
+            revision: revision,
+            editing: editingAuthorityGeneration,
+            markGeneration: markGeneration,
+            bookmarkGeneration: bookmarkGeneration,
+            selectionGeneration: selectionGeneration,
+            selections: selections,
+            marks: marks,
+            entry: entry,
+            backwards: backwards
+        )
+    }
+
+    /// 业务作用：复验后台历史动作的完整控制证据，再一次发布正文、选区、书签、颜色和双向历史。
+    /// 参数说明:
+    /// - action: 已完成全部可失败颜色准备的历史动作。
+    /// 返回：成功推进新修订；正文、权限、选区或元数据改变时拒绝且保留全部当前状态。
+    public func commitHistory(_ action: PreparedHistoryAction) throws {
+        let request = action.request
+        // 元数据与权限可在同一正文修订内往返变化，必须分别复验身份而不是只比较最后内容。
+        guard !isReadOnly, !isEditingSuspended, revision < UInt64.max,
+            request.documentID == id, request.revision == revision,
+            request.editing == editingAuthorityGeneration,
+            request.markGeneration == markGeneration, request.bookmarkGeneration == bookmarkGeneration,
+            request.selectionGeneration == selectionGeneration, request.selections == selections,
+            request.entry.id == (request.backwards ? undoEntries.last?.id : redoEntries.last?.id)
+        else {
+            throw NateError.staleRevision
+        }
+        let entry = request.entry
+        // 所有可失败计算已结束，历史栈和正文从这里开始作为同一串行动作发布。
+        if request.backwards {
+            _ = undoEntries.popLast()
+            redoEntries.append(entry)
+        }
+        else {
+            _ = redoEntries.popLast()
+            undoEntries.append(entry)
+        }
+        text = request.backwards ? entry.before : entry.after
+        format = request.backwards ? entry.formatBefore : entry.formatAfter
+        bookmarks = request.backwards ? entry.bookmarksBefore : entry.bookmarksAfter
+        lastEdits = []
+        lastChanges = request.backwards ? entry.backwardChanges : entry.forwardChanges
+        lastActionName = entry.name
+        selections = request.backwards ? entry.selectionsBefore : entry.selectionsAfter
+        publishDocumentMarks(action.marks)
+        recordPositions(request.backwards ? entry.backwardPositions : entry.forwardPositions)
+        revision += 1
+        historyFailure = nil
+    }
+
+    /// 业务作用：同步调用者复用与后台历史相同的准备和发布门禁，不产生第二套撤销行为。
+    /// 参数说明:
+    /// - backwards: 为真撤销，为假重做。
+    /// 返回：准备失败时保留正文与历史并记录原因，成功时完整切换当前状态。
+    private func performHistory(backwards: Bool) {
+        guard let request = historyRequest(backwards: backwards) else {
             return
         }
-        text = entry.after
-        format = entry.formatAfter
-        bookmarks = entry.bookmarksAfter
-        lastEdits = []
-        lastChanges = entry.forwardChanges
-        selections = entry.selectionsAfter
-        recordPositions(entry.forwardPositions)
-        revision += 1
-        undoEntries.append(entry)
+        do {
+            try commitHistory(PreparedHistoryAction(request))
+        }
+        catch {
+            // 未完整准备的颜色不能消费历史；用户减少范围后仍可重新执行同一个动作。
+            historyFailure = (backwards ? "撤销" : "重做") + "未执行，正文与历史保留：" + error.localizedDescription
+        }
     }
 
     /// 业务作用：将其他视图和标记的位置随同一事务映射。

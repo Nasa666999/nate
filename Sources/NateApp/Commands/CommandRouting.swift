@@ -157,15 +157,9 @@ extension ApplicationController {
             }
             else {
                 mainWindow?.editor.finishComposition()
-                if id == "undo" {
-                    active?.buffer.undo()
-                }
-                else {
-                    active?.buffer.redo()
-                }
-                mainWindow?.editor.refresh(reveal: true)
-                didEdit()
+                performHistoryAction(backwards: id == "undo")
             }
+        case "cancelHistoryAction": cancelHistoryAction()
         case "find", "replace", "findFiles", "findProjects":
             presentFind(
                 replacing: id == "replace",
@@ -236,6 +230,7 @@ extension ApplicationController {
             refreshVisibleIncrementalHighlights()
             mainWindow?.refreshSelectedTextHighlights()
         case "selectionChanged":
+            cancelHistoryAction()
             cancelMultipleSelection()
             cancelColumnInsertion()
             // 用户位置和克隆焦点属于新的导航意图，等待中的旧增量结果不得再选择原位置。

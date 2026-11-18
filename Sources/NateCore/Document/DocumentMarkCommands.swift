@@ -41,17 +41,29 @@ extension DocumentBuffer {
         return before - marks.count
     }
 
-    /// 业务作用：每次正文事务、撤销和重做只移动当前仍保留的标记，不从旧历史重新创建被用户清除的颜色。
+    /// 业务作用：正文与历史发布前完整准备当前颜色，行移动失败不能留下一半正文与旧颜色。
     /// 参数说明:
     /// - positions: 本次实际发布的前向或反向位置变换。
-    /// 返回：标记随原文本移动，完全消失的非空范围移除；位置变化更新颜色身份，不增加正文历史。
-    func mapDocumentMarks(_ positions: PositionMap) {
+    /// - text: 这次动作即将发布的完整正文。
+    /// 返回：当前仍保留的颜色按原文移动，不从历史恢复已清除样式；超量或取消时整体失败。
+    func prepareDocumentMarkMapping(_ positions: PositionMap, in text: PieceTree) throws -> DocumentMarkState
+    {
         guard positions.changeCount > 0, marks.count > 0 else {
-            return
+            return marks
         }
-        let mapped = marks.mapped(through: positions)
-        if mapped != marks {
-            marks = mapped
+        if let permutation = positions.permutation {
+            return try marks.relocated(by: permutation, in: text)
+        }
+        return marks.mapped(through: positions)
+    }
+
+    /// 业务作用：完整正文与颜色都已准备成功后更新当前标记，不在发布阶段重新执行可失败的大范围映射。
+    /// 参数说明:
+    /// - state: 本次实际正文对应的完整颜色状态。
+    /// 返回：颜色真正变化时推进其独立身份，当前清除意图始终保留。
+    func publishDocumentMarks(_ state: DocumentMarkState) {
+        if state != marks {
+            marks = state
             markGeneration = UUID()
         }
     }

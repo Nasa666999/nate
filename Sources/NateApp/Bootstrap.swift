@@ -27,6 +27,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let pausedWorkspace = PausedWorkspaceRuntime()
     let multipleSelection = MultipleSelectionRuntime()
     let columnEditing = ColumnEditingRuntime()
+    let historyAction = HistoryActionRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -513,6 +514,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         cancelMultipleSelection()
         cancelQuickFind()
         cancelColumnInsertion()
+        cancelHistoryAction()
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
         cancelSearchResultPathOpen()

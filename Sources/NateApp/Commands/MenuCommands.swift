@@ -48,6 +48,7 @@ extension ApplicationController: NSMenuItemValidation {
         let edit = NSMenu(title: "编辑")
         add(edit, "撤销", "undo", key: "z")
         add(edit, "重做", "redo", key: "Z")
+        add(edit, "取消历史动作准备", "cancelHistoryAction")
         for (title, selector, key) in [
             ("剪切", #selector(NSText.cut(_:)), "x"), ("复制", #selector(NSText.copy(_:)), "c"),
             ("粘贴", #selector(NSText.paste(_:)), "v"), ("全选", #selector(NSResponder.selectAll(_:)), "a"),
@@ -298,6 +299,9 @@ extension ApplicationController: NSMenuItemValidation {
         if id == "cancelColumnEditor" {
             return columnEditing.task != nil
         }
+        if id == "cancelHistoryAction" {
+            return historyAction.task != nil
+        }
         if let enabled = validateStyleMarkMenu(menuItem, id: id) {
             return enabled
         }
@@ -363,11 +367,11 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "undo" {
             return (NSApp.keyWindow?.firstResponder as? NSTextView)?.undoManager?.canUndo
-                ?? (active?.buffer.canUndo ?? false)
+                ?? (historyAction.task == nil && quickFindContext() != nil && active?.buffer.canUndo == true)
         }
         if id == "redo" {
             return (NSApp.keyWindow?.firstResponder as? NSTextView)?.undoManager?.canRedo
-                ?? (active?.buffer.canRedo ?? false)
+                ?? (historyAction.task == nil && quickFindContext() != nil && active?.buffer.canRedo == true)
         }
         if id.hasPrefix("edit:") || ["comment", "blockComment", "columnEditor"].contains(id) {
             return active?.buffer.isReadOnly == false
