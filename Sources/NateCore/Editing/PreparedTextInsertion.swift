@@ -8,7 +8,7 @@ public struct PreparedTextInsertion: Sendable {
     /// - snapshot: 包含完整选择身份与控制代次的原正文。
     /// - value: 用户确认的完整文字，不包含为虚拟列生成的空白。
     /// - replacementRange: 仅替代主选区的系统范围，其余明确目标继续参与。
-    /// - overwrite: 无系统替换范围时，空光标覆盖当前行内的一个完整字形簇。
+    /// - overwrite: 无系统替换范围时，单行输入覆盖空光标所在行内的一个完整字形簇。
     /// - name: 本次输入的撤销名称。
     /// - permit: 全部目标、空白与正文准备共用的执行资格。
     /// 返回：含完整结果选择的事务；超量、非法目标或取消时不发布中间选择与部分正文。
@@ -42,7 +42,7 @@ public struct PreparedTextInsertion: Sendable {
         }
         let canOverwrite =
             replacementRange == nil && overwrite && size > 0
-            && !value.contains("\n") && !value.contains("\r")
+            && !value.utf8.contains(10) && !value.utf8.contains(13)
         var navigation = try GraphemeNavigation(text: snapshot.text)
         var entries: [SelectionEntry] = []
         for (index, entry) in original.entries.enumerated() {

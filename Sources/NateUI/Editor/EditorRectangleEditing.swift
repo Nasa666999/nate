@@ -12,7 +12,7 @@ extension EditorView {
     /// 业务作用：矩形输入只展开边缘实际涉及的 Tab，所有行的剩余空白与输入一次进入事务。
     /// 参数说明:
     /// - value: 用户确认的原始输入文字。
-    /// - overwrite: 零宽矩形是否覆盖行内一个完整字形或 Tab 内的一列。
+    /// - overwrite: 零宽矩形的单行输入是否覆盖行内一个完整字形或 Tab 内的一列。
     /// 返回：保留原完整选择作为撤销来源的事务；目标或布局失效时不发布中间选择。
     func prepareRectangularInput(_ value: String, overwrite: Bool) throws -> PreparedTransaction {
         let snapshot = document.snapshot
@@ -25,7 +25,7 @@ extension EditorView {
             return try PreparedTextInsertion(snapshot: snapshot, value: value).transaction
         }
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
-        let replace = overwrite && !value.isEmpty && !value.contains("\n") && !value.contains("\r")
+        let replace = overwrite && !value.isEmpty && !value.utf8.contains(10) && !value.utf8.contains(13)
         var targets: [SelectionInsertionTarget] = []
         for entry in state.entries {
             try Task.checkCancellation()
