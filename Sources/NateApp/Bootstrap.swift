@@ -28,6 +28,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let multipleSelection = MultipleSelectionRuntime()
     let columnEditing = ColumnEditingRuntime()
     let historyAction = HistoryActionRuntime()
+    let lineSorting = LineSortingRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -109,7 +110,14 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var recentClosed: [ClosedTab] = []
     var clipboardHistory: [String] = []
     var autosaveEnabled = true
-    var macroRecording = false
+    var macroRecording = false {
+        didSet {
+            if oldValue != macroRecording {
+                macroRecordingGeneration = UUID()
+            }
+        }
+    }
+    var macroRecordingGeneration = UUID()
     var macroActions: [MacroAction] = []
     var macroPlaying = false
     var previousTextForMacro = PieceTree()
@@ -515,6 +523,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         cancelQuickFind()
         cancelColumnInsertion()
         cancelHistoryAction()
+        cancelLineSort()
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
         cancelSearchResultPathOpen()

@@ -13,6 +13,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 dismissCompletion()
                 dragAnchor = nil
                 dragColumn = nil
+                rectangleEvidence = nil
                 layouts.removeAll()
                 hiddenLines.removeAll()
                 syntaxTask?.cancel()
@@ -37,6 +38,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var viewSelections = [TextSelection(anchor: 0, head: 0)] {
         didSet {
             if oldValue != viewSelections {
+                rectangleEvidence = nil
                 selectionGeneration = UUID()
             }
             if window?.firstResponder === self {
@@ -45,7 +47,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         }
     }
     public var onFocus: (() -> Void)?
-    public private(set) var selectionGeneration = UUID()
+    public internal(set) var selectionGeneration = UUID()
+    var rectangleEvidence: (selection: UUID, revision: UInt64, zeroWidth: Bool)?
     public internal(set) var focusGeneration = UUID()
     public var selectedTextHighlightContext: (() -> SelectedTextHighlightContext?)?
     let selectedTextHighlights = SelectedTextHighlightRuntime()

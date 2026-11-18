@@ -8,6 +8,10 @@ extension ApplicationController {
     /// - command: 完整转换命令。
     /// 返回：一次动作对应一个撤销单元，失败显示原因。
     func edit(_ command: TextCommand) {
+        if let options = command.lineSortOptions {
+            performLineSort(options)
+            return
+        }
         mainWindow?.editor.finishComposition()
         guard let active else {
             return

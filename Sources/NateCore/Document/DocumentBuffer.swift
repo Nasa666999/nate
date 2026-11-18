@@ -253,20 +253,20 @@ public final class DocumentBuffer {
         else {
             throw NateError.invalidRange
         }
-        let mappedBookmarks = Set(
-            bookmarks.map {
-                text.lineStart($0)
-            }.map {
-                positions.map($0)
+        let bookmarksAfter: Set<Int>
+        if let update = transaction.bookmarkUpdate {
+            bookmarksAfter = update.lines
+        }
+        else {
+            let mapped = bookmarks.map {
+                positions.map(text.lineStart($0))
             }
-        )
-        let bookmarksAfter =
-            transaction.bookmarkUpdate?.lines
-            ?? Set(
-                mappedBookmarks.map {
+            bookmarksAfter = Set(
+                mapped.map {
                     prepared.lineNumber(at: min($0, prepared.byteCount))
                 }
             )
+        }
         let backwardChanges = Self.inverseChanges(changes)
         let backwardPositions = transaction.reversePositions ?? PositionMap(validatedChanges: backwardChanges)
         let entry = HistoryEntry(

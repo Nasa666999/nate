@@ -34,6 +34,7 @@ extension ApplicationController {
             return
         }
         cancelColumnInsertion()
+        cancelLineSort()
         cancelMultipleSelection()
         cancelQuickFind()
         let runtime = historyAction

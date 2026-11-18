@@ -74,6 +74,7 @@ extension ApplicationController {
         cancelColumnInsertion()
         cancelMultipleSelection()
         cancelHistoryAction()
+        cancelLineSort()
         cancelQuickFind()
         let runtime = columnEditing
         runtime.lastValue = value

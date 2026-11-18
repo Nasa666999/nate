@@ -6,6 +6,7 @@ import NateStorage
 enum MacroAction: Codable, Sendable {
     case input(String)
     case command(String)
+    case lineSort(LineSortOptions)
 }
 
 extension ApplicationController {
@@ -34,25 +35,41 @@ extension ApplicationController {
         guard !macroRecording, !macroPlaying, let active else {
             return
         }
-        let id = active.buffer.id
         let actions = macroActions
         macroPlaying = true
         defer {
             macroPlaying = false
         }
         for _ in 0..<repetitions {
-            guard !Task.isCancelled, !closing, self.active?.buffer.id == id, !active.buffer.isReadOnly,
+            guard !Task.isCancelled, !closing, self.active === active, !active.buffer.isReadOnly,
                 !active.buffer.isEditingSuspended
             else {
                 break
             }
             let revision = active.buffer.revision
             for action in actions {
+                // 每个后台动作返回后重新取得原实例与实际焦点，宏不能沿后续同名标签继续编辑。
+                guard !Task.isCancelled, !closing, self.active === active, !active.buffer.isReadOnly,
+                    !active.buffer.isEditingSuspended, quickFindContext()?.0 === active
+                else {
+                    return
+                }
                 switch action {
                 case .input(let text): insert(text)
                 case .command(let name):
                     if let command = TextCommand(rawValue: name) {
-                        edit(command)
+                        if let options = command.lineSortOptions {
+                            guard await playLineSort(options) else {
+                                return
+                            }
+                        }
+                        else {
+                            edit(command)
+                        }
+                    }
+                case .lineSort(let options):
+                    guard await playLineSort(options) else {
+                        return
                     }
                 }
                 await Task.yield()
@@ -61,6 +78,25 @@ extension ApplicationController {
                 break
             }
         }
+    }
+
+    /// 业务作用：宏等待同一排序身份的实际成功，失败或取消不能先执行下一项语义输入。
+    /// 参数说明:
+    /// - options: 宏明确记录的完整排序参数。
+    /// 返回：原动作真实完成时为真，无法启动、取消、过期或失败时为假。
+    private func playLineSort(_ options: LineSortOptions) async -> Bool {
+        guard let request = performLineSort(options), let pending = lineSorting.task else {
+            return false
+        }
+        await withTaskCancellationHandler(
+            operation: {
+                await pending.value
+            },
+            onCancel: {
+                pending.cancel()
+            }
+        )
+        return !Task.isCancelled && lineSorting.succeeded == request
     }
 
     /// 业务作用：将宏作为独立配置安全保存，载入不会自动执行动作。

@@ -98,7 +98,7 @@ final class LineLayout {
     /// 业务作用：通过原生字形映射像素到 UTF-16，避免按字符宽度猜测中文和 Emoji。
     /// 参数说明:
     /// - point: 段落内像素位置。
-    /// 返回：段落内系统字符位置。
+    /// 返回：段落内合法 UTF-16 位置；系统未命中时按最近真实端点处理，不把系统哨兵用于正文偏移。
     func character(at point: NSPoint) -> Int {
         for fragment in fragments {
             for line in fragment.textLineFragments {
@@ -107,7 +107,18 @@ final class LineLayout {
                     dy: fragment.layoutFragmentFrame.minY
                 )
                 if point.y < box.maxY {
-                    return line.characterIndex(for: NSPoint(x: point.x - box.minX, y: point.y - box.minY))
+                    let local = NSPoint(x: point.x - box.minX, y: point.y - box.minY)
+                    let index = line.characterIndex(for: local)
+                    if index != NSNotFound, index >= 0, index <= content.rendered.length {
+                        return index
+                    }
+                    // 行外命中可返回 NSNotFound，先选择原生字形端点，避免哨兵加上段落起点造成溢出。
+                    let start = min(content.rendered.length, max(0, line.characterRange.location))
+                    let count = min(content.rendered.length - start, max(0, line.characterRange.length))
+                    let end = start + count
+                    let first = line.locationForCharacter(at: start)
+                    let last = line.locationForCharacter(at: end)
+                    return abs(local.x - first.x) <= abs(local.x - last.x) ? start : end
                 }
             }
         }
@@ -125,7 +136,7 @@ final class LineLayout {
                 if local >= range.location && local <= range.location + range.length {
                     let p = line.locationForCharacter(at: local)
                     return NSRect(
-                        x: p.x + fragment.layoutFragmentFrame.minX,
+                        x: p.x + line.typographicBounds.minX + fragment.layoutFragmentFrame.minX,
                         y: line.typographicBounds.minY + fragment.layoutFragmentFrame.minY,
                         width: 1.5,
                         height: line.typographicBounds.height

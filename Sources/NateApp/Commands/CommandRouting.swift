@@ -17,6 +17,15 @@ extension ApplicationController {
         else {
             return
         }
+        if id.hasPrefix("sort:") {
+            let fields = id.split(separator: ":")
+            if fields.count == 3, let kind = LineSortKind(rawValue: String(fields[1])),
+                fields[2] == "asc" || fields[2] == "desc"
+            {
+                performLineSort(LineSortOptions(kind: kind, descending: fields[2] == "desc"))
+            }
+            return
+        }
         if id.hasPrefix("edit:"), let command = TextCommand(rawValue: String(id.dropFirst(5))) {
             edit(command)
             return
@@ -159,7 +168,15 @@ extension ApplicationController {
                 mainWindow?.editor.finishComposition()
                 performHistoryAction(backwards: id == "undo")
             }
-        case "cancelHistoryAction": cancelHistoryAction()
+        case "cancelHistoryAction":
+            cancelHistoryAction()
+            refreshUI()
+            mainWindow?.status.stringValue = "历史动作准备已取消，正文与历史保留。"
+        case "lineSort": chooseLineSort()
+        case "cancelLineSort":
+            cancelLineSort()
+            refreshUI()
+            mainWindow?.status.stringValue = "排序准备已取消，正文与历史保留。"
         case "find", "replace", "findFiles", "findProjects":
             presentFind(
                 replacing: id == "replace",
@@ -230,6 +247,7 @@ extension ApplicationController {
             refreshVisibleIncrementalHighlights()
             mainWindow?.refreshSelectedTextHighlights()
         case "selectionChanged":
+            cancelLineSort()
             cancelHistoryAction()
             cancelMultipleSelection()
             cancelColumnInsertion()

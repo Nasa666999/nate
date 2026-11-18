@@ -52,6 +52,11 @@ extension EditorView {
     /// 返回：正文命令只使用唯一历史；输入法取消撤去覆盖层后通知临时呈现重新读取已提交正文。
     public override func doCommand(by selector: Selector) {
         let command = NSStringFromSelector(selector)
+        if composition == nil,
+            command.hasPrefix("move") || command == "selectAll:" || command == "cancelOperation:"
+        {
+            clearRectangularSelection()
+        }
         switch command {
         case "complete:": onCommand?("complete")
         case "insertNewline:":

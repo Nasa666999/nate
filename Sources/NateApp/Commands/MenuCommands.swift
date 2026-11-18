@@ -68,12 +68,24 @@ extension ApplicationController: NSMenuItemValidation {
         let lines = NSMenu(title: "行操作与排序")
         for (title, command) in [
             ("复制行或选区", TextCommand.duplicate), ("删除行", .deleteLines), ("合并行", .joinLines),
-            ("字符升序", .sortAscending), ("字符降序", .sortDescending), ("忽略大小写排序", .sortIgnoringCase),
-            ("数值排序", .sortNumeric), ("按行长度排序", .sortLength), ("反转行序", .reverseLines),
-            ("随机行序", .shuffleLines), ("删除重复行", .uniqueLines), ("删除连续重复行", .uniqueAdjacent),
+            ("删除重复行", .uniqueLines), ("删除连续重复行", .uniqueAdjacent),
         ] {
             add(lines, title, "edit:" + command.rawValue)
         }
+        let sorts = NSMenu(title: "排序整行")
+        for (kind, title) in [
+            (LineSortKind.lexicographic, "字符序"), (.ignoringCase, "忽略大小写"),
+            (.locale, "区域规则（\(Locale.current.identifier)）"), (.integer, "带符号整数片段"),
+            (.decimalComma, "逗号小数"), (.decimalDot, "点号小数"), (.length, "行长度"),
+        ] {
+            add(sorts, title + "升序", "sort:" + kind.rawValue + ":asc")
+            add(sorts, title + "降序", "sort:" + kind.rawValue + ":desc")
+        }
+        add(sorts, "反转行序", "sort:reverse:asc")
+        add(sorts, "随机行序", "sort:random:asc")
+        add(sorts, "完整排序选项…", "lineSort")
+        add(sorts, "取消排序准备", "cancelLineSort")
+        attach(sorts, to: lines)
         add(lines, "上移行", "moveLineUp")
         add(lines, "下移行", "moveLineDown")
         add(lines, "上方插入空行", "blankAbove")
@@ -298,6 +310,12 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "cancelColumnEditor" {
             return columnEditing.task != nil
+        }
+        if id == "cancelLineSort" {
+            return lineSorting.task != nil
+        }
+        if id == "lineSort" || id.hasPrefix("sort:") {
+            return lineSorting.task == nil && quickFindContext() != nil && active?.buffer.isReadOnly == false
         }
         if id == "cancelHistoryAction" {
             return historyAction.task != nil

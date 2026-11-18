@@ -10,6 +10,24 @@ public enum TextCommand: String, Sendable, CaseIterable {
     case eolLF, eolCRLF, eolCR, maskBlocks, maskDots
 }
 
+extension TextCommand {
+    /// 业务作用：已有行命令使用与完整排序表单相同的数值、长度和锚点语义。
+    /// 参数说明: 无。
+    /// 返回：行重排命令对应的明确选项，其它文本命令为空。
+    public var lineSortOptions: LineSortOptions? {
+        switch self {
+        case .sortAscending: return LineSortOptions()
+        case .sortDescending: return LineSortOptions(descending: true)
+        case .sortIgnoringCase: return LineSortOptions(kind: .ignoringCase)
+        case .sortNumeric: return LineSortOptions(kind: .integer)
+        case .sortLength: return LineSortOptions(kind: .length)
+        case .reverseLines: return LineSortOptions(kind: .reverse)
+        case .shuffleLines: return LineSortOptions(kind: .random)
+        default: return nil
+        }
+    }
+}
+
 extension DocumentBuffer {
     /// 业务作用：以当前选区或明确的全文范围执行可撤销文本转换。
     /// 参数说明:
@@ -17,6 +35,17 @@ extension DocumentBuffer {
     /// - tabWidth: 当前语言的视觉 Tab 停靠间距。
     /// 返回：一次命令形成一个事务，保留混合换行直到显式转换。
     public func perform(_ command: TextCommand, tabWidth: Int = 4) throws {
+        if let options = command.lineSortOptions {
+            let plan = try PreparedLineSort(
+                snapshot: snapshot,
+                selections: selections,
+                options: options,
+                marks: markSnapshot,
+                bookmarks: bookmarkSnapshot
+            )
+            try commit(plan.transaction)
+            return
+        }
         let selections = normalizedSelections()
         let width = max(1, tabWidth)
         let lineCommands: Set<TextCommand> = [
@@ -60,9 +89,9 @@ extension DocumentBuffer {
                 merged.append(range)
             }
         }
-        let edits = merged.map {
+        let edits = try merged.map {
             range in
-            TextEdit(range, TextTransforms.apply(command, to: text.text(in: range), tabWidth: width))
+            TextEdit(range, try TextTransforms.apply(command, to: text.text(in: range), tabWidth: width))
         }
         var format = self.format
         if command == .eolLF {
@@ -106,8 +135,16 @@ public enum TextTransforms {
     /// - command: 变换类型。
     /// - text: 固定输入片段。
     /// - tabWidth: Tab 视觉停靠间距。
-    /// 返回：完整转换文本，不触碰磁盘或文档历史。
-    public static func apply(_ command: TextCommand, to text: String, tabWidth: Int) -> String {
+    /// 返回：完整转换文本，不触碰磁盘或文档历史；行排序超量或换行边界无法完整保持时失败。
+    public static func apply(_ command: TextCommand, to text: String, tabWidth: Int) throws -> String {
+        if let options = command.lineSortOptions {
+            let snapshot = DocumentSnapshot(id: UUID(), revision: 0, text: PieceTree(text))
+            return try PreparedLineSort(
+                snapshot: snapshot,
+                selections: [TextSelection(anchor: 0, head: 0)],
+                options: options
+            ).transaction.resultingText.text()
+        }
         switch command {
         case .uppercase: return text.uppercased()
         case .lowercase: return text.lowercased()
@@ -151,52 +188,6 @@ public enum TextTransforms {
                 !$0.ending.isEmpty
             })?.ending ?? "\n"
         switch command {
-        case .sortAscending, .sortDescending, .sortIgnoringCase, .sortNumeric, .sortLength:
-            let originalEndings = rows.map(\.ending)
-            rows = rows.enumerated().sorted {
-                a,
-                b in
-                let comparison: ComparisonResult
-                switch command {
-                case .sortNumeric:
-                    comparison = a.element.body.compare(
-                        b.element.body,
-                        options: [.numeric],
-                        locale: Locale(identifier: "en_US_POSIX")
-                    )
-                case .sortIgnoringCase:
-                    comparison = a.element.body.compare(
-                        b.element.body,
-                        options: [.caseInsensitive, .literal]
-                    )
-                case .sortLength:
-                    comparison =
-                        a.element.body.count == b.element.body.count
-                        ? .orderedSame
-                        : a.element.body.count < b.element.body.count ? .orderedAscending : .orderedDescending
-                default:
-                    comparison = a.element.body.compare(b.element.body, options: .literal)
-                }
-                if comparison == .orderedSame {
-                    return a.offset < b.offset
-                }
-                return command == .sortDescending
-                    ? comparison == .orderedDescending : comparison == .orderedAscending
-            }.map(\.element)
-            for i in rows.indices {
-                rows[i].ending = originalEndings[i]
-            }
-        case .reverseLines, .shuffleLines:
-            let endings = rows.map(\.ending)
-            if command == .reverseLines {
-                rows.reverse()
-            }
-            else {
-                rows.shuffle()
-            }
-            for i in rows.indices {
-                rows[i].ending = endings[i]
-            }
         case .uniqueLines, .uniqueAdjacent:
             var seen = Set<[UInt8]>()
             var previous: [UInt8]?

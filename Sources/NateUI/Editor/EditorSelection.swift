@@ -13,7 +13,10 @@ extension EditorView {
         let local = layout.character(
             at: NSPoint(x: max(0, point.x - gutterWidth), y: point.y - projection.y(of: line) - 8)
         )
-        var units = min(tree.utf16Count, max(layout.originUTF16, layout.originUTF16 + local))
+        // 系统哨兵或越界位置必须先收束到本段范围，再叠加正文起点，不能先做可能溢出的算术。
+        let origin = min(tree.utf16Count, max(0, layout.originUTF16))
+        let bounded = min(tree.utf16Count - origin, max(0, min(layout.content.rendered.length, local)))
+        var units = origin + bounded
         while units > layout.originUTF16 && tree.byteOffset(utf16: units) == nil {
             units -= 1
         }
@@ -66,6 +69,7 @@ extension EditorView {
             }
             return
         }
+        clearRectangularSelection()
         var wordNotice: String?
         if point.x - visibleRect.minX < gutterWidth || event.clickCount >= 3 {
             let range = document.text.lineRange(row)
@@ -101,6 +105,11 @@ extension EditorView {
         }
         dragAnchor = viewSelections.first?.anchor
         dragColumn = event.modifierFlags.contains(.option) ? point.x : nil
+        if dragColumn != nil, event.clickCount == 1,
+            !event.modifierFlags.contains(.command), !event.modifierFlags.contains(.shift)
+        {
+            _ = setRectangularSelections(viewSelections)
+        }
         needsDisplay = true
         onSelection?()
         // 选区变化回调会刷新状态栏，先发布实际选区，再显示未能完成整词选择的原因。
@@ -123,7 +132,11 @@ extension EditorView {
         if let startX = dragColumn {
             let a = document.text.lineNumber(at: anchor)
             let b = document.text.lineNumber(at: position)
-            viewSelections = projection.visibleLines(in: min(a, b)...max(a, b)).map {
+            guard max(a, b) - min(a, b) < 100_000 else {
+                onStatus?("矩形选择跨度最多十万行，原选择保留。")
+                return
+            }
+            let targets = projection.visibleLines(in: min(a, b)...max(a, b)).map {
                 line in
                 let y = projection.y(of: line) + 9
                 let lower = bytePosition(at: NSPoint(x: min(startX, point.x), y: y))
@@ -132,6 +145,10 @@ extension EditorView {
                 let end = layout.caret(at: layout.content.rendered.length).minX + gutterWidth
                 let virtual = Int(max(0, min(startX, point.x) - end) / max(1, font.maximumAdvancement.width))
                 return TextSelection(anchor: lower, head: upper, virtualColumn: virtual)
+            }
+            guard setRectangularSelections(targets, zeroWidth: abs(startX - point.x) < 0.5) else {
+                onStatus?("矩形目标无法完整落在原逻辑行内，原选择保留。")
+                return
             }
         }
         else {
