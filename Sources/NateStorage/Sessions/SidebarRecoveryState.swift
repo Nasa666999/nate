@@ -7,6 +7,7 @@ public struct SidebarProjectSnapshot: Codable, Sendable, Equatable {
     public var definitionPath: String?
     public var baseline: DiskBaseline?
     public var saveBlocked: Bool
+    public var needsBindingVerification: Bool?
     public var expanded: [UUID]
     public var selected: UUID?
 
@@ -16,7 +17,8 @@ public struct SidebarProjectSnapshot: Codable, Sendable, Equatable {
     /// - saved: 最近确认写入的定义，用于恢复未保存状态。
     /// - definitionPath: 原定义文件的显示路径，恢复后仍需重新取得写入证据。
     /// - baseline: 原定义保存时的磁盘证据，不能单独作为恢复后的覆盖授权。
-    /// - saveBlocked: 原保存结果是否尚未确认。
+    /// - saveBlocked: 是否禁止普通覆盖，包括未确认发布或待复验原路径。
+    /// - needsBindingVerification: 是否仅需在显式保存时复验原定义证据，旧归档可为空。
     /// - expanded: 已展开的虚拟分组身份。
     /// - selected: 当前选中的稳定节点身份。
     /// 返回：待完整归档验证的纯数据，不读取任何引用路径。
@@ -26,6 +28,7 @@ public struct SidebarProjectSnapshot: Codable, Sendable, Equatable {
         definitionPath: String? = nil,
         baseline: DiskBaseline? = nil,
         saveBlocked: Bool = false,
+        needsBindingVerification: Bool? = nil,
         expanded: [UUID] = [],
         selected: UUID? = nil
     ) {
@@ -34,6 +37,7 @@ public struct SidebarProjectSnapshot: Codable, Sendable, Equatable {
         self.definitionPath = definitionPath
         self.baseline = baseline
         self.saveBlocked = saveBlocked
+        self.needsBindingVerification = needsBindingVerification
         self.expanded = expanded
         self.selected = selected
     }
@@ -52,6 +56,7 @@ public struct SidebarProjectSnapshot: Codable, Sendable, Equatable {
                     Data($0.utf8)
                 }
             && lhs.baseline == rhs.baseline && lhs.saveBlocked == rhs.saveBlocked
+            && lhs.needsBindingVerification == rhs.needsBindingVerification
             && lhs.expanded == rhs.expanded && lhs.selected == rhs.selected
     }
 
@@ -66,6 +71,8 @@ public struct SidebarProjectSnapshot: Codable, Sendable, Equatable {
         }
         guard workspace != nil || saved == nil && definitionPath == nil && baseline == nil && !saveBlocked,
             definitionPath != nil || baseline == nil,
+            needsBindingVerification != true
+                || definitionPath != nil && baseline != nil && saved != nil && saveBlocked,
             expanded.count <= 20_000, Set(expanded).count == expanded.count
         else {
             throw NateError.message("项目恢复定义、原路径或展开状态不完整。")

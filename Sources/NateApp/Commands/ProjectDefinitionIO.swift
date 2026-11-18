@@ -47,6 +47,7 @@ extension ApplicationController {
         state.baseline = baseline
         state.selectedPaths.removeAll()
         state.saveBlocked = false
+        state.bindingNeedsVerification = false
         state.feedback = "已载入 \(workspace.files.count) 个文件引用；引用可用性尚未检查。"
     }
 
@@ -69,6 +70,11 @@ extension ApplicationController {
             return false
         }
         let state = projectPanelStates[index]
+        if state.saveBlocked && state.bindingNeedsVerification && !forceSaveAs && explicitTarget == nil {
+            guard try await verifyRestoredProjectBinding(index, operation: operation) else {
+                return false
+            }
+        }
         // 恢复后未复验原路径或保存结果不明时不重新使用旧基线，必须显式载入定义或重新确认另存目标。
         guard !state.saveBlocked || forceSaveAs || explicitTarget != nil else {
             throw NateError.message("当前定义路径尚未取得覆盖资格，请重新载入定义或使用“工作区另存为”。")
@@ -181,6 +187,7 @@ extension ApplicationController {
             state.url = target
             state.baseline = baseline
             state.saveBlocked = false
+            state.bindingNeedsVerification = false
             state.feedback = "已保存完整项目定义；引用文件字节保持原状。"
             return true
         }
@@ -188,6 +195,7 @@ extension ApplicationController {
             // 同步失败或发布结果不明不能沿旧基线自动重试，真实阶段仍保留在文件任务中。
             if projectOperationCurrent(index, operation: operation) {
                 state.saveBlocked = true
+                state.bindingNeedsVerification = false
                 state.feedback = "项目定义保存未确认；当前定义保留，可重新载入或另存为，实际阶段见文件任务。"
             }
             throw error

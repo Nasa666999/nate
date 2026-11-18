@@ -6,13 +6,23 @@ import NateUI
 final class ProjectPanelState {
     var workspace: ProjectWorkspace?
     var saved: ProjectWorkspace?
-    var url: URL?
+    var url: URL? {
+        didSet {
+            let before = oldValue.map { Data($0.absoluteString.utf8) }
+            let after = url.map { Data($0.absoluteString.utf8) }
+            if before != after {
+                // 定义目标变化立即撤销旧请求身份，改回原路径也不能恢复此前的覆盖资格。
+                generation = UUID()
+            }
+        }
+    }
     var baseline: DiskBaseline?
     var generation = UUID()
     var operation: UUID?
     var task: Task<Void, Never>?
     var feedback = "新建或载入工作区；引用文件的可用性尚未检查。"
     var saveBlocked = false
+    var bindingNeedsVerification = false
     var selectedPaths: Set<Data> = []
     var isDirty: Bool {
         workspace != saved

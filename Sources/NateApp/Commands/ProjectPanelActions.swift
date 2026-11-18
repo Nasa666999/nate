@@ -78,6 +78,7 @@ extension ApplicationController {
                 state.url = nil
                 state.baseline = nil
                 state.saveBlocked = false
+                state.bindingNeedsVerification = false
                 state.selectedPaths.removeAll()
                 state.feedback = action == "new" ? "空工作区，可添加项目。" : "工作区已关闭，引用文件保留。"
             }

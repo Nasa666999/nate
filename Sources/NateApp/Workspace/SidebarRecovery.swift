@@ -51,6 +51,7 @@ extension ApplicationController {
                 definitionPath: state.url?.path,
                 baseline: state.baseline,
                 saveBlocked: state.saveBlocked,
+                needsBindingVerification: state.bindingNeedsVerification ? true : nil,
                 expanded: panel.expandedNodes.filter {
                     folders.contains($0)
                 },
@@ -162,14 +163,24 @@ extension ApplicationController {
                 URL(fileURLWithPath: $0)
             }
             state.baseline = restored.baseline
+            state.bindingNeedsVerification =
+                restored.definitionPath != nil && restored.baseline != nil
+                && restored.saved != nil
+                && (restored.needsBindingVerification == true || !restored.saveBlocked)
             state.saveBlocked = restored.saveBlocked || restored.definitionPath != nil
             state.selectedPaths.removeAll()
-            state.feedback =
-                restored.workspace == nil
-                ? "尚未载入工作区。"
-                : state.url == nil
-                    ? "项目定义已恢复；引用文件尚未检查。"
-                    : "项目定义已恢复；原定义路径未取得写入权，请重新载入或另存为。"
+            if restored.workspace == nil {
+                state.feedback = "尚未载入工作区。"
+            }
+            else if state.bindingNeedsVerification {
+                state.feedback = "项目定义已恢复；首次保存将复验原定义路径，引用文件尚未检查。"
+            }
+            else if state.url == nil {
+                state.feedback = "项目定义已恢复；引用文件尚未检查。"
+            }
+            else {
+                state.feedback = "项目定义已恢复；原定义路径未取得写入权，请重新载入或另存为。"
+            }
         }
         for index in projectPanelStates.indices {
             refreshProjectPanel(index)
