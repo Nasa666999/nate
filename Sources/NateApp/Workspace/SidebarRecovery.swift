@@ -155,7 +155,7 @@ extension ApplicationController {
         for index in projectPanelStates.indices {
             cancelProjectSearch(changing: index)
             let state = projectPanelStates[index], restored = snapshot.projects[index]
-            // 恢复定义本身不重新取得原路径写入权，后续需显式重新载入或确认另存目标。
+            // 恢复定义本身不重新取得原路径写入权，首次显式保存需复验原证据，不足时须重新载入或另存。
             state.generation = UUID()
             state.workspace = restored.workspace
             state.saved = restored.saved

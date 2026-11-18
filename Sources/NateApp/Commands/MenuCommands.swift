@@ -36,6 +36,7 @@ extension ApplicationController: NSMenuItemValidation {
         let recent = NSMenu(title: "最近文件")
         add(file, "恢复已关闭临时内容…", "recoveryArchive")
         add(file, "恢复先前保留工作区…", "pausedWorkspaces")
+        add(file, "取消保留工作区导入", "cancelPausedWorkspaceImport")
         add(file, "打开保存前备份…", "savedBackups")
         for path in recentFiles {
             add(recent, path, "recent:" + path)
@@ -276,6 +277,12 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "resetSidebarRecovery" {
             return !closing && recovery != nil && !sidebarRecovery.loading && sidebarRecovery.task == nil
+        }
+        if id == "pausedWorkspaces" {
+            return !closing && applicationSupport != nil && pausedWorkspace.task == nil
+        }
+        if id == "cancelPausedWorkspaceImport" {
+            return !closing && pausedWorkspace.task != nil && !pausedWorkspace.published
         }
         if let enabled = validateStyleMarkMenu(menuItem, id: id) {
             return enabled

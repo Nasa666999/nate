@@ -123,9 +123,8 @@ extension ApplicationController {
                 await resolveSaveState()
             }
         case "pausedWorkspaces":
-            Task {
-                await showPausedWorkspaces()
-            }
+            showPausedWorkspaces()
+        case "cancelPausedWorkspaceImport": cancelPausedWorkspaceImport()
         case "reload":
             if let active {
                 Task {

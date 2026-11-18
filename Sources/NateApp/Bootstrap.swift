@@ -24,6 +24,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var structureTask: Task<Void, Never>?
     var directoryWorkspace: DirectoryWorkspaceController?
     let sidebarRecovery = SidebarRecoveryRuntime()
+    let pausedWorkspace = PausedWorkspaceRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),

@@ -36,6 +36,7 @@ extension ApplicationController {
             ("读取", readIO),
             ("恢复", recoveryIO),
             ("侧栏恢复", sidebarRecovery.io),
+            ("保留工作区读取", pausedWorkspace.io),
             ("外部命令", commandIO),
         ]
         fileTasksWindow?.updateExecutionStatus(
