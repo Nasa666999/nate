@@ -7,9 +7,11 @@ public final class IncrementalSearchBar: NSView, NSTextFieldDelegate {
     public var onNavigate: ((Bool) -> Void)?
     public var onClose: (() -> Void)?
     public var onOptionsChange: ((IncrementalSearchOptions) -> Void)?
+    public var onHighlightChange: ((String, IncrementalSearchOptions) -> Void)?
     public var onSuspend: (() -> Bool)?
     public let input = SearchInputBox(frame: .zero)
     public let feedback = NSTextField(labelWithString: "")
+    public let highlightFeedback = NSTextField(labelWithString: "")
     let caseSensitive = NSButton(
         checkboxWithTitle: "区分大小写",
         target: nil,
@@ -22,6 +24,11 @@ public final class IncrementalSearchBar: NSView, NSTextFieldDelegate {
     )
     let wrap = NSButton(
         checkboxWithTitle: "循环",
+        target: nil,
+        action: nil
+    )
+    let highlightAll = NSButton(
+        checkboxWithTitle: "全部高亮",
         target: nil,
         action: nil
     )
@@ -38,13 +45,14 @@ public final class IncrementalSearchBar: NSView, NSTextFieldDelegate {
         options.caseSensitive = caseSensitive.state == .on
         options.wholeWord = wholeWord.state == .on
         options.wrap = wrap.state == .on
+        options.highlightAll = highlightAll.state == .on
         return options
     }
 
     /// 业务作用：在编辑区上方提供已确认输入触发的字面查找、前后导航及独立选项。
     /// 参数说明:
     /// - frameRect: 主窗口提供的布局区域。
-    /// 返回：固定两行的非模态搜索栏，长输入仍使用完整原文编辑入口。
+    /// 返回：非模态搜索栏具有独立定位与高亮状态，长输入仍使用完整原文编辑入口。
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         input.placeholderString = "增量查找（普通字面模式）"
@@ -101,17 +109,21 @@ public final class IncrementalSearchBar: NSView, NSTextFieldDelegate {
         let first = NSStackView(views: [NSTextField(labelWithString: "增量查找"), input, previous, next, close])
         first.spacing = 6
         wrap.state = .on
-        for button in [caseSensitive, wholeWord, wrap] {
+        for button in [caseSensitive, wholeWord, wrap, highlightAll] {
             button.target = self
-            button.action = #selector(optionsChanged)
+            button.action = #selector(optionsChanged(_:))
         }
         feedback.font = .systemFont(ofSize: 11)
         feedback.textColor = .secondaryLabelColor
         feedback.lineBreakMode = .byTruncatingTail
         feedback.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let second = NSStackView(views: [caseSensitive, wholeWord, wrap, feedback])
+        let second = NSStackView(views: [caseSensitive, wholeWord, wrap, highlightAll, feedback])
         second.spacing = 12
-        let root = NSStackView(views: [first, second])
+        highlightFeedback.font = .systemFont(ofSize: 11)
+        highlightFeedback.textColor = .secondaryLabelColor
+        highlightFeedback.lineBreakMode = .byTruncatingTail
+        highlightFeedback.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let root = NSStackView(views: [first, second, highlightFeedback])
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = 5
@@ -123,6 +135,7 @@ public final class IncrementalSearchBar: NSView, NSTextFieldDelegate {
             root.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             first.widthAnchor.constraint(equalTo: root.widthAnchor),
             second.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor),
+            highlightFeedback.widthAnchor.constraint(equalTo: root.widthAnchor),
         ])
     }
 
@@ -148,6 +161,7 @@ public final class IncrementalSearchBar: NSView, NSTextFieldDelegate {
         caseSensitive.state = options.caseSensitive ? .on : .off
         wholeWord.state = options.wholeWord ? .on : .off
         wrap.state = options.wrap ? .on : .off
+        highlightAll.state = options.highlightAll ? .on : .off
         needsRestart = false
         restoring = false
     }
@@ -178,12 +192,18 @@ public final class IncrementalSearchBar: NSView, NSTextFieldDelegate {
         feedback.stringValue = "正在编辑输入，确认后继续查找。"
     }
 
-    /// 业务作用：选项变化保持当前原文，通过同一查询入口重新定位并保存选项。
-    /// 参数说明: 无。
-    /// 返回：选项保存回调和当前已确认查询各发布一次。
-    @objc func optionsChanged() {
+    /// 业务作用：匹配选项重新定位，仅切换全部高亮时只更新临时图层，不移动当前光标。
+    /// 参数说明:
+    /// - sender: 用户明确切换的选项控件。
+    /// 返回：完整选项保存；高亮开关只通知图层，其余选项通过已确认查询入口重新执行。
+    @objc func optionsChanged(_ sender: NSButton) {
         onOptionsChange?(options)
-        publishQuery(force: true)
+        if sender === highlightAll {
+            onHighlightChange?(query, options)
+        }
+        else {
+            publishQuery(force: true)
+        }
     }
 
     /// 业务作用：请求从当前命中向前导航，候选确认仍由原生输入上下文处理。

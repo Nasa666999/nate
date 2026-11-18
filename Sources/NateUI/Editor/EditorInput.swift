@@ -39,7 +39,7 @@ extension EditorView {
     /// 业务作用：系统编辑命令统一转换为内核事务或选区变更。
     /// 参数说明:
     /// - selector: 原生输入上下文解析出的动作。
-    /// 返回：正文命令只使用唯一历史，输入法取消只撤去覆盖层。
+    /// 返回：正文命令只使用唯一历史；输入法取消撤去覆盖层后通知临时呈现重新读取已提交正文。
     public override func doCommand(by selector: Selector) {
         let command = NSStringFromSelector(selector)
         switch command {
@@ -88,6 +88,8 @@ extension EditorView {
                 composition = nil
                 inputContext?.discardMarkedText()
                 refresh()
+                // 覆盖层已撤去才允许重新匹配已提交正文，不能把候选或旧任务恢复为高亮来源。
+                onCommand?("compositionEnded")
             }
             else if let first = viewSelections.first {
                 viewSelections = [first]

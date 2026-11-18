@@ -42,8 +42,8 @@ extension ApplicationController {
         // 查找界面接管新的输入意图，原目录读取不能在随后等待结束时抢回正文焦点。
         directoryWorkspace?.cancelOpen()
         cancelProjectOpen()
-        // 完整查找窗口重新接管用户意图，旧增量请求不能在打开窗口后移动正文光标。
-        cancelIncrementalSearch()
+        // 完整查找窗口重新接管用户意图，先撤销增量导航与临时图层，旧请求不能迟到改变正文呈现。
+        cancelIncrementalSearch(resetOrigin: true)
         // 当前草稿和候选仍由原输入上下文持有，重复快捷键不能改填另一份查询或结束候选。
         guard findWindow?.isEditingInput != true, mainWindow?.hasMarkedEditorInput != true else {
             return

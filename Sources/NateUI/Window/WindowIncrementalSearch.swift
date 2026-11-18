@@ -14,7 +14,7 @@ extension EditorWindow {
     public func showIncrementalSearch(query: String?, options: IncrementalSearchOptions) {
         incrementalSearch.prepare(query: query, options: options)
         incrementalSearch.isHidden = false
-        incrementalHeight?.constant = 68
+        incrementalHeight?.constant = 88
         window?.contentView?.layoutSubtreeIfNeeded()
         window?.makeFirstResponder(incrementalSearch.input)
         incrementalSearch.publishQuery(force: true)

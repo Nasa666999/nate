@@ -24,6 +24,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 syntaxFailedLines = nil
                 invalidateBracketAnalysis()
                 markDisplayStatus = nil
+                textHighlights.removeAll()
+                textHighlightDisplayStatus = nil
             }
             viewSelections = document.selections
             observedRevision = document.revision
@@ -93,6 +95,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var blinkTimer: Timer?
     var caretVisible = true
     public internal(set) var markDisplayStatus: String?
+    var textHighlights: [TextHighlightLayer: PreparedTextHighlights] = [:]
+    public internal(set) var textHighlightDisplayStatus: String?
     var completionPanel: CompletionPanel?
     var hiddenLines = HiddenLineRanges()
     var lineHeight: CGFloat {
@@ -158,6 +162,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             }
         }
         if observedRevision != document.revision {
+            // 临时匹配仅属于原正文，不按普通锚点移动后冒充重新搜索的结果。
+            textHighlights.removeAll()
             projection.measured.removeAll()
         }
         observedRevision = document.revision
@@ -255,6 +261,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let visibleLines = projection.visibleLines(in: first...last)
         var markBudget = 4096
         markDisplayStatus = nil
+        textHighlightDisplayStatus = nil
         for line in visibleLines {
             let layout = layoutLine(line)
             let y = projection.y(of: line) + 8
@@ -263,6 +270,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 NSRect(x: gutterWidth, y: y, width: bounds.width - gutterWidth, height: lineHeight).fill()
             }
             drawDocumentMarks(in: layout, line: line, y: y, budget: &markBudget)
+            drawTextHighlights(in: layout, line: line, y: y, budget: &markBudget)
             for selection in viewSelections where !selection.range.isEmpty && composition == nil {
                 let a = max(selection.range.lower, layout.range.lower)
                 let b = min(selection.range.upper, layout.range.upper)

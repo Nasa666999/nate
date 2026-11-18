@@ -222,6 +222,8 @@ extension ApplicationController {
             }
         case "compositionBegan":
             suspendSearchForInput()
+        case "compositionEnded":
+            refreshVisibleIncrementalHighlights()
         case "selectionChanged":
             // 用户位置和克隆焦点属于新的导航意图，等待中的旧增量结果不得再选择原位置。
             if incrementalTask != nil {
@@ -232,6 +234,7 @@ extension ApplicationController {
             searchNavigationGeneration = UUID()
             cancelCompletion()
             activeID = mainWindow?.editor.document.id
+            refreshVisibleIncrementalHighlights()
             if findWindow?.page != .files {
                 _ = refreshSearchPresentation()
             }

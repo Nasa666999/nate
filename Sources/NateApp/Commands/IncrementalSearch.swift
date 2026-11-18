@@ -43,11 +43,12 @@ extension ApplicationController {
     /// 业务作用：恢复增量栏自己的少量选项，完整查找窗口的设置保持独立。
     /// 参数说明:
     /// - defaults: 当前应用的偏好存储，独立运行的窗口不自动取得该存储。
-    /// 返回：大小写、全词和循环选项进入内存，缺失循环设置默认开启。
+    /// 返回：大小写、全词、循环与全部高亮选项进入内存，缺失循环设置默认开启。
     func loadIncrementalOptions(from defaults: UserDefaults) {
         incrementalDefaults = defaults
         incrementalOptions.caseSensitive = defaults.bool(forKey: "incrementalSearch.caseSensitive")
         incrementalOptions.wholeWord = defaults.bool(forKey: "incrementalSearch.wholeWord")
+        incrementalOptions.highlightAll = defaults.bool(forKey: "incrementalSearch.highlightAll")
         incrementalOptions.wrap =
             defaults.object(forKey: "incrementalSearch.wrap") == nil
             || defaults.bool(forKey: "incrementalSearch.wrap")
@@ -56,12 +57,13 @@ extension ApplicationController {
     /// 业务作用：保存用户明确改变的增量选项，不保存候选文本或改动正文状态。
     /// 参数说明:
     /// - options: 增量栏当前完整选项。
-    /// 返回：内存选项立即生效，已装配的应用偏好存储记录三个布尔值。
+    /// 返回：内存选项立即生效，已装配的应用偏好存储记录四个布尔值。
     func saveIncrementalOptions(_ options: IncrementalSearchOptions) {
         incrementalOptions = options
         incrementalDefaults?.set(options.caseSensitive, forKey: "incrementalSearch.caseSensitive")
         incrementalDefaults?.set(options.wholeWord, forKey: "incrementalSearch.wholeWord")
         incrementalDefaults?.set(options.wrap, forKey: "incrementalSearch.wrap")
+        incrementalDefaults?.set(options.highlightAll, forKey: "incrementalSearch.highlightAll")
     }
 
     /// 业务作用：打开编辑区顶部增量栏，按实际焦点视图取得允许的完整短选区或光标词。
@@ -119,6 +121,7 @@ extension ApplicationController {
         incrementalGeneration = UUID()
         if resetOrigin {
             incrementalOrigin = nil
+            cancelIncrementalHighlights()
         }
     }
 
@@ -139,6 +142,7 @@ extension ApplicationController {
     /// 返回：匹配可见且查询字段保持焦点，取消或证据变化不移动新光标，不改正文或撤销历史。
     func searchIncrementally(_ query: String, options: IncrementalSearchOptions, previous: Bool? = nil) {
         cancelIncrementalSearch()
+        refreshIncrementalHighlights(query, options: options)
         guard !closing, let window = mainWindow, window.isIncrementalSearchVisible,
             let document = active, window.editor.document === document.buffer
         else {
@@ -189,6 +193,7 @@ extension ApplicationController {
             return
         }
         let generation = incrementalGeneration
+        let inputIdentity = bar.input.contentIdentity
         let movement = searchNavigationGeneration
         let authority = SearchDocumentAuthority(document)
         let requested = options.searchOptions(query: query)
@@ -226,6 +231,7 @@ extension ApplicationController {
                 try Task.checkCancellation()
                 guard !self.closing, generation == self.incrementalGeneration,
                     window.isIncrementalSearchVisible, self.mainWindow === window,
+                    bar.input.contentIdentity == inputIdentity,
                     bar.query.utf8.elementsEqual(query.utf8), bar.options == options
                 else {
                     return
