@@ -21,7 +21,7 @@ final class LineLayout {
     /// - tokens: 当前快照语法呈现。
     /// - rtl: 段落基础方向。
     /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
-    /// 返回：只读 TextKit 2 布局缓存。
+    /// 返回：只读 TextKit 2 布局缓存，控制字符只在呈现副本中使用等长占位，原文与坐标保持一致。
     init(
         snapshot: DocumentSnapshot,
         range: ByteRange,
@@ -38,7 +38,7 @@ final class LineLayout {
         paragraph.defaultTabInterval = font.maximumAdvancement.width * 4
         paragraph.tabStops = []
         let value = NSMutableAttributedString(
-            string: snapshot.text.text(in: range),
+            string: LineControlPresentation.render(snapshot.text.text(in: range)),
             attributes: [
                 .font: font, .foregroundColor: ThemePalette.resolved(.textColor, appearance: appearance),
                 .paragraphStyle: paragraph,
