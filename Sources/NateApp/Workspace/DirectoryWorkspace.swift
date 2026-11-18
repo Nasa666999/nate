@@ -25,6 +25,32 @@ final class DirectoryWorkspaceController {
     private var monitor: Task<Void, Never>?
     private(set) var openTask: Task<Void, Never>?
     private var openGeneration = UUID()
+    private var restoredTree: SidebarDirectorySnapshot?
+    private var awaitingConnection = false
+
+    /// 业务作用：目录根往返或暂停后拥有新恢复身份，同路径不能重新授予旧侧栏读取发布权。
+    /// 参数说明: 无。
+    /// 返回：当前实际根和读取周期的唯一身份。
+    var sidebarGeneration: UUID {
+        generation
+    }
+
+    /// 业务作用：保存目录显示意图，尚未连接时保留原展开快照，不用空占位覆盖记忆状态。
+    /// 参数说明: 无。
+    /// 返回：当前根的纯数据状态，没有目录根时为空，不执行任何磁盘读取。
+    var sidebarSnapshot: SidebarDirectorySnapshot? {
+        if let restoredTree {
+            return restoredTree
+        }
+        guard let root, let window else {
+            return nil
+        }
+        return SidebarDirectorySnapshot(
+            root: root.path,
+            expanded: window.directoryPanel.expandedDirectories,
+            selected: window.directoryPanel.selectedPath
+        )
+    }
 
     /// 业务作用：目录工作区单独持有读取任务和观察状态，不与会话、虚拟项目或结果面板共用列表。
     /// 参数说明:
@@ -46,6 +72,32 @@ final class DirectoryWorkspaceController {
         window.directoryPanel.onClose = {
             [weak self] in self?.stop()
         }
+        window.directoryPanel.onUserInteraction = {
+            [weak self] in
+            guard let self, !self.awaitingConnection else {
+                return
+            }
+            // 首次展开只取得继续读取原树的意图；之后新的鼠标或键盘动作优先于未完成的恢复选择。
+            self.restoredTree = nil
+        }
+    }
+
+    /// 业务作用：启动只还原目录根的待连接展示，原归档不授予后台枚举或观察权限。
+    /// 参数说明:
+    /// - snapshot: 已完整校验的原目录树意图。
+    /// 返回：根与原展开状态在内存恢复，刷新或首次展开前不访问路径。
+    func restoreSidebar(_ snapshot: SidebarDirectorySnapshot) throws {
+        try snapshot.validate()
+        guard application?.closing == false, let window else {
+            return
+        }
+        pause()
+        records.removeAll()
+        root = URL(fileURLWithPath: snapshot.root, isDirectory: true)
+        restoredTree = snapshot
+        awaitingConnection = true
+        window.directoryPanel.setRoot(snapshot.root, restored: true)
+        window.setDirectoryVisible(true)
     }
 
     /// 业务作用：目录文件激活绑定原树、实际正文视图和光标，等待中的旧读取不能覆盖新输入意图。
@@ -152,6 +204,8 @@ final class DirectoryWorkspaceController {
         // 原根的队列和观察先失权，随后才装配新根，迟到清单不能覆盖新目录。
         pause()
         records.removeAll()
+        restoredTree = nil
+        awaitingConnection = false
         let root = url.standardizedFileURL
         self.root = root
         window.directoryPanel.setRoot(root.path)
@@ -165,6 +219,10 @@ final class DirectoryWorkspaceController {
     /// - path: 当前树内用户展开或观察到变化的目录。
     /// 返回：合法当前节点进入有界队列，旧请求、被移除节点和退出状态不更新树。
     func load(_ path: String) {
+        if awaitingConnection {
+            connectRestoredSidebar()
+            return
+        }
         // 目录节点、原根和活动窗口必须仍然存在，移出的路径不能重新排队获取展示权。
         guard let root, let window, application?.closing == false,
             window.directoryPanel.containsDirectory(path)
@@ -233,6 +291,14 @@ final class DirectoryWorkspaceController {
                 if window.directoryPanel.present(path, entries: entries) {
                     self.records[key]?.stamp = stamp
                     self.pruneRemovedDirectories()
+                    if let restored = self.restoredTree,
+                        window.directoryPanel.restoreTreeState(
+                            expanded: restored.expanded,
+                            selected: restored.selected
+                        )
+                    {
+                        self.restoredTree = nil
+                    }
                 }
             }
             catch {
@@ -267,9 +333,26 @@ final class DirectoryWorkspaceController {
     /// 参数说明: 无。
     /// 返回：现有节点分别排队复验，目录未选择时无副作用。
     func refresh() {
+        if awaitingConnection {
+            connectRestoredSidebar()
+            return
+        }
         for record in Array(records.values) {
             load(record.url.path)
         }
+    }
+
+    /// 业务作用：用户刷新或首次展开展示根后才取得新目录读取权，原恢复快照本身不启动观察。
+    /// 参数说明: 无。
+    /// 返回：仍有效的根进入首层读取并建立新观察，退出或缺席窗口时保持待连接状态。
+    private func connectRestoredSidebar() {
+        guard awaitingConnection, let root, application?.closing == false, window != nil else {
+            return
+        }
+        // 继续读取是新的显式用户动作，不能恢复此前已撤销任务的发布身份。
+        awaitingConnection = false
+        load(root.path)
+        beginMonitoring()
     }
 
     /// 业务作用：启动单个周期观察任务，目录变化只更新树，不抢正文焦点或覆盖搜索结果。
@@ -366,7 +449,7 @@ final class DirectoryWorkspaceController {
     /// 返回：已有目录重新读取并启动新观察，没有根时不启动任务。
     func resume() {
         // 只有仍存在且已解除退出状态的根能重新取得读取入口，空根不自动选择任何磁盘路径。
-        guard root != nil, application?.closing == false else {
+        guard root != nil, !awaitingConnection, application?.closing == false else {
             return
         }
         refresh()
@@ -380,6 +463,8 @@ final class DirectoryWorkspaceController {
         // 先撤销所有发布资格，再释放根与行对象，关闭后的异步返回不能重建不可见侧栏。
         pause()
         root = nil
+        restoredTree = nil
+        awaitingConnection = false
         records.removeAll()
         window?.directoryPanel.clear()
         window?.setDirectoryVisible(false)

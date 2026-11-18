@@ -116,7 +116,7 @@ public final class FileTasksWindow: NSWindowController, NSTableViewDataSource, N
         detail.maximumNumberOfLines = 3
         execution.font = .systemFont(ofSize: 11)
         execution.textColor = .secondaryLabelColor
-        execution.maximumNumberOfLines = 2
+        execution.maximumNumberOfLines = 3
         for view in [heading, execution, scroll, detail] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
@@ -128,7 +128,7 @@ public final class FileTasksWindow: NSWindowController, NSTableViewDataSource, N
             execution.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 6),
             execution.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
             execution.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
-            execution.heightAnchor.constraint(equalToConstant: 32),
+            execution.heightAnchor.constraint(equalToConstant: 48),
             scroll.topAnchor.constraint(equalTo: execution.bottomAnchor, constant: 6),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),

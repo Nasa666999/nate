@@ -23,6 +23,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var functionListCatalog: FunctionListCatalog?
     var structureTask: Task<Void, Never>?
     var directoryWorkspace: DirectoryWorkspaceController?
+    let sidebarRecovery = SidebarRecoveryRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -319,6 +320,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.editor.showSymbols = defaults.bool(forKey: "showSymbols")
         mainWindow = window
         connect(window)
+        await loadSidebarRecovery()
         buildMenus()
         refreshUI()
         window.showWindow(nil)

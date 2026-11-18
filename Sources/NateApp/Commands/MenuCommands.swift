@@ -189,6 +189,7 @@ extension ApplicationController: NSMenuItemValidation {
         attach(language, to: bar)
         let tools = NSMenu(title: "工具")
         add(tools, "文件写入任务…", "fileTasks")
+        add(tools, "重新保存当前侧栏恢复状态", "resetSidebarRecovery")
         add(tools, "取消文件读取", "cancelReads")
         add(tools, "取消外部命令", "cancelExternalCommand")
         add(tools, "上次外部命令结果", "lastExternalOutput")
@@ -272,6 +273,9 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if id == "resetSidebarRecovery" {
+            return !closing && recovery != nil && !sidebarRecovery.loading && sidebarRecovery.task == nil
         }
         if let enabled = validateStyleMarkMenu(menuItem, id: id) {
             return enabled

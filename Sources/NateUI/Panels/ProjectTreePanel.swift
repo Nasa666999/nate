@@ -90,6 +90,41 @@ public final class ProjectTreePanel: NSView, NSOutlineViewDataSource, NSOutlineV
         (outline.item(atRow: outline.selectedRow) as? ProjectTreeItem)?.value.id
     }
 
+    /// 业务作用：以稳定节点身份捕获展开状态，侧栏恢复不依赖容易变化的原生行号。
+    /// 参数说明: 无。
+    /// 返回：按身份排序的当前展开分组，不读取任何文件引用。
+    public var expandedNodes: [UUID] {
+        items.values.filter {
+            outline.isItemExpanded($0)
+        }.map {
+            $0.value.id
+        }.sorted {
+            $0.uuidString < $1.uuidString
+        }
+    }
+
+    /// 业务作用：定义完整发布后还原项目树的展开与选择，正文焦点和文档集合保持原状。
+    /// 参数说明:
+    /// - expanded: 归档中属于当前定义的展开分组身份。
+    /// - selected: 当前定义中需要重新选择的稳定节点。
+    /// 返回：有界状态完整应用；失效节点不创建占位或文件访问任务。
+    public func restoreTreeState(expanded: [UUID], selected: UUID?) {
+        guard expanded.count <= 20_000 else {
+            return
+        }
+        let identities = Set(expanded)
+        var pending = Array(roots.reversed())
+        while let item = pending.popLast() {
+            if identities.contains(item.value.id) {
+                outline.expandItem(item)
+            }
+            pending.append(contentsOf: item.children.reversed())
+        }
+        if let selected {
+            reveal(selected)
+        }
+    }
+
     /// 业务作用：独立项目面板持有自己的树、选择和展开状态，仅向应用发送虚拟编辑意图。
     /// 参数说明:
     /// - frameRect: 当前面板的初始布局。

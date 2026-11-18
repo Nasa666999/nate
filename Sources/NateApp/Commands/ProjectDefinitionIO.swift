@@ -69,9 +69,9 @@ extension ApplicationController {
             return false
         }
         let state = projectPanelStates[index]
-        // 保存结果不明时不重新使用旧基线，必须显式载入实际定义或重新确认另存目标。
+        // 恢复后未复验原路径或保存结果不明时不重新使用旧基线，必须显式载入定义或重新确认另存目标。
         guard !state.saveBlocked || forceSaveAs || explicitTarget != nil else {
-            throw NateError.message("上次保存结果未确认，请重新载入定义或使用“工作区另存为”。")
+            throw NateError.message("当前定义路径尚未取得覆盖资格，请重新载入定义或使用“工作区另存为”。")
         }
         let choosing = forceSaveAs || state.url == nil || explicitTarget != nil
         let target: URL

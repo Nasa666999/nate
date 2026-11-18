@@ -36,12 +36,23 @@ private final class DirectoryTreeNode: NSObject {
 
 private final class DirectoryOutlineView: NSOutlineView {
     var onActivate: (() -> Void)?
+    var onUserInteraction: (() -> Void)?
+
+    /// 业务作用：用户开始新的树选择或展开意图时撤销尚未应用的恢复定位，迟到清单不能恢复旧选择。
+    /// 参数说明:
+    /// - event: 当前原生鼠标事件。
+    /// 返回：原生点击照常执行，先通知协调器收回旧恢复意图。
+    override func mouseDown(with event: NSEvent) {
+        onUserInteraction?()
+        super.mouseDown(with: event)
+    }
 
     /// 业务作用：回车打开选中文件或展开目录，其余键保留原生树表导航。
     /// 参数说明:
     /// - event: 当前原生键盘事件。
     /// 返回：回车发出统一激活意图，其余交给原生控件。
     override func keyDown(with event: NSEvent) {
+        onUserInteraction?()
         if event.keyCode == 36 || event.keyCode == 76 {
             onActivate?()
         }
@@ -57,6 +68,7 @@ public final class DirectoryTreePanel: NSView, NSOutlineViewDataSource, NSOutlin
     public var onOpen: ((String) -> Void)?
     public var onRefresh: (() -> Void)?
     public var onClose: (() -> Void)?
+    public var onUserInteraction: (() -> Void)?
     private let outline = DirectoryOutlineView()
     private let state = NSTextField(labelWithString: "请选择目录工作区。")
     private var root: DirectoryTreeNode?
@@ -99,6 +111,9 @@ public final class DirectoryTreePanel: NSView, NSOutlineViewDataSource, NSOutlin
         outline.onActivate = {
             [weak self] in self?.activateSelection()
         }
+        outline.onUserInteraction = {
+            [weak self] in self?.onUserInteraction?()
+        }
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
@@ -138,9 +153,10 @@ public final class DirectoryTreePanel: NSView, NSOutlineViewDataSource, NSOutlin
 
     /// 业务作用：新目录取得展示权时清除原根的节点，旧异步清单不能沿同名节点覆盖新工作区。
     /// 参数说明:
-    /// - path: 用户明确选择的新根目录。
-    /// 返回：只显示一个待展开根节点，不移动正文焦点或清除结果面板。
-    public func setRoot(_ path: String) {
+    /// - path: 当前工作区的完整根目录。
+    /// - restored: 是否只恢复待连接展示，不暗示已经开始读取。
+    /// 返回：只显示一个待展开根节点，恢复状态提示由用户继续读取，不移动正文焦点或清除结果面板。
+    public func setRoot(_ path: String, restored: Bool = false) {
         let node = DirectoryTreeNode(
             path: path,
             isDirectory: true
@@ -148,8 +164,61 @@ public final class DirectoryTreePanel: NSView, NSOutlineViewDataSource, NSOutlin
         root = node
         nodes = [Data(path.utf8): node]
         outline.reloadData()
-        state.stringValue = "正在读取目录…"
+        state.stringValue = restored ? "目录已恢复；点击刷新或展开后读取原目录。" : "正在读取目录…"
         state.toolTip = path
+    }
+
+    /// 业务作用：目录展开状态以原路径字节保存，恢复不把某个旧行号误当成新文件。
+    /// 参数说明: 无。
+    /// 返回：按原字节排序的已展开真实目录路径。
+    public var expandedDirectories: [String] {
+        nodes.values.filter {
+            $0.isDirectory && outline.isItemExpanded($0)
+        }.map {
+            $0.path
+        }.sorted {
+            $0.utf8.lexicographicallyPrecedes($1.utf8)
+        }
+    }
+
+    /// 业务作用：为侧栏恢复捕获当前实际选择，不读取文件内容或取得打开权。
+    /// 参数说明: 无。
+    /// 返回：当前选中条目的完整原路径，没有有效选择时为空。
+    public var selectedPath: String? {
+        (outline.item(atRow: outline.selectedRow) as? DirectoryTreeNode)?.path
+    }
+
+    /// 业务作用：用户继续读取后逐层还原已有目录节点，缺席路径等待其父清单而不从归档直接创建磁盘条目。
+    /// 参数说明:
+    /// - expanded: 已验证属于原根的至多 64 个待展开路径。
+    /// - selected: 原根内待选择条目的完整原路径。
+    /// 返回：所有意图均已有真实节点时为真；缺席节点保持未应用，原生展开仍经统一异步读取入口。
+    @discardableResult public func restoreTreeState(expanded: [String], selected: String?) -> Bool {
+        guard expanded.count <= 64 else {
+            return false
+        }
+        var complete = true
+        let ordered = expanded.sorted {
+            $0.utf8.count < $1.utf8.count
+        }
+        for path in ordered {
+            guard let node = nodes[Data(path.utf8)], node.isDirectory else {
+                complete = false
+                continue
+            }
+            outline.expandItem(node)
+        }
+        if let selected {
+            if let node = nodes[Data(selected.utf8)], outline.row(forItem: node) >= 0 {
+                let row = outline.row(forItem: node)
+                outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                outline.scrollRowToVisible(row)
+            }
+            else {
+                complete = false
+            }
+        }
+        return complete
     }
 
     /// 业务作用：确认待发布的目录仍在当前树中，移出的后代不能继续取得读取或打开入口。
@@ -246,13 +315,14 @@ public final class DirectoryTreePanel: NSView, NSOutlineViewDataSource, NSOutlin
             updateStatus()
             return false
         }
+        let firstLoad = !parent.loaded
         parent.children = next
         parent.loaded = true
         parent.loading = false
         parent.failureMessage = nil
         nodes = rebuilt
         outline.reloadItem(parent, reloadChildren: true)
-        if parent === root {
+        if parent === root && firstLoad {
             outline.expandItem(parent)
         }
         // 原生 reload 会保留行号而不保证条目身份，按仍存活的原对象恢复选择，不能选中插入到旧行号的新文件。

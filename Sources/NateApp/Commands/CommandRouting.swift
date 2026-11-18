@@ -412,6 +412,7 @@ extension ApplicationController {
         case "preferences": showPreferences()
         case "saveBackupPreferences": showSaveBackupPreferences()
         case "savedBackups": showSavedBackups()
+        case "resetSidebarRecovery": resetSidebarRecovery()
         case "about":
             SystemIntegration.alert("Nate", "原生 macOS 文本与代码编辑器\nSwift · AppKit · TextKit 2\nGPL-3.0-or-later")
         case "help":

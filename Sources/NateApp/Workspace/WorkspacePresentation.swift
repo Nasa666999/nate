@@ -85,7 +85,8 @@ extension ApplicationController {
             let marks: String? = syntax ?? editor.markDisplayStatus
             let temporary: String? = marks ?? editor.textHighlightDisplayStatus
             let selected: String? = temporary ?? editor.selectedTextHighlightStatus
-            let status: String? = selected ?? selectedTextPreferences.failure
+            let preferences: String? = selected ?? selectedTextPreferences.failure
+            let status: String? = preferences ?? sidebarRecovery.failure
             structureState =
                 status.map {
                     " · " + $0

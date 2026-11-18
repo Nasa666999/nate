@@ -71,6 +71,7 @@ extension ApplicationController {
         resultNavigationTask?.cancel()
         // 不等待原文件和进程退出才开始保护正文，两个持久化通道必须保持独立推进。
         scheduleRecovery(force: true)
+        scheduleSidebarRecovery(force: true)
         Task {
             let deadline = ContinuousClock.now.advanced(by: .seconds(30))
             // 尚未发布的打开请求不拥有写入副作用，退出时保留请求文件而不等待系统读取。
@@ -90,6 +91,9 @@ extension ApplicationController {
                 return
             }
             var failures: [String] = []
+            if !(await flushSidebarRecovery(until: deadline)) {
+                failures.append(sidebarRecovery.failure ?? "侧栏恢复状态尚未确认保存。")
+            }
             if searchSettingsTask != nil || searchSettingsError != nil {
                 failures.append(searchSettingsError ?? "搜索设置仍在保存。")
             }
@@ -109,7 +113,10 @@ extension ApplicationController {
                 $0.bindingChange
             }
             // 目标关联尚未确认时不能按旧路径退出恢复，否则未决另存结果可能被误当成仍可写回旧路径。
-            let exitBlocked = !unresolved.isEmpty || externalCommandTask != nil || !pendingBindings.isEmpty
+            // 侧栏实际写入同样必须真实收束，不能在放弃草稿后仍让旧归档发布于进程退出边界。
+            let exitBlocked =
+                !unresolved.isEmpty || externalCommandTask != nil || !pendingBindings.isEmpty
+                || sidebarRecovery.task != nil
             if exitBlocked {
                 let bindings = pendingBindings.map {
                     $0.saveOperation?.target.path ?? $0.url?.path ?? $0.name
@@ -119,7 +126,7 @@ extension ApplicationController {
                 )
                 SystemIntegration.alert(
                     "系统动作尚未确认，已取消退出",
-                    paths + "\n已经进入的文件发布、目标关联或进程启动尚未确认。正文继续保留，可从工具菜单查看文件写入任务。"
+                    paths + "\n文件发布、侧栏归档、目标关联或进程启动尚未确认。正文继续保留，可从工具菜单查看文件写入任务。"
                 )
                 restoreAfterCancelledExit(protectedDocuments)
                 sender.reply(toApplicationShouldTerminate: false)
@@ -157,6 +164,7 @@ extension ApplicationController {
     /// 返回：原有保存周期继续推进，仍未返回的任务保持登记。
     func restoreAfterCancelledExit(_ protectedDocuments: [WorkspaceDocument]) {
         closing = false
+        scheduleSidebarRecovery(force: true)
         directoryWorkspace?.resume()
         fileOperations.resumePublications()
         for document in protectedDocuments + documents {
