@@ -37,11 +37,13 @@ extension DocumentBuffer {
         return result
     }
 
-    /// 业务作用：正文发布前登记位置转换，保留记录只承担视图位置责任，不持有旧正文。
+    /// 业务作用：正文事务的修订发布前同步标记锚点并登记视图位置转换，不持有旧正文。
     /// 参数说明:
     /// - positions: 当前修订到下一修订的完整映射。
-    /// 返回：最多保留 256 个连续事务与一百万项范围变化，至少保留最后一个事务。
+    /// 返回：当前颜色范围随事务移动，修订链最多保留 256 个连续事务与一百万项范围变化，至少保留最后一个事务。
     func recordPositions(_ positions: PositionMap) {
+        // 正文已切换为事务目标，标记仍属于原修订；先映射位置再让视图观察下一修订链。
+        mapDocumentMarks(positions)
         positionJournal.append(RevisionPositionMap(from: revision, to: revision + 1, positions: positions))
         positionJournalChanges += positions.changeCount
         while positionJournal.count > 256 || (positionJournal.count > 1 && positionJournalChanges > 1_000_000)

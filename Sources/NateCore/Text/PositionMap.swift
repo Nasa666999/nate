@@ -4,6 +4,7 @@ private struct MappedChange: Sendable {
     let lower: Int
     let upper: Int
     let resultEnd: Int
+    let resultStart: Int
     let deltaAfter: Int
 }
 
@@ -70,6 +71,7 @@ public struct PositionMap: Sendable {
                 lower: change.range.lower,
                 upper: change.range.upper,
                 resultEnd: result,
+                resultStart: result - change.insertedByteCount,
                 deltaAfter: delta
             )
         }
@@ -100,4 +102,52 @@ public struct PositionMap: Sendable {
         }
         return entry.resultEnd
     }
+
+    /// 业务作用：范围锚点明确归属于边界前侧或后侧，边界插入不会无意扩张相邻颜色标记。
+    /// 参数说明:
+    /// - position: 修改前快照中的合法字节位置。
+    /// - affinity: 同点插入和被替换位置归属前侧或后侧。
+    /// 返回：当前事务后的合法位置；后侧跨过同点后续修改，前侧保留替换结束边界。
+    public func map(_ position: Int, affinity: PositionAffinity) -> Int {
+        var lower = 0
+        var upper = entries.count
+        if affinity == .after {
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2
+                if entries[middle].lower <= position {
+                    lower = middle + 1
+                }
+                else {
+                    upper = middle
+                }
+            }
+            guard lower > 0 else {
+                return position
+            }
+            let entry = entries[lower - 1]
+            return position <= entry.upper ? entry.resultEnd : position + entry.deltaAfter
+        }
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if entries[middle].upper < position {
+                lower = middle + 1
+            }
+            else {
+                upper = middle
+            }
+        }
+        guard lower < entries.count else {
+            return position + (entries.last?.deltaAfter ?? 0)
+        }
+        let entry = entries[lower]
+        if position < entry.lower {
+            return position + (lower > 0 ? entries[lower - 1].deltaAfter : 0)
+        }
+        return position == entry.upper && entry.lower < entry.upper ? entry.resultEnd : entry.resultStart
+    }
+}
+
+public enum PositionAffinity: Sendable {
+    case before
+    case after
 }

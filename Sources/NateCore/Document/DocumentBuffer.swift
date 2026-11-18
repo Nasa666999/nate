@@ -68,6 +68,8 @@ public final class DocumentBuffer {
     public var isReadOnly = false
     public var isEditingSuspended = false
     public var bookmarks: Set<Int> = []
+    public internal(set) var marks = DocumentMarkState()
+    public internal(set) var markGeneration = UUID()
     public var modifiedLines: Set<Int> = []
     public var historyLimit = 1000
     public var historyByteLimit = 256 * 1024 * 1024
