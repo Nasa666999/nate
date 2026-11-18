@@ -13,7 +13,7 @@ extension ApplicationController {
             return
         }
         mainWindow?.editor.finishComposition()
-        guard let active else {
+        guard let (active, _, _) = quickFindContext() else {
             return
         }
         do {
@@ -43,7 +43,7 @@ extension ApplicationController {
     /// 返回：选区或涉及整行的一次事务；无规则时明确说明。
     func comment(block: Bool) {
         guard let active, let language = registry?.language(active.language),
-            let selection = active.buffer.selections.first
+            let selection = active.buffer.primarySelection
         else {
             return
         }
@@ -105,7 +105,7 @@ extension ApplicationController {
     /// - command: 移动或插入空行动作。
     /// 返回：一次可撤销行事务，不作用于无关全文。
     func lineCommand(_ command: String) {
-        guard let active, let selection = active.buffer.selections.first else {
+        guard let active, let selection = active.buffer.primarySelection else {
             return
         }
         let tree = active.buffer.text

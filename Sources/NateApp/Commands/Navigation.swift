@@ -173,7 +173,7 @@ extension ApplicationController {
     /// - action: 打开文件、Finder 定位或系统网址打开。
     /// 返回：只操作明确选择的目标，未知协议拒绝。
     func openSelection(_ action: String) {
-        guard let active, let range = active.buffer.selections.first?.range, !range.isEmpty else {
+        guard let active, let range = active.buffer.primarySelection?.range, !range.isEmpty else {
             return
         }
         let value = active.buffer.text.text(in: range).trimmingCharacters(in: .whitespacesAndNewlines)

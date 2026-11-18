@@ -347,7 +347,7 @@ extension ApplicationController {
             document.failure = nil
             document.state = monitoring ? "监视中 · 已刷新" : "已重新载入"
             mainWindow?.refreshEditors()
-            if monitoring && document.buffer.selections.first?.head == document.buffer.text.byteCount
+            if monitoring && document.buffer.primarySelection?.head == document.buffer.text.byteCount
                 && mainWindow?.editor.document.id == document.buffer.id
             {
                 mainWindow?.editor.revealSelection()

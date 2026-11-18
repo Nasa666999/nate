@@ -29,8 +29,8 @@ extension EditorView {
             [weak self] text in
             guard let self, self.document.id == result.documentID,
                 self.document.revision == result.revision, self.viewSelections.count == 1,
-                self.viewSelections.first?.head == result.context.range.upper,
-                self.viewSelections.first?.range.isEmpty == true, !self.hasComposition
+                self.primarySelection?.head == result.context.range.upper,
+                self.primarySelection?.range.isEmpty == true, !self.hasComposition
             else {
                 return
             }

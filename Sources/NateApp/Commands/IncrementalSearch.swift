@@ -23,7 +23,7 @@ final class IncrementalSearchOrigin {
         self.editor = editor
         revision = buffer.revision
         originalSelections = selections
-        let start = selections.first?.range.lower ?? 0
+        let start = editor.primarySelection?.range.lower ?? 0
         selection = ByteRange(start, start)
     }
 
@@ -187,7 +187,7 @@ extension ApplicationController {
         let origin = incrementalOrigin
         let selection =
             previous == nil
-            ? origin?.selection ?? ByteRange(0, 0) : selections.first?.range ?? ByteRange(0, 0)
+            ? origin?.selection ?? ByteRange(0, 0) : editor.primarySelection?.range ?? ByteRange(0, 0)
         guard !query.isEmpty else {
             bar.feedback.stringValue = "输入查找内容。"
             return

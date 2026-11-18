@@ -62,7 +62,7 @@ extension EditorView {
             !hasComposition, !context.source.hasComposition,
             !document.isEditingSuspended, !context.source.document.isEditingSuspended,
             context.source.viewSelections.count == 1,
-            let selection = context.source.viewSelections.first,
+            let selection = context.source.primarySelection,
             !selection.range.isEmpty, selection.virtualColumn == 0
         else {
             cancelSelectedTextHighlights()

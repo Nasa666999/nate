@@ -5,6 +5,10 @@ struct CompositionSession {
     let revision: UInt64
     let originalRange: ByteRange
     let selections: [TextSelection]
+    let selectionState: SelectionState?
+    let selectionGeneration: UUID
+    let documentSelectionGeneration: UUID
+    let editingGeneration: UUID
     var text: String
     var selected: NSRange
 }
@@ -31,9 +35,12 @@ extension EditorView {
             return
         }
         if composition == nil {
+            guard synchronizeDocumentSelectionState() else {
+                return
+            }
             let range =
                 replacementRange.location == NSNotFound
-                ? viewSelections.first?.range : document.text.byteRange(replacementRange)
+                ? primarySelection?.range : document.text.byteRange(replacementRange)
             guard let range else {
                 return
             }
@@ -41,6 +48,10 @@ extension EditorView {
                 revision: document.revision,
                 originalRange: range,
                 selections: viewSelections,
+                selectionState: viewSelectionState,
+                selectionGeneration: selectionGeneration,
+                documentSelectionGeneration: document.selectionGeneration,
+                editingGeneration: document.editingAuthorityGeneration,
                 text: value,
                 selected: selectedRange
             )
@@ -68,11 +79,20 @@ extension EditorView {
         let value = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
         if let session = composition {
             composition = nil
-            guard session.revision == document.revision else {
+            guard session.revision == document.revision,
+                session.selectionGeneration == selectionGeneration,
+                session.documentSelectionGeneration == document.selectionGeneration,
+                session.editingGeneration == document.editingAuthorityGeneration
+            else {
                 refresh()
                 return
             }
-            viewSelections = session.selections
+            if let state = session.selectionState {
+                adoptViewSelectionState(state)
+            }
+            else {
+                viewSelections = session.selections
+            }
             if session.selections.count == 1 {
                 viewSelections = [
                     TextSelection(anchor: session.originalRange.lower, head: session.originalRange.upper)
@@ -107,7 +127,9 @@ extension EditorView {
             }
         }
         do {
-            document.selections = viewSelections
+            guard synchronizeDocumentSelectionState() else {
+                return
+            }
             try document.insert(value)
             refresh(reveal: true)
             onChange?()
@@ -153,7 +175,7 @@ extension EditorView {
             let start = document.text.utf16Offset(byte: session.originalRange.lower) ?? 0
             return NSRange(location: start + session.selected.location, length: session.selected.length)
         }
-        return viewSelections.first.flatMap {
+        return primarySelection.flatMap {
             document.text.nsRange($0.range)
         }
             ?? NSRange(location: 0, length: 0)

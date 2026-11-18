@@ -16,7 +16,7 @@ extension ApplicationController {
             markFeedback("当前颜色组没有标记。")
             return
         }
-        let selected = context.editor.viewSelections.first?.range ?? ByteRange(0, 0)
+        let selected = context.editor.primarySelection?.range ?? ByteRange(0, 0)
         var lower = 0
         var upper = ranges.count
         while lower < upper {

@@ -110,7 +110,7 @@ extension ApplicationController {
         }
         let snapshot = active.buffer.snapshot
         let range =
-            active.buffer.selections.first.flatMap {
+            active.buffer.primarySelection.flatMap {
                 $0.range.isEmpty ? nil : $0.range
             }
             ?? ByteRange(0, snapshot.text.byteCount)

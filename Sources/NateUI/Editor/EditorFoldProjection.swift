@@ -78,11 +78,11 @@ extension EditorView {
 
     /// 业务作用：查找、括号和显式跳转进入隐藏正文时展开相应区域，使真实选区可以看见。
     /// 参数说明:
-    /// - selection: 需要显示的明确选区，为空时使用当前首选区。
+    /// - selection: 需要显示的明确选区，为空时使用当前主选区。
     /// 返回：仅展开挡住所选目标的块，内层其它收起状态仍保留。
     func unfoldSelection(_ selection: TextSelection? = nil) {
         synchronizeBracketContext()
-        guard let index = folds.index, let selection = selection ?? viewSelections.first else {
+        guard let index = folds.index, let selection = selection ?? primarySelection else {
             return
         }
         var removed = false

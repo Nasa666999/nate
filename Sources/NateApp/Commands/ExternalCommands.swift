@@ -35,7 +35,7 @@ extension ApplicationController {
         }
         do {
             var values = try JSONDecoder().decode([String].self, from: Data(arguments.utf8))
-            let selection = active.buffer.selections.first?.range ?? ByteRange(0, 0)
+            let selection = active.buffer.primarySelection?.range ?? ByteRange(0, 0)
             if values.contains(where: {
                 $0.contains("${file}") || $0.contains("${directory}")
             })
@@ -43,7 +43,7 @@ extension ApplicationController {
             {
                 throw NateError.message("未命名文档没有磁盘路径，请先保存。")
             }
-            let head = active.buffer.selections.first?.head ?? 0
+            let head = active.buffer.primarySelection?.head ?? 0
             let row = active.buffer.text.lineNumber(at: head)
             var variables = [
                 "name": active.name, "selection": active.buffer.text.text(in: selection),

@@ -107,7 +107,7 @@ extension EditorView {
             return false
         }
         guard !document.isEditingSuspended, FoldIndex.supports(language: language, udl: userLanguage),
-            let selection = viewSelections.first
+            let selection = primarySelection
         else {
             return false
         }
@@ -147,7 +147,7 @@ extension EditorView {
         finishComposition()
         synchronizeBracketContext()
         brackets.pending = nil
-        guard let context = brackets.context, let selection = viewSelections.first else {
+        guard let context = brackets.context, let selection = primarySelection else {
             return
         }
         let line = line ?? document.text.lineNumber(at: selection.head)

@@ -50,6 +50,8 @@ extension ApplicationController {
         guard !closing, let document = active, let window = mainWindow,
             let native = window.window, NSApp.keyWindow === native,
             native.firstResponder === window.editor, window.editor.document === document.buffer,
+            let selectionState = window.editor.viewSelectionState,
+            selectionState == document.buffer.selectionState,
             !document.closing, !document.buffer.isEditingSuspended,
             !window.hasMarkedEditorInput, findWindow?.isEditingInput != true,
             !window.incrementalSearch.isEditingInput,

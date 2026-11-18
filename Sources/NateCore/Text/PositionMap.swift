@@ -121,6 +121,47 @@ public struct PositionMap: Sendable {
         return entry.resultEnd
     }
 
+    /// 业务作用：尚未绑定原正文的外部选择先检查系统哨兵和整数算术，不能把溢出当成有效锚点。
+    /// 参数说明:
+    /// - position: 待映射的非负原位置，不得为系统未命中哨兵。
+    /// 返回：与普通后侧映射相同的可表示位置；负值、哨兵或溢出时失败，正文边界仍由目标快照复验。
+    public func checkedMap(_ position: Int) throws -> Int {
+        guard position >= 0, position != NSNotFound else {
+            throw NateError.invalidRange
+        }
+        let value: Int
+        if let permutation {
+            value = permutation.map(position)
+        }
+        else {
+            var lower = 0, upper = entries.count
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2
+                if entries[middle].upper < position {
+                    lower = middle + 1
+                }
+                else {
+                    upper = middle
+                }
+            }
+            if lower < entries.count, position >= entries[lower].lower {
+                value = entries[lower].resultEnd
+            }
+            else {
+                let delta = lower > 0 ? entries[lower - 1].deltaAfter : 0
+                let result = position.addingReportingOverflow(delta)
+                guard !result.overflow else {
+                    throw NateError.invalidRange
+                }
+                value = result.partialValue
+            }
+        }
+        guard value >= 0, value != NSNotFound else {
+            throw NateError.invalidRange
+        }
+        return value
+    }
+
     /// 业务作用：范围锚点明确归属于边界前侧或后侧，边界插入不会无意扩张相邻颜色标记。
     /// 参数说明:
     /// - position: 修改前快照中的合法字节位置。

@@ -4,8 +4,8 @@ struct HistoryEntry: Sendable {
     let id = UUID()
     var before: PieceTree
     var after: PieceTree
-    var selectionsBefore: [TextSelection]
-    var selectionsAfter: [TextSelection]
+    var selectionsBefore: SelectionState
+    var selectionsAfter: SelectionState
     var formatBefore: DocumentFormat
     var formatAfter: DocumentFormat
     var bookmarksBefore: Set<Int>
@@ -52,6 +52,12 @@ public struct PreparedHistoryAction: Sendable {
         }
         let positions = request.backwards ? request.entry.backwardPositions : request.entry.forwardPositions
         let text = request.backwards ? request.entry.before : request.entry.after
+        // 撤销目标包含完整身份与矩形，先复验目标正文边界，不能消费历史后才发现某一行形态无效。
+        _ = try (request.backwards ? request.entry.selectionsBefore : request.entry.selectionsAfter)
+            .validated(
+                in: text,
+                permit: permit
+            )
         if let permutation = positions.permutation, request.marks.count > 0 {
             marks = try request.marks.relocated(by: permutation, in: text, permit: permit)
         }

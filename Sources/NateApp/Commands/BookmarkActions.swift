@@ -50,7 +50,7 @@ extension ApplicationController {
             return
         }
         cancelBookmarkAction()
-        let row = buffer.text.lineNumber(at: context.editor.viewSelections.first?.head ?? 0)
+        let row = buffer.text.lineNumber(at: context.editor.primarySelection?.head ?? 0)
         switch action {
         case .toggle:
             if buffer.bookmarks.contains(row) {

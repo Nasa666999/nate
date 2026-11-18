@@ -42,6 +42,10 @@ extension EditorView {
             onStatus?("文档处于编辑保护，书签暂不改变。")
             return
         }
+        guard !document.isEditingSuspended || foldClick else {
+            onStatus?("文档处于编辑保护，正文选择保持原状。")
+            return
+        }
         finishComposition()
         window?.makeFirstResponder(self)
         let position = bytePosition(at: point)
@@ -95,16 +99,32 @@ extension EditorView {
             ]
         }
         else if event.modifierFlags.contains(.command) {
-            viewSelections.append(TextSelection(anchor: position, head: position))
+            if let state = viewSelectionState,
+                let existing = state.entries.first(where: {
+                    $0.selection.range.isEmpty && $0.selection.head == position
+                        && $0.selection.virtualColumn == 0
+                })
+            {
+                try? setSelectionState(state.selectingPrimary(existing.id))
+            }
+            else {
+                viewSelections.append(TextSelection(anchor: position, head: position))
+                if let state = viewSelectionState, let last = state.entries.last {
+                    try? setSelectionState(state.selectingPrimary(last.id))
+                }
+            }
         }
-        else if event.modifierFlags.contains(.shift), let first = viewSelections.first {
+        else if event.modifierFlags.contains(.shift), let first = primarySelection {
             viewSelections = [TextSelection(anchor: first.anchor, head: position)]
         }
         else {
             viewSelections = [TextSelection(anchor: position, head: position)]
         }
-        dragAnchor = viewSelections.first?.anchor
+        dragAnchor = primarySelection?.anchor
         dragColumn = event.modifierFlags.contains(.option) ? point.x : nil
+        dragRevision = document.revision
+        dragSelectionID = viewSelectionState?.primaryID
+        dragAppending = event.modifierFlags.contains(.command) && !event.modifierFlags.contains(.option)
         if dragColumn != nil, event.clickCount == 1,
             !event.modifierFlags.contains(.command), !event.modifierFlags.contains(.shift)
         {
@@ -126,6 +146,14 @@ extension EditorView {
         guard let anchor = dragAnchor else {
             return
         }
+        // 拖选锚点只属于按下时的正文；另一事务已经提交后不能把旧字节起点套入新内容。
+        guard dragRevision == document.revision, !document.isEditingSuspended else {
+            dragAnchor = nil
+            dragColumn = nil
+            dragSelectionID = nil
+            onStatus?("正文或编辑保护已改变，本次拖选已结束。")
+            return
+        }
         autoscroll(with: event)
         let point = convert(event.locationInWindow, from: nil)
         let position = bytePosition(at: point)
@@ -136,18 +164,64 @@ extension EditorView {
                 onStatus?("矩形选择跨度最多十万行，原选择保留。")
                 return
             }
-            let targets = projection.visibleLines(in: min(a, b)...max(a, b)).map {
-                line in
-                let y = projection.y(of: line) + 9
-                let lower = bytePosition(at: NSPoint(x: min(startX, point.x), y: y))
-                let upper = bytePosition(at: NSPoint(x: max(startX, point.x), y: y))
-                let layout = layoutLine(line)
-                let end = layout.caret(at: layout.content.rendered.length).minX + gutterWidth
-                let virtual = Int(max(0, min(startX, point.x) - end) / max(1, font.maximumAdvancement.width))
-                return TextSelection(anchor: lower, head: upper, virtualColumn: virtual)
+            do {
+                let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+                let zero = abs(startX - point.x) < 0.5
+                let targets = try projection.visibleLines(in: min(a, b)...max(a, b)).map {
+                    line -> (TextSelection, Int) in
+                    guard ContinuousClock.now < deadline else {
+                        throw NateError.message("矩形字形命中超过两秒，原选择保留。")
+                    }
+                    let y = projection.y(of: line) + 9
+                    let lower = bytePosition(at: NSPoint(x: min(startX, point.x), y: y))
+                    let upper = bytePosition(at: NSPoint(x: max(startX, point.x), y: y))
+                    let layout = layoutLine(line)
+                    let end = layout.caret(at: layout.content.rendered.length).minX + gutterWidth
+                    let width = max(1, font.maximumAdvancement.width)
+                    let leading = max(0, min(startX, point.x) - end) / width
+                    let trailing = max(0, max(startX, point.x) - end) / width
+                    guard leading.isFinite, trailing.isFinite, leading <= 1_000_000, trailing <= 1_000_000
+                    else {
+                        throw NateError.message("矩形虚拟位置超过一百万列，未建立部分目标。")
+                    }
+                    let forward = startX <= point.x
+                    let selected = TextSelection(
+                        anchor: forward ? lower : upper,
+                        head: forward ? upper : lower,
+                        virtualColumn: Int(leading)
+                    )
+                    return (selected, zero ? 0 : Int(trailing) - Int(leading))
+                }
+                guard
+                    setRectangularSelections(
+                        targets.map(\.0),
+                        zeroWidth: zero,
+                        anchorX: Double(max(0, startX - gutterWidth)),
+                        headX: Double(max(0, point.x - gutterWidth)),
+                        trailingColumns: targets.map(\.1),
+                        primaryRow: b
+                    )
+                else {
+                    return
+                }
             }
-            guard setRectangularSelections(targets, zeroWidth: abs(startX - point.x) < 0.5) else {
-                onStatus?("矩形目标无法完整落在原逻辑行内，原选择保留。")
+            catch {
+                onStatus?(error.localizedDescription)
+                return
+            }
+        }
+        else if dragAppending, let id = dragSelectionID, let state = viewSelectionState,
+            let index = state.entries.firstIndex(where: {
+                $0.id == id
+            })
+        {
+            var entries = state.entries
+            entries[index] = SelectionEntry(id: id, selection: TextSelection(anchor: anchor, head: position))
+            do {
+                try setSelectionState(SelectionState(entries: entries, primaryID: id))
+            }
+            catch {
+                onStatus?(error.localizedDescription)
                 return
             }
         }
@@ -165,6 +239,9 @@ extension EditorView {
     public override func mouseUp(with event: NSEvent) {
         dragAnchor = nil
         dragColumn = nil
+        dragRevision = nil
+        dragSelectionID = nil
+        dragAppending = false
     }
 
     /// 业务作用：全选真实正文，软换行和语法呈现不参与范围。
@@ -172,6 +249,10 @@ extension EditorView {
     /// - sender: 菜单或键盘来源。
     /// 返回：仅更新选区。
     @objc public override func selectAll(_ sender: Any?) {
+        guard !document.isEditingSuspended else {
+            onStatus?("文档处于编辑保护，正文选择保持原状。")
+            return
+        }
         viewSelections = [TextSelection(anchor: 0, head: document.text.byteCount)]
         needsDisplay = true
         onSelection?()

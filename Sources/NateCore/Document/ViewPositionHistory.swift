@@ -7,6 +7,34 @@ struct RevisionPositionMap {
 }
 
 extension DocumentBuffer {
+    /// 业务作用：克隆视图使用同一完整修订链移动自己的稳定身份，不借当前活动视图覆盖其选择。
+    /// 参数说明:
+    /// - state: 该视图原先持有的完整选择与主项。
+    /// - observedRevision: 该状态对应的原正文修订。
+    /// 返回：完整链存在且最终范围合法时的独立状态；缺链、预算不足或无效范围时为空。
+    public func mapSelectionState(_ state: SelectionState, from observedRevision: UInt64) -> SelectionState? {
+        if observedRevision == revision {
+            return try? state.validated(in: text, checkingCancellation: false)
+        }
+        guard observedRevision < revision,
+            let index = positionJournal.firstIndex(where: {
+                $0.from == observedRevision
+            }), positionJournal.last?.to == revision
+        else {
+            return nil
+        }
+        let chain = positionJournal[index...].map(\.positions)
+        let preserving = chain.allSatisfy {
+            $0.changeCount == 0 || $0.permutation != nil
+        }
+        return try? state.mapped(
+            through: chain,
+            in: text,
+            preservingRectangle: preserving,
+            checkingCancellation: false
+        )
+    }
+
     /// 业务作用：克隆视图跨过多个事务时连续映射自己的光标，不只套用最后一次变化。
     /// 参数说明:
     /// - values: 该视图最后看到的选区。

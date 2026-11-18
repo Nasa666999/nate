@@ -76,7 +76,7 @@ extension ApplicationController {
         let snapshot = buffer.snapshot
         let selections = editor.viewSelections
         let focus = editor.focusGeneration
-        let selection = selections.first?.range ?? ByteRange(0, 0)
+        let selection = editor.primarySelection?.range ?? ByteRange(0, 0)
         let input = SearchRequestInput(findWindow)
         let continuing =
             searchNavigationEvidence?.continues(

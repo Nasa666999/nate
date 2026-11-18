@@ -9,7 +9,7 @@ extension ApplicationController {
     func requestPathCompletion() {
         guard let document = active, let editor = mainWindow?.editor,
             !document.buffer.isReadOnly, !editor.hasComposition, editor.viewSelections.count == 1,
-            let selection = editor.viewSelections.first, selection.range.isEmpty,
+            let selection = editor.primarySelection, selection.range.isEmpty,
             selection.virtualColumn == 0
         else {
             return

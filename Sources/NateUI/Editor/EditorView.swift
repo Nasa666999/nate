@@ -13,7 +13,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 dismissCompletion()
                 dragAnchor = nil
                 dragColumn = nil
-                rectangleEvidence = nil
+                dragRevision = nil
+                dragSelectionID = nil
+                dragAppending = false
                 layouts.removeAll()
                 hiddenLines.removeAll()
                 syntaxTask?.cancel()
@@ -29,7 +31,12 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 textHighlightDisplayStatus = nil
                 cancelSelectedTextHighlights()
             }
-            viewSelections = document.selections
+            if let state = document.selectionState {
+                adoptViewSelectionState(state)
+            }
+            else {
+                viewSelections = document.selections
+            }
             observedRevision = document.revision
             projection.measured.removeAll()
             refresh()
@@ -37,18 +44,21 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var viewSelections = [TextSelection(anchor: 0, head: 0)] {
         didSet {
-            if oldValue != viewSelections {
-                rectangleEvidence = nil
-                selectionGeneration = UUID()
-            }
-            if window?.firstResponder === self {
-                document.selections = viewSelections
+            if !publishingViewSelectionState {
+                if oldValue != viewSelections {
+                    synchronizeLegacyViewSelectionState()
+                }
+                if window?.firstResponder === self {
+                    synchronizeDocumentSelectionState()
+                }
             }
         }
     }
     public var onFocus: (() -> Void)?
     public internal(set) var selectionGeneration = UUID()
-    var rectangleEvidence: (selection: UUID, revision: UInt64, zeroWidth: Bool)?
+    public internal(set) var viewSelectionState: SelectionState?
+    var selectionStateRevision: UInt64 = 0
+    var publishingViewSelectionState = false
     public internal(set) var focusGeneration = UUID()
     public var selectedTextHighlightContext: (() -> SelectedTextHighlightContext?)?
     let selectedTextHighlights = SelectedTextHighlightRuntime()
@@ -103,6 +113,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var composition: CompositionSession?
     var dragAnchor: Int?
     var dragColumn: CGFloat?
+    var dragRevision: UInt64?
+    var dragSelectionID: UUID?
+    var dragAppending = false
     var blinkTimer: Timer?
     var caretVisible = true
     public internal(set) var markDisplayStatus: String?
@@ -137,7 +150,12 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public init(document: DocumentBuffer) {
         self.document = document
         super.init(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
-        viewSelections = document.selections
+        if let state = document.selectionState {
+            adoptViewSelectionState(state)
+        }
+        else {
+            viewSelections = document.selections
+        }
         observedRevision = document.revision
         setAccessibilityElement(true)
         setAccessibilityRole(.textArea)
@@ -160,17 +178,15 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public func refresh(reveal: Bool = false) {
         synchronizeBracketContext()
         if window?.firstResponder === self || reveal {
-            viewSelections = document.selections
-        }
-        else if observedRevision != document.revision {
-            if let mapped = document.mapSelections(viewSelections, from: observedRevision) {
-                viewSelections = mapped
+            if let state = document.selectionState {
+                adoptViewSelectionState(state)
             }
             else {
-                // 无完整修订证据时不猜测旧偏移，采用文档当前的合法活动选区。
                 viewSelections = document.selections
-                onStatus?("原视图位置超出保留的修订链，已同步当前活动光标。")
             }
+        }
+        else {
+            synchronizeViewSelectionRevision()
         }
         if observedRevision != document.revision {
             // 临时匹配仅属于原正文，不按普通锚点移动后冒充重新搜索的结果。
@@ -269,7 +285,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         guard first <= last, let context = NSGraphicsContext.current?.cgContext else {
             return
         }
-        let active = tree.lineNumber(at: min(viewSelections.first?.head ?? 0, tree.byteCount))
+        let active = tree.lineNumber(at: min(primarySelection?.head ?? 0, tree.byteCount))
         let visibleLines = projection.visibleLines(in: first...last)
         var markBudget = 4096
         markDisplayStatus = nil
@@ -420,10 +436,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
 
     /// 业务作用：主动导航时显示当前选区，后台保存不会调用此入口。
     /// 参数说明:
-    /// - selection: 明确需要显示的真实选区，为空时显示当前首选区。
+    /// - selection: 明确需要显示的真实选区，为空时显示当前主选区。
     /// 返回：有效目标展开遮挡范围并滚动视口，不移动正文光标；非法字节位置保持原视口。
     public func revealSelection(_ selection: TextSelection? = nil) {
-        guard let selection = selection ?? viewSelections.first,
+        guard let selection = selection ?? primarySelection,
             document.text.isBoundary(selection.anchor), document.text.isBoundary(selection.head)
         else {
             return
@@ -444,7 +460,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 返回：成为系统文本输入目标并通知窗口。
     public override func becomeFirstResponder() -> Bool {
         focusGeneration = UUID()
-        document.selections = viewSelections
+        synchronizeViewSelectionRevision()
+        guard synchronizeDocumentSelectionState() else {
+            return false
+        }
         onFocus?()
         needsDisplay = true
         return true

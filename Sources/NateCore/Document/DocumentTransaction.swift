@@ -14,6 +14,7 @@ public struct PreparedTransaction: Sendable {
     var bookmarkUpdate: PreparedBookmarkUpdate?
     var markUpdate: PreparedMarkRelocation?
     var reversePositions: PositionMap?
+    var selectionUpdate: PreparedSelectionUpdate?
 
     /// 业务作用：为关联行元数据提供已构建的结果正文，避免后台重复执行同一批编辑。
     /// 参数说明: 无。
@@ -27,6 +28,7 @@ public struct PreparedTransaction: Sendable {
     /// - snapshot: 修改前的不可变文档证据。
     /// - edits: 全部基于同一快照的修改意图。
     /// - selectionsAfter: 可选的最终选区。
+    /// - selectionStateAfter: 可选的完整结果身份、主项和形态。
     /// - formatAfter: 可选的最终编码和换行规则。
     /// - name: 撤销动作名称。
     /// - permit: 整个准备过程仍有权限与时间，为假时停止且不返回部分正文。
@@ -35,9 +37,10 @@ public struct PreparedTransaction: Sendable {
         snapshot: DocumentSnapshot,
         edits: [TextEdit],
         selectionsAfter: [TextSelection]? = nil,
+        selectionStateAfter: SelectionState? = nil,
         formatAfter: DocumentFormat? = nil,
         name: String = "编辑",
-        permit: @Sendable () -> Bool = {
+        permit: @escaping @Sendable () -> Bool = {
             true
         }
     ) throws {
@@ -111,6 +114,7 @@ public struct PreparedTransaction: Sendable {
         selections = selectionsAfter
         format = formatAfter
         self.name = name
+        try prepareSelectionUpdate(snapshot: snapshot, explicitState: selectionStateAfter, permit: permit)
         try Task.checkCancellation()
         guard permit() else {
             throw CancellationError()
@@ -122,15 +126,21 @@ public struct PreparedTransaction: Sendable {
     /// - snapshot: 替换前的固定文档。
     /// - text: 后台已经完成校验和构建的正文。
     /// - selectionsAfter: 明确的结果选区；为空时按当前选区与实际差异映射。
+    /// - selectionStateAfter: 可选的明确完整结果形态。
     /// - formatAfter: 新正文的编码与换行规则。
     /// - name: 用户可理解的撤销动作。
+    /// - permit: 正文差异与结果选择仍属于当前动作的执行资格。
     /// 返回：接管完整目标正文、仅按实际差异更新位置关系的事务。
     public init(
         replacing snapshot: DocumentSnapshot,
         with text: PieceTree,
         selectionsAfter: [TextSelection]? = nil,
+        selectionStateAfter: SelectionState? = nil,
         formatAfter: DocumentFormat,
-        name: String
+        name: String,
+        permit: @escaping @Sendable () -> Bool = {
+            true
+        }
     ) throws {
         try Task.checkCancellation()
         if let selectionsAfter {
@@ -156,6 +166,7 @@ public struct PreparedTransaction: Sendable {
         selections = selectionsAfter
         format = formatAfter
         self.name = name
+        try prepareSelectionUpdate(snapshot: snapshot, explicitState: selectionStateAfter, permit: permit)
         try Task.checkCancellation()
     }
 }

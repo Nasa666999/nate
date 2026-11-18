@@ -37,7 +37,7 @@ extension ApplicationController {
         else {
             window.editor.userLanguage = userLanguages[active.language]
         }
-        let head = active.buffer.selections.first?.head ?? 0
+        let head = active.buffer.primarySelection?.head ?? 0
         let line = active.buffer.text.lineNumber(at: head)
         let lineStart = active.buffer.text.lineStart(line)
         let column: String

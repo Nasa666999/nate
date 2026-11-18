@@ -28,6 +28,7 @@ public struct GraphemeNavigation {
     private let scalarLimit: Int
     private var remaining: Int
     private let deadline: ContinuousClock.Instant
+    private let checkingCancellation: Bool
 
     /// 业务作用：为同一次多光标移动、删除或覆盖建立共享读取预算，不复制完整逻辑行。
     /// 参数说明:
@@ -35,6 +36,16 @@ public struct GraphemeNavigation {
     /// - maximumScalars: 本次动作合计允许的标量读取次数，必须在一至 262144 之间。
     /// 返回：固定 Unicode 17.0.0 的扩展字形簇导航器；非法预算失败，动作共用一百毫秒截止。
     public init(text: PieceTree, maximumScalars: Int = 262_144) throws {
+        try self.init(text: text, maximumScalars: maximumScalars, checkingCancellation: true)
+    }
+
+    /// 业务作用：正文发布后的串行视图同步继续验证字形，原准备任务的取消不能留下未映射坐标。
+    /// 参数说明:
+    /// - text: 当前固定正文。
+    /// - maximumScalars: 共同标量读取上限。
+    /// - checkingCancellation: 是否仍响应原任务取消，时间和读取预算始终保留。
+    /// 返回：严格边界导航器，不放宽字形证据或资源上限。
+    init(text: PieceTree, maximumScalars: Int = 262_144, checkingCancellation: Bool) throws {
         guard maximumScalars > 0, maximumScalars <= 262_144 else {
             throw NateError.message("字形簇读取预算必须在 1 至 262144 之间。")
         }
@@ -42,6 +53,29 @@ public struct GraphemeNavigation {
         scalarLimit = maximumScalars
         remaining = maximumScalars
         deadline = ContinuousClock.now.advanced(by: .milliseconds(100))
+        self.checkingCancellation = checkingCancellation
+    }
+
+    /// 业务作用：证明列选择端点属于完整扩展字形簇，不能把标量边界直接当作视觉列边缘。
+    /// 参数说明:
+    /// - offset: 当前正文中的合法 UTF-8 标量位置。
+    /// 返回：按固定 Unicode 17.0.0 判断的真实边界；上下文、时间或取消不足时失败，不返回近似边缘。
+    public mutating func isBoundary(at offset: Int) throws -> Bool {
+        guard text.isBoundary(offset) else {
+            throw NateError.invalidRange
+        }
+        try checkpoint()
+        if offset == 0 || offset == text.byteCount {
+            return true
+        }
+        if let left = text.byte(at: offset - 1), let right = text.byte(at: offset), left < 128, right < 128 {
+            guard remaining >= 2 else {
+                throw NateError.message("字形簇上下文超过 \(scalarLimit) 次标量读取预算，操作未执行。")
+            }
+            remaining -= 2
+            return left != 13 || right != 10
+        }
+        return try breaks(at: offset)
     }
 
     /// 业务作用：沿真实源标量寻找严格相邻的完整扩展字形簇边界，组合、旗帜和连写不能被部分删除。
@@ -211,7 +245,9 @@ public struct GraphemeNavigation {
     /// 参数说明: 无。
     /// 返回：仍在本次交互预算内时继续，否则明确失败。
     private func checkpoint() throws {
-        try Task.checkCancellation()
+        if checkingCancellation {
+            try Task.checkCancellation()
+        }
         guard ContinuousClock.now < deadline else {
             throw NateError.message("字形簇上下文超过一百毫秒预算，操作未执行。")
         }

@@ -88,7 +88,7 @@ extension EditorView {
         }
         if brackets.index == nil && brackets.task != nil
             && (brackets.pending != nil
-                || BracketIndex.isAdjacent(in: document.text, caret: viewSelections.first?.head ?? 0))
+                || BracketIndex.isAdjacent(in: document.text, caret: primarySelection?.head ?? 0))
         {
             return "正在解析括号"
         }
@@ -99,7 +99,7 @@ extension EditorView {
     /// 参数说明: 无。
     /// 返回：当前提交正文的主光标附近存在圆、方或花括号时为真。
     public var hasAdjacentBracket: Bool {
-        BracketIndex.isAdjacent(in: document.text, caret: viewSelections.first?.head ?? 0)
+        BracketIndex.isAdjacent(in: document.text, caret: primarySelection?.head ?? 0)
     }
 
     /// 业务作用：菜单和快捷键共用当前结构证据决定动作资格，已确认无匹配时不提供无效跳转。
@@ -108,7 +108,7 @@ extension EditorView {
     /// 返回：保护态拒绝导航；尚未分析时允许明确请求，完整结果已知时按实际匹配启用。
     public func bracketNavigationAvailable(_ action: BracketNavigation) -> Bool {
         synchronizeBracketContext()
-        guard !document.isEditingSuspended, let caret = viewSelections.first?.head else {
+        guard !document.isEditingSuspended, let caret = primarySelection?.head else {
             return false
         }
         switch action {
@@ -330,7 +330,7 @@ extension EditorView {
             document.id == request.context.documentID, document.revision == request.context.revision,
             brackets.resource == request.context.resource, viewSelections == request.selections,
             index.documentID == document.id, index.revision == document.revision,
-            let caret = viewSelections.first?.head
+            let caret = primarySelection?.head
         else {
             return
         }
@@ -378,7 +378,7 @@ extension EditorView {
     func drawBracketMatch(in layout: LineLayout, y: CGFloat) {
         guard composition == nil, window?.firstResponder === self,
             let index = brackets.index, index.documentID == document.id, index.revision == document.revision,
-            let caret = viewSelections.first?.head, let match = index.match(at: caret)
+            let caret = primarySelection?.head, let match = index.match(at: caret)
         else {
             return
         }

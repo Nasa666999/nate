@@ -12,6 +12,7 @@ extension PreparedTransaction {
     /// - text: 已按实际顺序构建的完整新正文。
     /// - permutation: 真实字节片段和行锚点的完整移动关系。
     /// - selectionsAfter: 明确结果选区，为空时按原行锚点移动当前选区。
+    /// - selectionStateAfter: 可选的明确完整结果身份、主项和形态。
     /// - marks: 可选的原颜色快照，后台准备可避免发布时重新计算大批颜色。
     /// - name: 用户可理解的撤销动作。
     /// - permit: 整个验证和颜色准备共用的执行资格。
@@ -21,9 +22,10 @@ extension PreparedTransaction {
         to text: PieceTree,
         using permutation: TextPermutation,
         selectionsAfter: [TextSelection]? = nil,
+        selectionStateAfter: SelectionState? = nil,
         marks: DocumentMarkSnapshot? = nil,
         name: String,
-        permit: @Sendable () -> Bool = {
+        permit: @escaping @Sendable () -> Bool = {
             true
         }
     ) throws {
@@ -104,6 +106,7 @@ extension PreparedTransaction {
         selections = selectionsAfter
         format = nil
         self.name = name
+        try prepareSelectionUpdate(snapshot: snapshot, explicitState: selectionStateAfter, permit: permit)
         try Task.checkCancellation()
         guard permit() else {
             throw CancellationError()

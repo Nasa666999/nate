@@ -52,6 +52,10 @@ extension EditorView {
     /// 返回：正文命令只使用唯一历史；输入法取消撤去覆盖层后通知临时呈现重新读取已提交正文。
     public override func doCommand(by selector: Selector) {
         let command = NSStringFromSelector(selector)
+        guard !document.isEditingSuspended || command == "cancelOperation:" && composition != nil else {
+            onStatus?("文档处于编辑保护，输入与选择保持原状。")
+            return
+        }
         if composition == nil,
             command.hasPrefix("move") || command == "selectAll:" || command == "cancelOperation:"
         {
@@ -61,7 +65,7 @@ extension EditorView {
         case "complete:": onCommand?("complete")
         case "insertNewline:":
             var indent = ""
-            if let head = viewSelections.first?.head {
+            if let head = primarySelection?.head {
                 let row = document.text.lineNumber(at: head)
                 indent = String(
                     document.text.text(in: document.text.lineRange(row, includeEnding: false)).prefix {
@@ -106,7 +110,7 @@ extension EditorView {
                 // 覆盖层已撤去才允许重新匹配已提交正文，不能把候选或旧任务恢复为高亮来源。
                 onCommand?("compositionEnded")
             }
-            else if let first = viewSelections.first {
+            else if let first = primarySelection {
                 // Esc 属于新的选择意图，必须通知工作区撤销等待读取，不能只重绘本视图。
                 viewSelections = [first]
                 needsDisplay = true
@@ -183,7 +187,9 @@ extension EditorView {
                 )
             }
             let changed = try document.commit(edits, selectionsAfter: after, name: forward ? "向后删除" : "退格")
-            viewSelections = after
+            if !changed {
+                viewSelections = after
+            }
             refresh(reveal: true)
             if changed {
                 onChange?()
@@ -249,7 +255,7 @@ extension EditorView {
     /// - forward: 跳转方向。
     /// 返回：有完整边界证据时光标移动，正文保持不变；共享字形预算不足时保留原位置并说明原因。
     func moveWord(forward: Bool) {
-        guard let selection = viewSelections.first else {
+        guard let selection = primarySelection else {
             return
         }
         let tree = document.text

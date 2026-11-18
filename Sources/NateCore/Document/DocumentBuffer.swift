@@ -25,6 +25,8 @@ public struct DocumentSnapshot: Sendable {
     public let revision: UInt64
     public let text: PieceTree
     public let format: DocumentFormat
+    public let selectionState: SelectionState?
+    public let selectionGeneration: UUID?
 
     /// 业务作用：将不可变正文绑定到后台任务与排版所需身份。
     /// 参数说明:
@@ -32,12 +34,23 @@ public struct DocumentSnapshot: Sendable {
     /// - revision: 单调正文修订。
     /// - text: 结构共享的正文。
     /// - format: 同一修订的持久化参数。
+    /// - selectionState: 可选的完整稳定选择，供后台事务准备其结果状态。
+    /// - selectionGeneration: 可选的原选择控制身份，完整状态发布前须复验。
     /// 返回：可跨执行域传递的快照。
-    public init(id: UUID, revision: UInt64, text: PieceTree, format: DocumentFormat = .utf8) {
+    public init(
+        id: UUID,
+        revision: UInt64,
+        text: PieceTree,
+        format: DocumentFormat = .utf8,
+        selectionState: SelectionState? = nil,
+        selectionGeneration: UUID? = nil
+    ) {
         self.id = id
         self.revision = revision
         self.text = text
         self.format = format
+        self.selectionState = selectionState
+        self.selectionGeneration = selectionGeneration
     }
 }
 
@@ -49,12 +62,16 @@ public final class DocumentBuffer {
     public private(set) var format: DocumentFormat
     public var selections = [TextSelection(anchor: 0, head: 0)] {
         didSet {
-            if oldValue != selections {
-                selectionGeneration = UUID()
+            if oldValue != selections, !publishingSelectionState {
+                synchronizeLegacySelectionState()
             }
         }
     }
-    public private(set) var selectionGeneration = UUID()
+    public internal(set) var selectionGeneration = UUID()
+    public internal(set) var selectionState = try? SelectionState(selections: [
+        TextSelection(anchor: 0, head: 0)
+    ])
+    var publishingSelectionState = false
     public var isReadOnly = false {
         didSet {
             if oldValue != isReadOnly {
@@ -108,7 +125,14 @@ public final class DocumentBuffer {
         !redoEntries.isEmpty && !isReadOnly && !isEditingSuspended && revision < UInt64.max
     }
     public var snapshot: DocumentSnapshot {
-        DocumentSnapshot(id: id, revision: revision, text: text, format: format)
+        DocumentSnapshot(
+            id: id,
+            revision: revision,
+            text: text,
+            format: format,
+            selectionState: selectionState,
+            selectionGeneration: selectionGeneration
+        )
     }
 
     /// 业务作用：建立独立于路径和视图的文档生命周期。
@@ -211,6 +235,14 @@ public final class DocumentBuffer {
         else {
             throw NateError.staleRevision
         }
+        // 选择的主项与形态可在同一正文修订内改变，后台正文不能覆盖后来明确选择的状态。
+        guard
+            transaction.selectionUpdate.map({
+                $0.generation == selectionGeneration
+            }) ?? true
+        else {
+            throw NateError.staleRevision
+        }
         let unique = transaction.edits
         let changes = transaction.changes
         let positions = transaction.positions
@@ -237,21 +269,17 @@ public final class DocumentBuffer {
         let prepared = transaction.after
         let preparedMarks =
             try transaction.markUpdate?.state ?? prepareDocumentMarkMapping(positions, in: prepared)
-        let after =
-            transaction.selections
-            ?? normalizedSelections().map {
-                TextSelection(
-                    anchor: positions.map($0.anchor),
-                    head: positions.map($0.head),
-                    virtualColumn: $0.virtualColumn
-                )
-            }
-        guard
-            after.allSatisfy({
-                prepared.isBoundary($0.anchor) && prepared.isBoundary($0.head)
-            })
+        let completeSelections: PreparedSelectionUpdate
+        if let update = transaction.selectionUpdate {
+            completeSelections = update
+        }
         else {
-            throw NateError.invalidRange
+            var complete = transaction
+            try complete.prepareSelectionUpdate(snapshot: snapshot)
+            guard let update = complete.selectionUpdate else {
+                throw NateError.message("原选择缺少完整身份，正文未发布。")
+            }
+            completeSelections = update
         }
         let bookmarksAfter: Set<Int>
         if let update = transaction.bookmarkUpdate {
@@ -272,8 +300,8 @@ public final class DocumentBuffer {
         let entry = HistoryEntry(
             before: text,
             after: prepared,
-            selectionsBefore: selections,
-            selectionsAfter: after,
+            selectionsBefore: completeSelections.before,
+            selectionsAfter: completeSelections.after,
             formatBefore: format,
             formatAfter: formatAfter ?? format,
             bookmarksBefore: bookmarks,
@@ -282,7 +310,10 @@ public final class DocumentBuffer {
             backwardChanges: backwardChanges,
             forwardPositions: positions,
             backwardPositions: backwardPositions,
-            retainedBytes: changes.reduce(512 + positions.retainedBytes + backwardPositions.retainedBytes) {
+            retainedBytes: changes.reduce(
+                512 + positions.retainedBytes + backwardPositions.retainedBytes
+                    + completeSelections.before.retainedBytes + completeSelections.after.retainedBytes
+            ) {
                 $0 + $1.range.count + $1.insertedByteCount + 4096
             },
             name: name
@@ -293,7 +324,7 @@ public final class DocumentBuffer {
         lastEdits = unique
         lastChanges = entry.forwardChanges
         lastActionName = name
-        selections = after
+        publishSelectionState(completeSelections.after)
         publishDocumentMarks(preparedMarks)
         recordPositions(positions)
         revision += 1
@@ -439,7 +470,7 @@ public final class DocumentBuffer {
         lastEdits = []
         lastChanges = request.backwards ? entry.backwardChanges : entry.forwardChanges
         lastActionName = entry.name
-        selections = request.backwards ? entry.selectionsBefore : entry.selectionsAfter
+        publishSelectionState(request.backwards ? entry.selectionsBefore : entry.selectionsAfter)
         publishDocumentMarks(action.marks)
         recordPositions(request.backwards ? entry.backwardPositions : entry.forwardPositions)
         revision += 1

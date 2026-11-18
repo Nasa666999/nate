@@ -45,7 +45,13 @@ public enum SearchScope {
             )
         }
         if action == "replaceAll" && !options.wrap {
-            let selection = selections.first?.range ?? ByteRange(0, 0)
+            let selection: ByteRange
+            if let state = snapshot.selectionState, state.selections == selections {
+                selection = state.primary.selection.range
+            }
+            else {
+                selection = selections.first?.range ?? ByteRange(0, 0)
+            }
             let range =
                 options.backwards
                 ? ByteRange(0, selection.upper) : ByteRange(selection.lower, snapshot.text.byteCount)
