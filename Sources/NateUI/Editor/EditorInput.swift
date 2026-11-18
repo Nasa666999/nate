@@ -112,9 +112,17 @@ extension EditorView {
     /// 业务作用：逐字删除不切开扩展字形簇，多光标操作一次提交。
     /// 参数说明:
     /// - forward: 是否删除光标后的字形。
-    /// 返回：一个可撤销事务；虚拟空白删除不写入空格。
+    /// 返回：一个可撤销事务；虚拟空白删除不写入空格，完整字形边界无法在共享预算内确定时整次不执行。
     func delete(forward: Bool) {
         finishComposition()
+        var navigation: GraphemeNavigation
+        do {
+            navigation = try GraphemeNavigation(text: document.text)
+        }
+        catch {
+            onStatus?(error.localizedDescription)
+            return
+        }
         var ranges: [ByteRange] = []
         var after: [TextSelection] = []
         for selection in document.normalizedSelections() {
@@ -128,12 +136,17 @@ extension EditorView {
                 )
                 continue
             }
-            let range =
-                selection.range.isEmpty
-                ? TextSelection(
-                    anchor: selection.head,
-                    head: document.text.graphemeBoundary(from: selection.head, forward: forward)
-                ).range : selection.range
+            let range: ByteRange
+            do {
+                range =
+                    selection.range.isEmpty
+                    ? try navigation.range(at: selection.head, forward: forward) : selection.range
+            }
+            catch {
+                // 所有目标共用完整边界证据；任一目标超限时不能只删除此前已准备的其它光标范围。
+                onStatus?(error.localizedDescription)
+                return
+            }
             if !range.isEmpty {
                 ranges.append(range)
             }
@@ -183,43 +196,51 @@ extension EditorView {
     /// - vertical: 可见行方向，跨过已收起的正文。
     /// - edge: 当前行首或行尾。
     /// - extend: 是否保留固定端。
-    /// 返回：仅更新视图选区，不产生修改修订。
+    /// 返回：完整计算后更新全部视图选区，不产生修改修订；边界预算不足时保留全部原选择。
     func move(horizontal: Int = 0, vertical: Int = 0, edge: Int = 0, extend: Bool = false) {
         finishComposition()
-        viewSelections = viewSelections.map {
-            selection in
-            var head = selection.head
-            let row = document.text.lineNumber(at: head)
-            if horizontal != 0 {
-                if !extend && !selection.range.isEmpty {
-                    head = horizontal < 0 ? selection.range.lower : selection.range.upper
+        do {
+            var navigation = try GraphemeNavigation(text: document.text)
+            let after = try viewSelections.map {
+                selection in
+                var head = selection.head
+                let row = document.text.lineNumber(at: head)
+                if horizontal != 0 {
+                    if !extend && !selection.range.isEmpty {
+                        head = horizontal < 0 ? selection.range.lower : selection.range.upper
+                    }
+                    else {
+                        head = try navigation.boundary(from: head, forward: horizontal > 0)
+                    }
+                }
+                else if edge != 0 {
+                    let range = document.text.lineRange(row, includeEnding: false)
+                    head = edge < 0 ? range.lower : range.upper
                 }
                 else {
-                    head = document.text.graphemeBoundary(from: head, forward: horizontal > 0)
+                    let target = projection.adjacentLine(to: row, direction: vertical)
+                    let units = document.text.utf16Offset(byte: head) ?? 0
+                    let layout = layoutLine(row)
+                    let p = layout.caret(at: units - layout.originUTF16)
+                    head = bytePosition(at: NSPoint(x: gutterWidth + p.minX, y: projection.y(of: target) + 9))
                 }
+                return TextSelection(anchor: extend ? selection.anchor : head, head: head)
             }
-            else if edge != 0 {
-                let range = document.text.lineRange(row, includeEnding: false)
-                head = edge < 0 ? range.lower : range.upper
-            }
-            else {
-                let target = projection.adjacentLine(to: row, direction: vertical)
-                let units = document.text.utf16Offset(byte: head) ?? 0
-                let layout = layoutLine(row)
-                let p = layout.caret(at: units - layout.originUTF16)
-                head = bytePosition(at: NSPoint(x: gutterWidth + p.minX, y: projection.y(of: target) + 9))
-            }
-            return TextSelection(anchor: extend ? selection.anchor : head, head: head)
+            // 全部光标的原始边界均已取得才发布，失败不能留下只有部分光标移动的状态。
+            viewSelections = after
+            needsDisplay = true
+            revealSelection()
+            onSelection?()
         }
-        needsDisplay = true
-        revealSelection()
-        onSelection?()
+        catch {
+            onStatus?(error.localizedDescription)
+        }
     }
 
     /// 业务作用：按 Unicode 词字符边界跳转，不把字节位置当字符下标。
     /// 参数说明:
     /// - forward: 跳转方向。
-    /// 返回：光标移动，正文保持不变。
+    /// 返回：有完整边界证据时光标移动，正文保持不变；共享字形预算不足时保留原位置并说明原因。
     func moveWord(forward: Bool) {
         guard let selection = viewSelections.first else {
             return
@@ -227,23 +248,29 @@ extension EditorView {
         let tree = document.text
         var position = selection.head
         var moved = false
-        for _ in 0..<10_000 {
-            let next = tree.graphemeBoundary(from: position, forward: forward)
-            if next == position {
-                break
+        do {
+            var navigation = try GraphemeNavigation(text: tree)
+            for _ in 0..<10_000 {
+                let next = try navigation.boundary(from: position, forward: forward)
+                if next == position {
+                    break
+                }
+                let word = tree.text(in: ByteRange(min(position, next), max(position, next)))
+                if moved
+                    && word.allSatisfy({
+                        !$0.isLetter && !$0.isNumber && $0 != "_"
+                    })
+                {
+                    break
+                }
+                position = next
+                moved = true
             }
-            let word = tree.text(in: ByteRange(min(position, next), max(position, next)))
-            if moved
-                && word.allSatisfy({
-                    !$0.isLetter && !$0.isNumber && $0 != "_"
-                })
-            {
-                break
-            }
-            position = next
-            moved = true
+            setCaret(position)
         }
-        setCaret(position)
+        catch {
+            onStatus?(error.localizedDescription)
+        }
     }
 
     /// 业务作用：统一主动导航后的焦点与选区通知。

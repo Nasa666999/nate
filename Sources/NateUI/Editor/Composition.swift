@@ -63,7 +63,7 @@ extension EditorView {
     /// 参数说明:
     /// - string: 系统确认的文字。
     /// - replacementRange: 无组合时可指定的 UTF-16 替换范围。
-    /// 返回：一次撤销单元；失效组合不修改正文。
+    /// 返回：一次撤销单元；失效组合不修改正文，覆盖输入无法取得全部完整字形边界时保留原选择和正文。
     public func insertText(_ string: Any, replacementRange: NSRange) {
         let value = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
         if let session = composition {
@@ -86,14 +86,24 @@ extension EditorView {
             viewSelections = [TextSelection(anchor: range.lower, head: range.upper)]
         }
         else if overwrite && !value.contains("\n") {
-            viewSelections = viewSelections.map {
-                if $0.range.isEmpty {
-                    return TextSelection(
-                        anchor: $0.head,
-                        head: document.text.graphemeBoundary(from: $0.head, forward: true)
-                    )
+            do {
+                var navigation = try GraphemeNavigation(text: document.text)
+                let targets = try viewSelections.map {
+                    if $0.range.isEmpty {
+                        let range = try navigation.range(at: $0.head, forward: true)
+                        return TextSelection(
+                            anchor: range.lower,
+                            head: range.upper
+                        )
+                    }
+                    return $0
                 }
-                return $0
+                // 覆盖必须先准备全部完整字形，再发布选择并进入事务，不能让后一个目标超限后退化为普通插入。
+                viewSelections = targets
+            }
+            catch {
+                onStatus?(error.localizedDescription)
+                return
             }
         }
         do {

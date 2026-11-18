@@ -167,29 +167,14 @@ extension PieceTree {
         return breaks
     }
 
-    /// 业务作用：逐字移动和删除遵守扩展字形簇，CRLF 不被切开。
+    /// 业务作用：单次逐字移动采用固定 Unicode 扩展字形簇，CRLF 不被切开，也不复制逻辑行。
     /// 参数说明:
     /// - offset: 当前字节位置。
     /// - forward: 是否向后一个字形移动。
-    /// 返回：相邻字形边界；文档边界保持不变。
-    public func graphemeBoundary(from offset: Int, forward: Bool) -> Int {
-        let line = lineNumber(at: offset)
-        let start = lineStart(max(0, line - (forward ? 0 : 1)))
-        let end = lineStart(min(lineCount, line + 2))
-        let text = text(in: ByteRange(start, end))
-        var position = start
-        var previous = start
-        for character in text {
-            position += character.utf8.count
-            if forward && position > offset {
-                return position
-            }
-            if !forward && position >= offset {
-                return previous
-            }
-            previous = position
-        }
-        return forward ? byteCount : previous
+    /// 返回：相邻完整边界；文档端点保持不变，非法位置、取消或上下文预算不足失败。
+    public func graphemeBoundary(from offset: Int, forward: Bool) throws -> Int {
+        var navigation = try GraphemeNavigation(text: self)
+        return try navigation.boundary(from: offset, forward: forward)
     }
 
     /// 业务作用：在缓存换行数帮助下定位行界，跨叶片 CRLF 按一个换行处理。
