@@ -12,6 +12,7 @@ extension ApplicationController {
         guard let active, let window = mainWindow else {
             return
         }
+        window.refreshSelectedTextHighlights()
         window.updateTabs(
             documents.map {
                 TabPresentation(
@@ -80,7 +81,8 @@ extension ApplicationController {
             window.editor.document.id == active.buffer.id
             ? (window.editor.bracketAnalysisStatus ?? window.editor.foldingAnalysisStatus
                 ?? window.editor.syntaxAnalysisStatus ?? window.editor.markDisplayStatus
-                ?? window.editor.textHighlightDisplayStatus).map {
+                ?? window.editor.textHighlightDisplayStatus ?? window.editor.selectedTextHighlightStatus
+                ?? selectedTextPreferences.failure).map {
                     " · " + $0
                 } ?? "" : ""
         let folded = window.editor.foldedRegionCount

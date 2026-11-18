@@ -27,6 +27,13 @@ extension EditorWindow {
         removeSplit()
         editorSplit.isVertical = vertical
         let clone = EditorView(document: editor.document)
+        clone.selectedTextHighlightContext = {
+            [weak self, weak clone] in
+            guard let self, let clone else {
+                return nil
+            }
+            return self.selectedTextContext(for: clone)
+        }
         clone.font = editor.font
         clone.language = editor.language
         clone.userLanguage = editor.userLanguage

@@ -25,6 +25,9 @@ extension ApplicationController {
             routeStyleMark(command.style, action: command.action)
             return
         }
+        if id.hasPrefix("smartHighlight"), toggleSelectedTextHighlightOption(id) {
+            return
+        }
         if id.hasPrefix("language:"), let active {
             active.language = String(id.dropFirst(9))
             active.languageExplicit = true
@@ -222,8 +225,10 @@ extension ApplicationController {
             }
         case "compositionBegan":
             suspendSearchForInput()
+            mainWindow?.refreshSelectedTextHighlights()
         case "compositionEnded":
             refreshVisibleIncrementalHighlights()
+            mainWindow?.refreshSelectedTextHighlights()
         case "selectionChanged":
             // 用户位置和克隆焦点属于新的导航意图，等待中的旧增量结果不得再选择原位置。
             if incrementalTask != nil {

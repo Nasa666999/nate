@@ -89,6 +89,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var incrementalOptions = IncrementalSearchOptions()
     var incrementalDefaults: UserDefaults?
     let incrementalHighlights = IncrementalHighlightRuntime()
+    let selectedTextPreferences = SelectedTextHighlightPreferencesRuntime()
     var searchNavigationEvidence: SearchNavigationEvidence?
     var searchNavigationGeneration = UUID()
     var externalObservationTask: Task<Void, Never>?
@@ -191,6 +192,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             saveBackupStore = SaveBackupStore(directory: support.appendingPathComponent("SavedBackups"))
             loadSaveBackupPolicy()
             loadIncrementalOptions(from: .standard)
+            loadSelectedTextHighlightOptions(from: .standard)
             await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
@@ -358,6 +360,13 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         window.onIncrementalQuery = {
             [weak self] query, options in self?.searchIncrementally(query, options: options)
+        }
+        window.selectedTextHighlightSettings = {
+            [weak self, weak window] target in
+            guard let self, let window else {
+                return nil
+            }
+            return self.selectedTextHighlightSettings(for: target, in: window)
         }
         window.onIncrementalOptions = {
             [weak self] options in self?.saveIncrementalOptions(options)

@@ -60,6 +60,7 @@ extension ApplicationController {
                 window.onStateChange = {
                     [weak self] state in
                     self?.scheduleSearchSettings(state)
+                    self?.mainWindow?.refreshSelectedTextHighlights()
                 }
                 window.onResetSavedState = {
                     [weak self] state in

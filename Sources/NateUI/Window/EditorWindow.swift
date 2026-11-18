@@ -51,6 +51,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onIncrementalQuery: ((String, IncrementalSearchOptions) -> Void)?
     public var onIncrementalOptions: ((IncrementalSearchOptions) -> Void)?
     public var onIncrementalSuspend: (() -> Bool)?
+    public var selectedTextHighlightSettings: ((EditorView) -> SelectedTextHighlightSettings?)?
     public let incrementalSearch = IncrementalSearchBar(frame: .zero)
     public let directoryPanel = DirectoryTreePanel(frame: .zero)
     public let projectPanels = ProjectPanelsView(frame: .zero)
@@ -271,6 +272,13 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             [weak self] message in self?.status.stringValue = message
         }
         let primary = editor
+        primary.selectedTextHighlightContext = {
+            [weak self, weak primary] in
+            guard let self, let primary else {
+                return nil
+            }
+            return self.selectedTextContext(for: primary)
+        }
         editor.onFocus = {
             [weak self, weak primary] in
             guard let self, let primary else {

@@ -26,6 +26,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 markDisplayStatus = nil
                 textHighlights.removeAll()
                 textHighlightDisplayStatus = nil
+                cancelSelectedTextHighlights()
             }
             viewSelections = document.selections
             observedRevision = document.revision
@@ -35,12 +36,18 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var viewSelections = [TextSelection(anchor: 0, head: 0)] {
         didSet {
+            if oldValue != viewSelections {
+                selectionGeneration = UUID()
+            }
             if window?.firstResponder === self {
                 document.selections = viewSelections
             }
         }
     }
     public var onFocus: (() -> Void)?
+    public private(set) var selectionGeneration = UUID()
+    public var selectedTextHighlightContext: (() -> SelectedTextHighlightContext?)?
+    let selectedTextHighlights = SelectedTextHighlightRuntime()
     var observedRevision: UInt64 = 0
     var projection = VisualLineMap()
     var layoutMetrics: EditorLayoutMetrics?
@@ -242,6 +249,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// - dirtyRect: 系统要求重绘的区域。
     /// 返回：呈现当前已提交快照及独立预编辑，不改动文档。
     public override func draw(_ dirtyRect: NSRect) {
+        prepareSelectedTextHighlights()
         prepareBracketAnalysis()
         NSColor.textBackgroundColor.setFill()
         dirtyRect.fill()
@@ -454,6 +462,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         super.viewDidMoveToWindow()
         observeBracketFocus()
         if window == nil {
+            cancelSelectedTextHighlights()
             brackets.pending = nil
             folds.pending = nil
             brackets.task?.cancel()

@@ -121,6 +121,7 @@ extension ApplicationController: NSMenuItemValidation {
             add(search, title, id, key: key)
         }
         addStyleMarkMenus(to: search)
+        addSelectedTextHighlightMenus(to: search)
         attach(search, to: bar)
         let view = NSMenu(title: "视图")
         for (title, id) in [
@@ -268,6 +269,9 @@ extension ApplicationController: NSMenuItemValidation {
             return enabled
         }
         if let enabled = validateBookmarkMenu(id) {
+            return enabled
+        }
+        if let enabled = validateSelectedTextHighlightMenu(menuItem, id: id) {
             return enabled
         }
         if let action = foldAction(for: id) {
