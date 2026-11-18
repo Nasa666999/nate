@@ -88,9 +88,17 @@ extension ApplicationController {
                 until: deadline,
                 while: {
                     externalCommandTask != nil || searchTask != nil || searchSettingsTask != nil
+                        || historyPersistence.task != nil
                         || !closingDocumentIDs.isEmpty
                 }
             )
+            // 历史归档可能仍在系统文件发布中，不能结束进程后把尚未确认的替换当作已经保存。
+            guard historyPersistence.task == nil else {
+                restoreAfterCancelledExit(protectedDocuments)
+                sender.reply(toApplicationShouldTerminate: false)
+                mainWindow?.status.stringValue = "历史归档仍在确认，已取消退出；请等待后重试。"
+                return
+            }
             // 既有关闭仍可能移除或恢复标签，成员集合未收束时不能确认最终退出索引。
             guard closingDocumentIDs.isEmpty else {
                 SystemIntegration.alert("关闭流程尚未完成，已取消退出", "正文保持保护；请等待当前关闭返回，再重新退出。文件写入任务仍可从工具菜单查看。")
@@ -99,6 +107,9 @@ extension ApplicationController {
                 return
             }
             var failures: [String] = []
+            if historyPersistence.enabled, let failure = historyPersistence.failure {
+                failures.append(failure)
+            }
             if !(await flushSidebarRecovery(until: deadline)) {
                 failures.append(sidebarRecovery.failure ?? "侧栏恢复状态尚未确认保存。")
             }

@@ -109,6 +109,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var pendingURLs: [URL] = []
     var recentClosed: [ClosedTab] = []
     var clipboardHistory: [ClipboardHistoryRecord] = []
+    let historyPersistence = ClipboardHistoryRuntime()
     var clipboardDefaults: UserDefaults?
     var copyLineWithoutSelection = true
     var adaptClipboardLineEndings = false
@@ -212,6 +213,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             loadSelectedTextHighlightOptions(from: .standard)
             loadMultipleSelectionOptions(from: .standard)
             loadClipboardOptions(from: .standard)
+            configureClipboardHistory()
             await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。

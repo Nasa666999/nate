@@ -376,7 +376,7 @@ extension ApplicationController {
             cancelQuickFind()
             clipboardRecordingGeneration = macroRecording && !macroPlaying ? macroRecordingGeneration : nil
         case "clipboardHistory": showClipboardHistory()
-        case "clearClipboardHistory": clipboardHistory = []
+        case "clearClipboardHistory": clearClipboardHistory()
         case "clipboardCopyLine", "clipboardAdaptEndings": toggleClipboardOption(id)
         case "pasteAsPlainText": quickFindContext()?.2.pasteAsPlainText(nil)
         case "cancelClipboard": mainWindow?.editor.cancelClipboardOperation()

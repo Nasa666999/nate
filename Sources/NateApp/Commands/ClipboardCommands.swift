@@ -2,29 +2,6 @@ import AppKit
 import NateCore
 import NateUI
 
-struct ClipboardHistoryRecord: Sendable {
-    let payload: ClipboardPayload
-    let text: String
-    let retainedBytes: Int
-
-    /// 业务作用：历史仅保留容量内完整载荷，不能为预览而丢弃形态或截断正文。
-    /// 参数说明:
-    /// - payload: 用户主动复制、剪切或粘贴的实际完整内容。
-    /// 返回：文本与编码合计不超过 1 MiB 的记录；超量不进入历史。
-    init(_ payload: ClipboardPayload) throws {
-        guard payload.plainByteCount <= 1_048_576 else {
-            throw NateError.message("该剪贴板内容超过单条历史容量。")
-        }
-        let data = try payload.encoded()
-        guard data.count + payload.plainByteCount <= 1_048_576 else {
-            throw NateError.message("该剪贴板内容与形态超过单条历史容量。")
-        }
-        self.payload = payload
-        text = try payload.plainText()
-        retainedBytes = data.count + payload.plainByteCount
-    }
-}
-
 extension ApplicationController {
     /// 业务作用：无选区整行与插入换行适配分别恢复，缺省保持整行启用、换行适配关闭。
     /// 参数说明:
@@ -34,6 +11,7 @@ extension ApplicationController {
         clipboardDefaults = defaults
         copyLineWithoutSelection = defaults.object(forKey: "copyLineWithoutSelection") as? Bool ?? true
         adaptClipboardLineEndings = defaults.object(forKey: "adaptClipboardLineEndings") as? Bool ?? false
+        historyPersistence.enabled = defaults.object(forKey: "persistClipboardHistory") as? Bool ?? false
     }
 
     /// 业务作用：用户明确切换选项时先撤销旧准备，克隆视图不能沿原选项继续发布。
@@ -66,63 +44,55 @@ extension ApplicationController {
         guard let record = try? ClipboardHistoryRecord(payload) else {
             return
         }
-        var candidates =
-            [record]
-            + clipboardHistory.filter {
-                $0.payload != payload
-            }
-        var bytes = 0
-        candidates = Array(
-            candidates.prefix(20).prefix {
-                value in
-                guard value.retainedBytes <= 8_388_608 - bytes else {
-                    return false
-                }
-                bytes += value.retainedBytes
-                return true
-            }
-        )
-        clipboardHistory = candidates
+        clipboardHistory = ClipboardHistoryLimits.inserting(record, into: clipboardHistory)
+        scheduleClipboardHistoryPersistence()
+        refreshClipboardHistoryPanel()
     }
 
-    /// 业务作用：查看本次运行中主动动作产生的完整历史，显示形态和不可见字符预览。
+    /// 业务作用：浏览完整历史的形态与全文，持久化须经明确选项，面板不轮询系统剪贴板。
     /// 参数说明: 无。
-    /// 返回：选择记录后按其原形态进入常规原子粘贴，不读取系统剪贴板。
+    /// 返回：显示独立面板，粘贴前回到实际活动编辑器复验来源和权限。
     func showClipboardHistory() {
-        guard let (_, _, editor) = quickFindContext() else {
+        guard !closing, mainWindow != nil else {
             return
         }
-        let menu = NSMenu()
-        for (index, record) in clipboardHistory.enumerated() {
-            let preview = String(String.UnicodeScalarView(record.text.unicodeScalars.prefix(80)))
-                .replacingOccurrences(of: "\r", with: "␍")
-                .replacingOccurrences(of: "\n", with: "↵")
-                .replacingOccurrences(of: "\t", with: "⇥")
-                .replacingOccurrences(of: "\0", with: "␀")
-            let kind: String
-            switch record.payload.shape {
-            case .stream: kind = "片段"
-            case .lines: kind = "整行"
-            case .rectangle: kind = "矩形"
+        if historyPersistence.panel == nil {
+            let panel = ClipboardHistoryPanel()
+            panel.onPaste = {
+                [weak self] record in self?.pasteClipboardHistoryRecord(record)
             }
-            let item = NSMenuItem(
-                title: "\(index + 1). [\(kind)] \(preview)",
-                action: #selector(pasteHistory(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = record
-            menu.addItem(item)
+            panel.onClear = {
+                [weak self] in self?.clearClipboardHistory()
+            }
+            panel.onPersistenceChange = {
+                [weak self] in self?.setClipboardHistoryPersistence($0)
+            }
+            panel.onResetArchive = {
+                [weak self] in self?.resetClipboardHistoryArchive()
+            }
+            historyPersistence.panel = panel
         }
-        menu.popUp(positioning: nil, at: NSPoint(x: 100, y: 50), in: editor)
+        refreshClipboardHistoryPanel()
+        historyPersistence.panel?.showWindow(nil)
+        historyPersistence.panel?.window?.makeKeyAndOrderFront(nil)
     }
 
-    /// 业务作用：菜单持有明确完整记录，异步历史变化不能把原选择的序号重解释为另一条正文。
+    /// 业务作用：用户明确选中的完整记录只粘贴到当前活动文档，面板行号不会重解释为其它内容。
     /// 参数说明:
-    /// - sender: 带完整记录的实际菜单选择。
-    /// 返回：原编辑视图按当前明确换行选项执行一次完整粘贴，系统剪贴板保持不变。
-    @objc func pasteHistory(_ sender: NSMenuItem) {
-        guard let record = sender.representedObject as? ClipboardHistoryRecord,
+    /// - record: 面板实际选中的稳定记录与完整载荷。
+    /// 返回：恢复真实正文焦点后执行常规原子粘贴，失效、候选或权限不足时保留正文与剪贴板。
+    func pasteClipboardHistoryRecord(_ record: ClipboardHistoryRecord) {
+        guard !closing,
+            clipboardHistory.contains(where: {
+                $0.id == record.id
+            }),
+            let active, let window = mainWindow, window.editor.document === active.buffer,
+            !window.editor.hasComposition, !active.buffer.isReadOnly, !active.buffer.isEditingSuspended
+        else {
+            return
+        }
+        window.window?.makeKeyAndOrderFront(nil)
+        guard window.window?.makeFirstResponder(window.editor) == true,
             let (_, _, editor) = quickFindContext()
         else {
             return
@@ -146,7 +116,7 @@ extension ApplicationController {
         case "clipboardAdaptEndings":
             item.state = adaptClipboardLineEndings ? .on : .off
             return !closing
-        case "clipboardHistory": return !closing && !clipboardHistory.isEmpty && quickFindContext() != nil
+        case "clipboardHistory": return !closing && mainWindow != nil
         case "clearClipboardHistory": return !closing && !clipboardHistory.isEmpty
         case "cancelClipboard": return !closing && mainWindow != nil
         case "pasteAsPlainText":
