@@ -1,3 +1,4 @@
+import Foundation
 import NateCore
 import NateSearch
 import NateUI
@@ -7,6 +8,7 @@ struct BufferSearchCapture: Sendable {
     let scope: ResolvedSearchScope
     let label: String
     let bookmarks: Set<Int>?
+    let bookmarkGeneration: UUID?
 }
 
 struct BufferSearchPlan: Sendable {
@@ -16,5 +18,6 @@ struct BufferSearchPlan: Sendable {
     let transaction: PreparedTransaction?
     let previews: [SearchPreviewRow]
     let originalBookmarks: Set<Int>?
+    let originalBookmarkGeneration: UUID?
     let bookmarkPlan: SearchBookmarkPlan?
 }

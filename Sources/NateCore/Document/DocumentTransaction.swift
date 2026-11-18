@@ -11,6 +11,14 @@ public struct PreparedTransaction: Sendable {
     let selections: [TextSelection]?
     let format: DocumentFormat?
     let name: String
+    var bookmarkUpdate: PreparedBookmarkUpdate?
+
+    /// 业务作用：为关联行元数据提供已构建的结果正文，避免后台重复执行同一批编辑。
+    /// 参数说明: 无。
+    /// 返回：共享存储的不可变结果树，尚未发布到文档。
+    public var resultingText: PieceTree {
+        after
+    }
 
     /// 业务作用：在后台完成批量修改的范围校验和正文构建，主线程只发布完整结果。
     /// 参数说明:
@@ -51,7 +59,10 @@ public struct PreparedTransaction: Sendable {
                     throw NateError.overlappingEdits
                 }
             }
-            if !snapshot.text.bytes(in: edit.range).elementsEqual(edit.text.utf8) {
+            // 字节数不同已足以证明内容变化，删除巨型范围时不能只为比较空字符串而展开原正文。
+            if edit.range.count != edit.text.utf8.count
+                || !snapshot.text.bytes(in: edit.range).elementsEqual(edit.text.utf8)
+            {
                 unique.append(edit)
             }
         }

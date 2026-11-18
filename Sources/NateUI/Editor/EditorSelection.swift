@@ -25,16 +25,33 @@ extension EditorView {
     /// - event: 鼠标按下事件。
     /// 返回：建立确定的拖选锚点，边栏不修改正文，单词超出 262144 个标量时保留光标并明确反馈。
     public override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let gutterX = point.x - visibleRect.minX
+        let bookmarkClick = gutterX < 18
+        let foldClick = gutterX >= gutterWidth - 19 && gutterX < gutterWidth
+        // 边栏动作不拥有正文提交权，候选仍在时不能借书签或折叠点击把预编辑写入正文。
+        guard composition == nil || !bookmarkClick && !foldClick else {
+            onStatus?("请先确认或取消当前候选，再操作书签或折叠。")
+            return
+        }
+        // 关闭或恢复保护固定了当前元数据，书签点击不能在保护期间改写这份集合。
+        guard !bookmarkClick || !document.isEditingSuspended else {
+            onStatus?("文档处于编辑保护，书签暂不改变。")
+            return
+        }
         finishComposition()
         window?.makeFirstResponder(self)
-        let point = convert(event.locationInWindow, from: nil)
         let position = bytePosition(at: point)
         let row = document.text.lineNumber(at: position)
-        if point.x - visibleRect.minX < 18 {
+        if bookmarkClick {
             if document.bookmarks.contains(row) {
                 document.bookmarks.remove(row)
             }
             else {
+                guard document.bookmarks.count < 100_000 else {
+                    onStatus?("书签最多保留十万行，已有书签保持不变。")
+                    return
+                }
                 document.bookmarks.insert(row)
             }
             needsDisplay = true

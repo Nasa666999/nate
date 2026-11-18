@@ -119,6 +119,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var markCopyGeneration = UUID()
     var markSearchGeneration: UUID?
     let styleMarks = StyleMarkRuntime()
+    let bookmarkActions = BookmarkActionRuntime()
     var recentFiles: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: "recentFiles") ?? []
@@ -487,6 +488,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         guard let active else {
             return
         }
+        cancelBookmarkAction()
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
         cancelSearchResultPathOpen()

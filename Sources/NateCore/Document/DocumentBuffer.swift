@@ -67,7 +67,13 @@ public final class DocumentBuffer {
     public var selections = [TextSelection(anchor: 0, head: 0)]
     public var isReadOnly = false
     public var isEditingSuspended = false
-    public var bookmarks: Set<Int> = []
+    public var bookmarks: Set<Int> = [] {
+        didSet {
+            // 书签独立于正文修订，任何重新赋值或往返变动都撤销旧书签计划的发布资格。
+            bookmarkGeneration = UUID()
+        }
+    }
+    public private(set) var bookmarkGeneration = UUID()
     public internal(set) var marks = DocumentMarkState()
     public internal(set) var markGeneration = UUID()
     public var modifiedLines: Set<Int> = []
@@ -183,6 +189,14 @@ public final class DocumentBuffer {
         else {
             throw NateError.staleRevision
         }
+        // 正文修订不包含书签变化，关联行计划还须持有最初的书签身份才能发布。
+        guard
+            transaction.bookmarkUpdate.map({
+                $0.generation == bookmarkGeneration
+            }) ?? true
+        else {
+            throw NateError.staleRevision
+        }
         let unique = transaction.edits
         let changes = transaction.changes
         let positions = transaction.positions
@@ -194,6 +208,10 @@ public final class DocumentBuffer {
                     $0 != format
                 }) == true
         else {
+            // 空末行没有可删除字节，仍解除其书签；这类元数据动作不制造正文历史。
+            if let update = transaction.bookmarkUpdate {
+                bookmarks = update.lines
+            }
             lastEdits = []
             lastActionName = ""
             return false
@@ -226,6 +244,13 @@ public final class DocumentBuffer {
                 positions.map($0)
             }
         )
+        let bookmarksAfter =
+            transaction.bookmarkUpdate?.lines
+            ?? Set(
+                mappedBookmarks.map {
+                    prepared.lineNumber(at: min($0, prepared.byteCount))
+                }
+            )
         let backwardChanges = Self.inverseChanges(changes)
         let entry = HistoryEntry(
             before: text,
@@ -235,11 +260,7 @@ public final class DocumentBuffer {
             formatBefore: format,
             formatAfter: formatAfter ?? format,
             bookmarksBefore: bookmarks,
-            bookmarksAfter: Set(
-                mappedBookmarks.map {
-                    prepared.lineNumber(at: min($0, prepared.byteCount))
-                }
-            ),
+            bookmarksAfter: bookmarksAfter,
             forwardChanges: changes,
             backwardChanges: backwardChanges,
             forwardPositions: positions,
@@ -270,11 +291,7 @@ public final class DocumentBuffer {
             discardedHistoryEntries += 1
         }
         redoEntries.removeAll()
-        bookmarks = Set(
-            mappedBookmarks.map {
-                text.lineNumber(at: min($0, text.byteCount))
-            }
-        )
+        bookmarks = bookmarksAfter
         modifiedLines.formUnion(
             changes.map {
                 text.lineNumber(at: min($0.range.lower, text.byteCount))

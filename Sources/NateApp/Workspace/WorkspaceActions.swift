@@ -71,68 +71,6 @@ extension ApplicationController {
         mainWindow?.editor.setCaret(range.lower + prefix.utf8.count)
     }
 
-    /// 业务作用：书签导航与批处理使用真实行，修改仍通过原子事务。
-    /// 参数说明:
-    /// - command: 书签操作类型。
-    /// 返回：仅删除命令改正文，其余保留文本字节。
-    func bookmarkCommand(_ command: String) {
-        guard let active else {
-            return
-        }
-        let buffer = active.buffer
-        let row = buffer.text.lineNumber(at: buffer.selections.first?.head ?? 0)
-        switch command {
-        case "bookmark":
-            if buffer.bookmarks.contains(row) {
-                buffer.bookmarks.remove(row)
-            }
-            else {
-                buffer.bookmarks.insert(row)
-            }
-        case "clearBookmarks": buffer.bookmarks.removeAll()
-        case "invertBookmarks":
-            buffer.bookmarks = Set(0..<buffer.text.lineCount).subtracting(buffer.bookmarks)
-        case "nextBookmark", "previousBookmark":
-            let sorted = buffer.bookmarks.sorted()
-            let target =
-                command == "nextBookmark"
-                ? sorted.first(where: {
-                    $0 > row
-                }) ?? sorted.first
-                : sorted.last(where: {
-                    $0 < row
-                }) ?? sorted.last
-            if let target {
-                mainWindow?.editor.setCaret(buffer.text.lineStart(target))
-            }
-        case "copyBookmarks":
-            SystemIntegration.copy(
-                buffer.bookmarks.sorted().map {
-                    buffer.text.text(in: buffer.text.lineRange($0))
-                }.joined()
-            )
-        default:
-            let targets =
-                command == "deleteUnbookmarked"
-                ? Set(0..<buffer.text.lineCount).subtracting(buffer.bookmarks) : buffer.bookmarks
-            do {
-                try buffer.commit(
-                    targets.sorted().map {
-                        TextEdit(buffer.text.lineRange($0), "")
-                    },
-                    name: "书签行操作"
-                )
-                buffer.bookmarks.removeAll()
-                didEdit()
-            }
-            catch {
-                SystemIntegration.alert("书签", error.localizedDescription)
-            }
-        }
-        mainWindow?.editor.refresh()
-        refreshUI()
-    }
-
     /// 业务作用：统计用户当前全文及选区，不把字节与字符计数混为一项。
     /// 参数说明: 无。
     /// 返回：明确显示行、字形、标量、UTF-16 和字节数量。

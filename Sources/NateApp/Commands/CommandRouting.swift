@@ -297,7 +297,8 @@ extension ApplicationController {
             }
         case "openSelection", "revealSelection", "openURL": openSelection(id)
         case "bookmark", "nextBookmark", "previousBookmark", "clearBookmarks", "invertBookmarks",
-            "copyBookmarks", "deleteBookmarks", "deleteUnbookmarked":
+            "copyBookmarks", "deleteBookmarks", "deleteUnbookmarked", "cutBookmarks", "replaceBookmarks",
+            "cancelBookmarkAction":
             bookmarkCommand(id)
         case "comment", "blockComment": comment(block: id == "blockComment")
         case "selectMatches", "addMatch": selectMatches(all: id == "selectMatches")

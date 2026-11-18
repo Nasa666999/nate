@@ -115,6 +115,8 @@ extension ApplicationController: NSMenuItemValidation {
             ("切换书签", "bookmark", ""), ("下一个书签", "nextBookmark", ""), ("上一个书签", "previousBookmark", ""),
             ("清空书签", "clearBookmarks", ""), ("反转书签", "invertBookmarks", ""), ("复制书签行", "copyBookmarks", ""),
             ("删除书签行", "deleteBookmarks", ""), ("删除非书签行", "deleteUnbookmarked", ""),
+            ("剪切书签行", "cutBookmarks", ""), ("用剪贴板替换书签行", "replaceBookmarks", ""),
+            ("取消书签行操作", "cancelBookmarkAction", ""),
         ] {
             add(search, title, id, key: key)
         }
@@ -263,6 +265,9 @@ extension ApplicationController: NSMenuItemValidation {
             return true
         }
         if let enabled = validateStyleMarkMenu(menuItem, id: id) {
+            return enabled
+        }
+        if let enabled = validateBookmarkMenu(id) {
             return enabled
         }
         if let action = foldAction(for: id) {

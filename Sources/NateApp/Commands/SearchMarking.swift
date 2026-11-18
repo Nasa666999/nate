@@ -22,6 +22,7 @@ extension ApplicationController {
         let authority = SearchDocumentAuthority(document)
         let snapshot = document.buffer.markSnapshot
         let originalBookmarks = preferences.bookmarkLines ? document.buffer.bookmarks : nil
+        let originalBookmarkGeneration = preferences.bookmarkLines ? document.buffer.bookmarkGeneration : nil
         let scope: ResolvedSearchScope
         do {
             scope = try SearchScope.resolve(
@@ -94,7 +95,9 @@ extension ApplicationController {
                     }),
                     authority.matches(current), !current.buffer.isEditingSuspended,
                     current.buffer.markGeneration == snapshot.generation,
-                    originalBookmarks == nil || current.buffer.bookmarks == originalBookmarks
+                    originalBookmarks == nil
+                        || current.buffer.bookmarks == originalBookmarks
+                            && current.buffer.bookmarkGeneration == originalBookmarkGeneration
                 else {
                     if !self.closing, self.queryGeneration == generation, input.matches(self.findWindow) {
                         self.markFeedback("正文、书签或颜色标记已改变，未发布旧标记。")

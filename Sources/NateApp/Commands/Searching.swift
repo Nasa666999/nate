@@ -234,7 +234,8 @@ extension ApplicationController {
                         selections: document.buffer.selections
                     ),
                     label: document.url?.path ?? document.name,
-                    bookmarks: action == "mark" ? document.buffer.bookmarks : nil
+                    bookmarks: action == "mark" ? document.buffer.bookmarks : nil,
+                    bookmarkGeneration: action == "mark" ? document.buffer.bookmarkGeneration : nil
                 )
             }
         }
@@ -275,6 +276,7 @@ extension ApplicationController {
                                 transaction: nil,
                                 previews: [],
                                 originalBookmarks: nil,
+                                originalBookmarkGeneration: nil,
                                 bookmarkPlan: nil
                             )
                         }
@@ -307,6 +309,7 @@ extension ApplicationController {
                             transaction: prepared,
                             previews: rows,
                             originalBookmarks: capture.bookmarks,
+                            originalBookmarkGeneration: capture.bookmarkGeneration,
                             bookmarkPlan: bookmarks
                         )
                     }
@@ -342,7 +345,9 @@ extension ApplicationController {
                     }
                     // 后台期间手动增删的书签属于更新的用户意图，旧集合不能覆盖它们。
                     if let original = plan.originalBookmarks {
-                        guard document.buffer.bookmarks == original else {
+                        guard document.buffer.bookmarks == original,
+                            document.buffer.bookmarkGeneration == plan.originalBookmarkGeneration
+                        else {
                             throw NateError.message("书签已改变，原标记计划未发布，请重新执行。")
                         }
                     }
