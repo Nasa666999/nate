@@ -57,6 +57,9 @@ extension FindReplaceWindow {
         onDismiss?()
     }
 
+    /// 业务作用：固定完整已确认输入、历史与独立交互偏好，候选和全文草稿不进入持久归档。
+    /// 参数说明: 无。
+    /// 返回：可校验并后台保存的值快照，不提交正文或改变输入上下文。
     public var state: SearchWindowState {
         var result = SearchWindowState()
         result.options = options
@@ -77,6 +80,7 @@ extension FindReplaceWindow {
         result.projectPanels = preferredProjectPanels.sorted()
         result.results = resultPreferences
         result.marking = markPreferences
+        result.styling = stylePreferences
         return result
     }
 
@@ -95,6 +99,7 @@ extension FindReplaceWindow {
         query.stringValue = state.options.query
         presentationPreferences = state.presentation
         resultPreferences = state.results
+        stylePreferences = state.styling
         replacement.stringValue = state.options.replacement
         directory.stringValue = state.directory
         filters.stringValue = state.filters

@@ -118,6 +118,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var markCopyTask: Task<Void, Never>?
     var markCopyGeneration = UUID()
     var markSearchGeneration: UUID?
+    let styleMarks = StyleMarkRuntime()
     var recentFiles: [String] {
         get {
             UserDefaults.standard.stringArray(forKey: "recentFiles") ?? []

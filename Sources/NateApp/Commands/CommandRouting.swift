@@ -21,6 +21,10 @@ extension ApplicationController {
             edit(command)
             return
         }
+        if id.hasPrefix("markStyle:"), let command = styleMarkAction(for: id) {
+            routeStyleMark(command.style, action: command.action)
+            return
+        }
         if id.hasPrefix("language:"), let active {
             active.language = String(id.dropFirst(9))
             active.languageExplicit = true
@@ -160,6 +164,26 @@ extension ApplicationController {
                 inProjects: id == "findProjects"
             )
         case "incrementalSearch": showIncrementalSearch()
+        case "findMark": presentMarkPage()
+        case "nextSearchMark", "previousSearchMark":
+            navigateDocumentMarks(.search, backwards: id == "previousSearchMark")
+        case "clearSearchMarks": clearSearchMarks()
+        case "copySearchMarks": copyDocumentMarks(styles: [.search])
+        case "clearStyleMarks":
+            clearDocumentStyles(
+                DocumentMarkStyle.allCases.filter {
+                    $0 != .search
+                }
+            )
+        case "clearAllMarks": clearDocumentStyles(DocumentMarkStyle.allCases)
+        case "copyStyleMarks":
+            copyDocumentMarks(
+                styles: DocumentMarkStyle.allCases.filter {
+                    $0 != .search
+                }
+            )
+        case "copyAllMarks": copyDocumentMarks(styles: DocumentMarkStyle.allCases)
+        case "styleMatchCase", "styleWholeWord": toggleStyleMarkPreference(id)
         case "showSearchResults": mainWindow?.showSearchResultHistory()
         case "showToolOutput": mainWindow?.showToolOutput()
         case "hideResults": mainWindow?.setResultsVisible(false)

@@ -118,6 +118,7 @@ extension ApplicationController: NSMenuItemValidation {
         ] {
             add(search, title, id, key: key)
         }
+        addStyleMarkMenus(to: search)
         attach(search, to: bar)
         let view = NSMenu(title: "视图")
         for (title, id) in [
@@ -260,6 +261,9 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if let enabled = validateStyleMarkMenu(menuItem, id: id) {
+            return enabled
         }
         if let action = foldAction(for: id) {
             guard !closing, let window = mainWindow, NSApp.keyWindow === window.window,

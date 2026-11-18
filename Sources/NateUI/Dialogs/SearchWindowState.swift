@@ -19,6 +19,7 @@ public struct SearchWindowState: Codable, Sendable {
     public var projectPanels: [Int] = []
     public var results = SearchResultPreferences()
     public var marking = SearchMarkPreferences()
+    public var styling = StyleMarkPreferences()
 
     enum CodingKeys: String, CodingKey {
         case format, options, directory, filters
@@ -26,6 +27,7 @@ public struct SearchWindowState: Codable, Sendable {
         case page, stayAfterReplace, confirmsOpenReplacement, presentation, inputFont, projectPanels
         case results
         case marking
+        case styling
     }
 
     /// 业务作用：建立独立于文档和窗口对象的搜索配置快照，供启动恢复与后台保存使用。
@@ -33,7 +35,7 @@ public struct SearchWindowState: Codable, Sendable {
     /// 返回：普通搜索、空历史和明确文件过滤的默认状态。
     public init() {}
 
-    /// 业务作用：读取既有搜索归档，可选输入偏好或项目选择缺失时采用默认值，其它原字段保持严格解码。
+    /// 业务作用：读取既有搜索归档，可选交互偏好或项目选择缺失时采用默认值，其它原字段保持严格解码。
     /// 参数说明:
     /// - decoder: 当前归档的完整解码上下文。
     /// 返回：可再次校验的配置值；错误字段失败，缺少可选偏好不使既有归档失效。
@@ -62,6 +64,9 @@ public struct SearchWindowState: Codable, Sendable {
         marking =
             try values.decodeIfPresent(SearchMarkPreferences.self, forKey: .marking)
             ?? SearchMarkPreferences()
+        styling =
+            try values.decodeIfPresent(StyleMarkPreferences.self, forKey: .styling)
+            ?? StyleMarkPreferences()
     }
 
     /// 业务作用：在归档解析后和编码前限定配置格式、历史条目和完整文本容量，拒绝无界配置分配。

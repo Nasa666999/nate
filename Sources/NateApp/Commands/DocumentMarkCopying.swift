@@ -1,5 +1,6 @@
 import AppKit
 import NateCore
+import NateUI
 
 extension ApplicationController {
     /// 业务作用：新的标记、清除、编辑或退出撤销旧标记文本复制，迟到输出不能覆盖系统剪贴板。
@@ -15,17 +16,16 @@ extension ApplicationController {
         }
     }
 
-    /// 业务作用：复制一个或多个独立颜色组的真实标记文本，不改变查找输入、书签或正文。
+    /// 业务作用：复制当前真实编辑视图所属文档的一个或多个颜色组，不改变查找输入、书签或正文。
     /// 参数说明:
     /// - styles: 用户明确选择复制的颜色组，重叠正文仅输出一次。
     /// 返回：原文档、标记身份与剪贴板仍有效时发布完整内容；失效、取消或超限保留剪贴板。
     func copyDocumentMarks(styles: [DocumentMarkStyle]) {
         cancelDocumentMarkCopy()
-        guard !closing, let document = active,
-            mainWindow?.hasMarkedEditorInput != true, findWindow?.isEditingInput != true
-        else {
+        guard let context = currentMarkEditor(modifying: false) else {
             return
         }
+        let document = context.document
         let authority = SearchDocumentAuthority(document)
         let snapshot = document.buffer.markSnapshot
         let ranges = Set(styles).flatMap {

@@ -129,12 +129,12 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：旧标记计划失权，实际颜色清除数进入反馈，不增加正文撤销项。
     func clearSearchMarks() {
-        guard !closing, let active, !active.buffer.isEditingSuspended else {
+        guard let context = currentMarkEditor(modifying: true) else {
             return
         }
         cancelDocumentMarkCopy()
         cancelSearchMarking()
-        let count = active.buffer.clearMarks(.search)
+        let count = context.document.buffer.clearMarks(.search)
         mainWindow?.refreshEditors()
         refreshUI()
         markFeedback("已清除 \(count) 个查找标记，书签和其他样式保留。")
