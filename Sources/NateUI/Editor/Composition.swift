@@ -23,6 +23,17 @@ extension EditorView {
     /// - replacementRange: 系统展示坐标中的替换范围。
     /// 返回：仅更新预编辑，不产生历史或修订。
     public func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        guard !confirmingComposition else {
+            return
+        }
+        if let session = composition, !compositionIsCurrent(session) {
+            // 新候选回调不重新授予旧组合权限，失效来源只能撤去，不能覆盖后来选择的正文。
+            composition = nil
+            inputContext?.discardMarkedText()
+            refresh()
+            onStatus?("原输入法组合的正文、选择或权限已改变，请重新输入。")
+            return
+        }
         completionPanel?.hide()
         guard !document.isReadOnly, !document.isEditingSuspended else {
             return
@@ -97,66 +108,7 @@ extension EditorView {
     /// 返回：实际正文变化形成一次撤销单元，相同文字只收束选择；失效组合或准备失败保留原正文与选择。
     public func insertText(_ string: Any, replacementRange: NSRange) {
         let value = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
-        guard !document.isReadOnly, !document.isEditingSuspended else {
-            composition = nil
-            refresh()
-            return
-        }
-        let hadComposition = composition != nil
-        var replacement: ByteRange?
-        if let session = composition {
-            composition = nil
-            guard session.revision == document.revision,
-                session.selectionGeneration == selectionGeneration,
-                session.selectionState == viewSelectionState,
-                session.documentSelectionGeneration == document.selectionGeneration,
-                session.editingGeneration == document.editingAuthorityGeneration
-            else {
-                refresh()
-                return
-            }
-            replacement = session.replacementOverride
-        }
-        else if replacementRange.location != NSNotFound {
-            guard let range = document.text.byteRange(replacementRange) else {
-                return
-            }
-            replacement = range
-        }
-        do {
-            guard synchronizeDocumentSelectionState() else {
-                return
-            }
-            let changed: Bool
-            if replacement == nil, let state = viewSelectionState, case .rectangle = state.shape {
-                changed = try document.commit(
-                    prepareRectangularInput(value, overwrite: !hadComposition && overwrite)
-                )
-            }
-            else {
-                changed = try document.insert(
-                    value,
-                    replacementRange: replacement,
-                    overwrite: !hadComposition && overwrite
-                )
-            }
-            refresh(reveal: true)
-            // 语义输入与实际字节变化分别通知，宏记录原确认文字，元数据收束不触发保存写盘。
-            onTextInput?(value)
-            if changed {
-                onChange?()
-            }
-            else {
-                onSelection?()
-            }
-            if !value.isEmpty && value.utf16.count <= 2 {
-                onCommand?("typingAssistance")
-            }
-        }
-        catch {
-            onStatus?(error.localizedDescription)
-            NSSound.beep()
-        }
+        _ = commitTextInput(value, replacementRange: replacementRange)
     }
 
     /// 业务作用：系统解除标记时提交仍有效的候选，后续解除回调不会重复提交。
@@ -171,10 +123,22 @@ extension EditorView {
 
     /// 业务作用：手动保存、切换或关闭前完成候选生命周期。
     /// 参数说明: 无。
-    /// 返回：已提交的候选与正文一致，系统标记被解除。
-    public func finishComposition() {
-        unmarkText()
+    /// 返回：没有组合或确认成功时为真并解除系统标记；准备失败保留候选且为假，调用方不得继续切换或关闭。
+    @discardableResult
+    public func finishComposition() -> Bool {
+        guard !confirmingComposition else {
+            return false
+        }
+        guard let session = composition else {
+            return true
+        }
+        guard commitTextInput(session.text, replacementRange: NSRange(location: NSNotFound, length: 0)),
+            composition == nil
+        else {
+            return false
+        }
         inputContext?.discardMarkedText()
+        return true
     }
 
     /// 业务作用：向系统说明当前是否有预编辑候选。

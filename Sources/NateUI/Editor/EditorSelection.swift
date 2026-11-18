@@ -46,7 +46,10 @@ extension EditorView {
             onStatus?("文档处于编辑保护，正文选择保持原状。")
             return
         }
-        finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return
+        }
         window?.makeFirstResponder(self)
         let position = bytePosition(at: point)
         let row = document.text.lineNumber(at: position)
@@ -208,8 +211,12 @@ extension EditorView {
     /// 业务作用：全选真实正文，软换行和语法呈现不参与范围。
     /// 参数说明:
     /// - sender: 菜单或键盘来源。
-    /// 返回：仅更新选区。
+    /// 返回：候选确认成功后全选最新正文；确认失败保留候选和原选择。
     @objc public override func selectAll(_ sender: Any?) {
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return
+        }
         guard !document.isEditingSuspended else {
             onStatus?("文档处于编辑保护，正文选择保持原状。")
             return

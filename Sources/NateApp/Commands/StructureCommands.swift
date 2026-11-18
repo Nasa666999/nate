@@ -123,7 +123,10 @@ extension ApplicationController {
                     guard let self, let document, let window else {
                         return
                     }
-                    window.editor.finishComposition()
+                    // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+                    guard window.editor.finishComposition() else {
+                        return
+                    }
                     // 输入法确认可能提交新修订，定位前必须再次核验而不能把旧范围夹紧后使用。
                     guard self.active === document, document.buffer.revision == result.revision,
                         document.language == language, generation == self.structureGeneration,

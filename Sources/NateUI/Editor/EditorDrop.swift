@@ -28,10 +28,12 @@ extension EditorView {
         guard !document.isReadOnly, let text = board.string(forType: .string) else {
             return false
         }
-        finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return false
+        }
         setCaret(bytePosition(at: convert(sender.draggingLocation, from: nil)))
-        insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-        return true
+        return commitTextInput(text, replacementRange: NSRange(location: NSNotFound, length: 0))
     }
 
     /// 业务作用：正文右键菜单复用系统剪贴板与应用编辑命令。

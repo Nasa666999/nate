@@ -144,7 +144,10 @@ extension EditorView {
         guard !document.isEditingSuspended, FoldIndex.supports(language: language, udl: userLanguage) else {
             return
         }
-        finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return
+        }
         synchronizeBracketContext()
         brackets.pending = nil
         guard let context = brackets.context, let selection = primarySelection else {

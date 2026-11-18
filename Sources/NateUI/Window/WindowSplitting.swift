@@ -10,7 +10,9 @@ extension EditorWindow {
             (($0 as? NSScrollView)?.documentView as? EditorView)?.document.id == id
         }
         if secondaryContains {
-            removeSplit()
+            guard removeSplit() else {
+                return
+            }
         }
         if let primary = scroll.documentView as? EditorView, primary.document.id == id {
             editor = primary
@@ -24,7 +26,9 @@ extension EditorWindow {
     /// - vertical: 左右分屏为真，上下分屏为假。
     /// 返回：建立第二个编辑视图，不创建第二个磁盘写入者。
     public func splitEditor(vertical: Bool) {
-        removeSplit()
+        guard removeSplit() else {
+            return
+        }
         editorSplit.isVertical = vertical
         let clone = EditorView(document: editor.document)
         clone.selectedTextHighlightContext = {
@@ -118,12 +122,18 @@ extension EditorWindow {
 
     /// 业务作用：关闭克隆只释放该视图，原文档与保存任务继续有效。
     /// 参数说明: 无。
-    /// 返回：恢复单视图并保留原窗口编辑器。
-    public func removeSplit() {
+    /// 返回：全部候选完成后恢复单视图时为真；任一失败保留原全部视图并为假。
+    @discardableResult
+    public func removeSplit() -> Bool {
+        // 先完整检查所有待移除视图，不能移除第一项之后才发现另一候选无法提交。
         for view in editorSplit.arrangedSubviews.dropFirst() {
-            (view as? NSScrollView)?.documentView.map {
-                ($0 as? EditorView)?.finishComposition()
+            if let editor = (view as? NSScrollView)?.documentView as? EditorView,
+                !editor.finishComposition()
+            {
+                return false
             }
+        }
+        for view in editorSplit.arrangedSubviews.dropFirst() {
             editorSplit.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
@@ -131,5 +141,25 @@ extension EditorWindow {
             editor = primary
             window?.makeFirstResponder(primary)
         }
+        return true
+    }
+
+    /// 业务作用：关闭、保护和保存固定目标文档在全部可见克隆中的最后候选，不能只检查活动视图。
+    /// 参数说明:
+    /// - documentID: 明确目标文档，省略时检查全部当前视图。
+    /// 返回：全部相关候选确认成功或不存在时为真；任一失败保留相关视图并为假。
+    public func finishCompositions(documentID: UUID? = nil) -> Bool {
+        for view in editorSplit.arrangedSubviews {
+            guard let editor = (view as? NSScrollView)?.documentView as? EditorView,
+                documentID == nil || editor.document.id == documentID
+            else {
+                continue
+            }
+            // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+            guard editor.finishComposition() else {
+                return false
+            }
+        }
+        return true
     }
 }

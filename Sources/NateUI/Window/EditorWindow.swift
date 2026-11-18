@@ -314,15 +314,20 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// 业务作用：切换标签时保留各文档视口，避免后台更新抢焦点。
     /// 参数说明:
     /// - document: 新活动文档。
-    /// 返回：正文视图切换为共享缓冲区，原视口保存。
-    public func showDocument(_ document: DocumentBuffer) {
-        editor.finishComposition()
+    /// 返回：确认原候选后切换并保存视口时为真；候选失败时保持原文档与视图并为假。
+    @discardableResult
+    public func showDocument(_ document: DocumentBuffer) -> Bool {
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard editor.finishComposition() else {
+            return false
+        }
         let container = editor.enclosingScrollView ?? scroll
         scrollPositions[editor.document.id] = container.contentView.bounds.origin
         editor.document = document
         editor.refresh()
         container.contentView.scroll(to: scrollPositions[document.id] ?? .zero)
         window?.makeFirstResponder(editor)
+        return true
     }
 
     /// 业务作用：共享正文的每个视图独立映射光标并重绘，后台视图不抢走焦点。

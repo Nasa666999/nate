@@ -6,9 +6,12 @@ extension ApplicationController {
     /// 参数说明:
     /// - document: 需要改变编辑权限的文档。
     /// - value: 是否只读。
-    /// 返回：立即阻止新事务与新保存；解除只读不改变磁盘权限。
+    /// 返回：相关候选确认后改变编辑角色，失败保留原角色；解除只读不改变磁盘权限。
     func setReadOnly(_ document: WorkspaceDocument, value: Bool) {
-        mainWindow?.editor.finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+            return
+        }
         if value {
             document.savePermit?.cancel()
         }
@@ -38,7 +41,10 @@ extension ApplicationController {
         guard !document.bindingChange else {
             return
         }
-        mainWindow?.editor.finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+            return
+        }
         // 固定最终输入后收束写入，监视期间只允许显式磁盘载入改变缓冲区。
         let generation = document.targetGeneration
         document.setEditingSuspension(.monitoringPreparation, active: true)

@@ -47,6 +47,12 @@ extension ApplicationController {
         Task {
             for id in targets {
                 await closeDocument(id)
+                // 取消或保护失败仍保留原标签时停止整组动作，不能继续弹出其它关闭确认并遮住未确认候选。
+                if documents.contains(where: {
+                    $0.buffer.id == id
+                }) {
+                    break
+                }
             }
         }
     }

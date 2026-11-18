@@ -92,6 +92,10 @@ extension ApplicationController {
         case "selectBracketPair": mainWindow?.editor.navigateBracket(.selectPair)
         case "selectInsideBracket": mainWindow?.editor.navigateBracket(.selectInside)
         case "new":
+            // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+            guard mainWindow?.editor.finishComposition() != false else {
+                return
+            }
             _ = newDocument()
             buildMenus()
         case "open":
@@ -102,7 +106,10 @@ extension ApplicationController {
                 }
             }
         case "save":
-            mainWindow?.editor.finishComposition()
+            // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+            guard mainWindow?.editor.finishComposition() != false else {
+                return
+            }
             guard let active else {
                 return
             }
@@ -121,6 +128,10 @@ extension ApplicationController {
                 }
             }
         case "saveAll":
+            // 全部手动保存也必须包含当前最终输入，不能以旧正文保存成功掩盖仍未确认的候选。
+            guard mainWindow?.finishCompositions() != false else {
+                return
+            }
             Task {
                 for document in documents where document.url != nil {
                     _ = await flush(document)
@@ -165,7 +176,10 @@ extension ApplicationController {
                 }
             }
             else {
-                mainWindow?.editor.finishComposition()
+                // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+                guard mainWindow?.editor.finishComposition() != false else {
+                    return
+                }
                 performHistoryAction(backwards: id == "undo")
             }
         case "cancelHistoryAction":

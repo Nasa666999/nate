@@ -39,6 +39,10 @@ extension ApplicationController {
         if closing {
             return .terminateCancel
         }
+        // 确认失败的候选仍属于用户输入，不能先进入退出保护再丢弃未进入正文的内容。
+        guard mainWindow?.finishCompositions() != false else {
+            return .terminateCancel
+        }
         // 项目定义和正文分别保护，尚未确认的虚拟结构不能在正文保存后被静默丢弃。
         guard permitsProjectTermination() else {
             return .terminateCancel
@@ -66,7 +70,6 @@ extension ApplicationController {
         cancelCompletion()
         cancelStructure()
         externalCommandTask?.cancel()
-        mainWindow?.editor.finishComposition()
         let protectedDocuments = documents
         // 先冻结所有现有正文，再等待外部动作，使最后确认的正文在等待期间保持不变。
         for document in protectedDocuments {

@@ -517,7 +517,10 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         // 切换标签结束原视图的增量会话，旧计算不能沿稳定 UUID 导航到新活动正文。
         cancelIncrementalSearch(resetOrigin: true)
-        mainWindow?.editor.finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard mainWindow?.editor.finishComposition() != false else {
+            return
+        }
         cancelCompletion()
         activeID = id
         mainWindow?.showDocument(document.buffer)

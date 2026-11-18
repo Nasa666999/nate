@@ -136,6 +136,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var gutterWidth: CGFloat = 62
     var layouts: [Int: LineLayout] = [:]
     var composition: CompositionSession?
+    var confirmingComposition = false
     var dragAnchor: Int?
     var dragColumn: CGFloat?
     var dragRevision: UInt64?
@@ -161,7 +162,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         composition != nil
     }
     var displayTree: PieceTree {
-        guard let composition, composition.revision == document.revision else {
+        guard !confirmingComposition, let composition, composition.revision == document.revision else {
             return document.text
         }
         // 候选前的虚拟定位只进入展示树，确认前的自动保存和撤销来源仍保持原正文。
@@ -512,12 +513,15 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
 
     /// 业务作用：焦点离开前收束有效输入法组合，候选窗口不能继续修改后台视图。
     /// 参数说明: 无。
-    /// 返回：遵循原生焦点交接，已确认内容只进入一次事务。
+    /// 返回：候选成功确认后交接焦点；失败返回假并保留原输入视图，已确认内容只进入一次事务。
     public override func resignFirstResponder() -> Bool {
         // 交出焦点即收回等待中的导航权，后续候选收束和焦点返回不能复活旧请求。
         focusGeneration = UUID()
         clipboard.cancel()
-        finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return false
+        }
         dismissCompletion()
         // 焦点即使稍后返回同一光标，也不能重新执行此前尚未确认的导航意图。
         brackets.pending = nil

@@ -68,6 +68,12 @@ extension EditorView {
             onStatus?("文档处于编辑保护，输入与选择保持原状。")
             return
         }
+        if composition != nil, command.hasPrefix("move") || command == "selectAll:" {
+            // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+            guard finishComposition() else {
+                return
+            }
+        }
         if composition == nil,
             command.hasPrefix("move") || command == "selectAll:" || command == "cancelOperation:"
         {
@@ -137,7 +143,10 @@ extension EditorView {
     /// - forward: 是否删除光标后的字形。
     /// 返回：一个可撤销事务；虚拟空白删除不写入空格，完整字形边界无法在共享预算内确定时整次不执行。
     func delete(forward: Bool) {
-        finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return
+        }
         if let state = viewSelectionState, case .rectangle(let shape) = state.shape, !shape.zeroWidth {
             // 正宽矩形即使实际字节范围为空也仍有列意图，删除不能退化为移除下一字形或整份 Tab。
             insertText("", replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -245,9 +254,12 @@ extension EditorView {
     /// - vertical: 可见行方向，跨过已收起的正文。
     /// - edge: 当前行首或行尾。
     /// - extend: 是否保留固定端。
-    /// 返回：完整计算后更新全部视图选区，不产生修改修订；边界预算不足时保留全部原选择。
+    /// 返回：候选确认成功后完整计算全部视图选区；导航不另改正文，确认或边界预算失败保留当前状态。
     func move(horizontal: Int = 0, vertical: Int = 0, edge: Int = 0, extend: Bool = false) {
-        finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return
+        }
         do {
             var navigation = try GraphemeNavigation(text: document.text)
             let after = try viewSelections.map {
@@ -289,8 +301,12 @@ extension EditorView {
     /// 业务作用：按 Unicode 词字符边界跳转，不把字节位置当字符下标。
     /// 参数说明:
     /// - forward: 跳转方向。
-    /// 返回：有完整边界证据时光标移动，正文保持不变；共享字形预算不足时保留原位置并说明原因。
+    /// 返回：候选确认且边界证据完整时移动光标；导航不另改正文，确认或字形预算失败保留当前状态。
     func moveWord(forward: Bool) {
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard finishComposition() else {
+            return
+        }
         guard let selection = primarySelection else {
             return
         }
@@ -325,8 +341,12 @@ extension EditorView {
     /// 业务作用：统一主动导航后的焦点与选区通知。
     /// 参数说明:
     /// - position: 已验证字节位置。
-    /// 返回：显示对应光标且不修改正文。
+    /// 返回：没有候选和编辑保护且字节合法时定位；否则保留当前选择，不替用户丢弃候选。
     public func setCaret(_ position: Int) {
+        guard composition == nil, !document.isEditingSuspended else {
+            onStatus?("请先确认或取消候选并解除编辑保护，再定位正文。")
+            return
+        }
         guard document.text.isBoundary(position) else {
             return
         }

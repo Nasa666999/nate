@@ -149,7 +149,10 @@ extension ApplicationController {
             document.bindingChange = false
         }
         let catalog = codecs
-        mainWindow?.editor.finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+            return
+        }
         guard await waitForOriginalSave(document) else {
             return
         }
@@ -284,6 +287,10 @@ extension ApplicationController {
     /// - encoding: 重新解释代码页，为空时按文件证据识别。
     /// 返回：旧正文仍可撤销；基线只取新读取内容。
     func reload(_ document: WorkspaceDocument, encoding: TextEncoding? = nil) async {
+        // 重新载入会替换已提交正文，先确认目标全部候选，失败不能撤去覆盖层后改用磁盘旧内容。
+        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+            return
+        }
         guard !document.bindingChange else {
             return
         }
@@ -378,8 +385,10 @@ extension ApplicationController {
         guard !closing, !document.closing else {
             return
         }
-        if activeID == id {
-            mainWindow?.editor.finishComposition()
+        // 先完成该正文所有克隆的候选，再取得关闭保护；失败不能归档不含候选的旧正文后移除窗口。
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard mainWindow?.finishCompositions(documentID: id) != false else {
+            return
         }
         document.closing = true
         closingDocumentIDs.insert(id)

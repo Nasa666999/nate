@@ -11,7 +11,10 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：完整样式可用时交给系统处理分页和输出；失败显示原因，不启动打印。
     func printDocument() {
-        mainWindow?.editor.finishComposition()
+        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
+        guard mainWindow?.editor.finishComposition() != false else {
+            return
+        }
         guard let active else {
             return
         }
