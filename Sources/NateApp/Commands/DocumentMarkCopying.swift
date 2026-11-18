@@ -18,7 +18,7 @@ extension ApplicationController {
 
     /// 业务作用：复制当前真实编辑视图所属文档的一个或多个颜色组，不改变查找输入、书签或正文。
     /// 参数说明:
-    /// - styles: 用户明确选择复制的颜色组，重叠正文仅输出一次。
+    /// - styles: 用户明确选择的颜色组，同色连续覆盖合并，跨颜色重叠独立输出。
     /// 返回：原文档、标记身份与剪贴板仍有效时发布完整内容；失效、取消或超限保留剪贴板。
     func copyDocumentMarks(styles: [DocumentMarkStyle]) {
         cancelDocumentMarkCopy()
@@ -28,7 +28,9 @@ extension ApplicationController {
         let document = context.document
         let authority = SearchDocumentAuthority(document)
         let snapshot = document.buffer.markSnapshot
-        let ranges = Set(styles).flatMap {
+        let groups = Set(styles).sorted {
+            $0.rawValue < $1.rawValue
+        }.map {
             snapshot.marks.ranges(for: $0)
         }
         let request = markCopyGeneration
@@ -61,7 +63,7 @@ extension ApplicationController {
             do {
                 let worker = Task.detached(priority: .userInitiated) {
                     try MarkedTextExport.prepare(
-                        ranges,
+                        groups,
                         tree: snapshot.document.text,
                         permit: {
                             !Task.isCancelled
