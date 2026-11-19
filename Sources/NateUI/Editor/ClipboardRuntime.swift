@@ -81,7 +81,7 @@ struct ClipboardProof {
             && document.selectionGeneration == snapshot.selectionGeneration
             && editor.selectionGeneration == selection && editor.focusGeneration == focus
             && document.editingAuthorityGeneration == editing && editor.composition == nil
-            && editor.viewSelectionState == snapshot.selectionState
+            && editor.viewSelectionState == snapshot.selectionState && !editor.hasStaleRectangleLayout
             && editor.window === window && window.isKeyWindow && window.firstResponder === editor
             && editor.font == font && editor.wrapLines == wrapping && editor.rtl == rtl
             && (!modifying

@@ -43,9 +43,12 @@ extension ApplicationController {
     }
 
     /// 业务作用：快捷搜索只接收真正正文焦点，不把查找字段、候选或克隆的旧选择当作来源。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - allowingStaleRectangle: 仅按既有字节历史执行的动作可接受需要重新定义视觉边缘的矩形。
     /// 返回：工作区、正文、焦点与保护状态均有效时的真实来源，否则为空。
-    func quickFindContext() -> (WorkspaceDocument, EditorWindow, EditorView)? {
+    func quickFindContext(allowingStaleRectangle: Bool = false) -> (
+        WorkspaceDocument, EditorWindow, EditorView
+    )? {
         // 保护阶段已固定选区元数据，快捷定位也不能在此期间改写它；只读本身仍允许导航。
         guard !closing, let document = active, let window = mainWindow,
             let native = window.window, NSApp.keyWindow === native,
@@ -59,6 +62,10 @@ extension ApplicationController {
                 $0 === document
             })
         else {
+            return nil
+        }
+        // 新视觉动作不能沿已经改变的像素解释旧选择；纯字节历史由调用方明确保留原控制证据。
+        guard allowingStaleRectangle || !window.editor.hasStaleRectangleLayout else {
             return nil
         }
         return (document, window, window.editor)

@@ -28,6 +28,10 @@ public struct PreparedTextInsertion: Sendable {
             throw NateError.message("输入需要原文档的完整选择身份。")
         }
         _ = try original.validated(in: snapshot.text, permit: permit)
+        // 旧矩形必须先重新定义列边缘，不能经普通输入入口绕过半个 Tab 的保护。
+        if case .rectangle(let rectangle) = original.shape, rectangle.needsRevalidation {
+            throw NateError.message("矩形正文已经改变，请重新选择边缘后再输入。")
+        }
         let size = value.utf8.count
         guard size <= 64 * 1024 * 1024 else {
             throw NateError.message("单次输入超过 64 MiB，正文保持原状。")

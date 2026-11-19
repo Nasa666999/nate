@@ -27,6 +27,8 @@ public struct ClipboardBlockLayout: Sendable {
     public let additionalRows: Int
     public let newRowPadding: Int
     public let originTabX: Double?
+    public let layoutContext: RectangleLayoutContext?
+    public let originProjection: RectangleEditProjection?
 
     /// 业务作用：绑定完整块的原生边缘和文档末尾扩展意图，正文构建始终留在后台事务内。
     /// 参数说明:
@@ -35,18 +37,24 @@ public struct ClipboardBlockLayout: Sendable {
     /// - additionalRows: 超过临时文档末尾的真实载荷行数，包括空行。
     /// - newRowPadding: 新建非空行在插入内容前需要的空格列。
     /// - originTabX: 首行空操作仍停留在未展开 Tab 内时的明确视觉位置。
+    /// - layoutContext: 首行仍需保留视觉列时使用的目标原生布局证据。
+    /// - originProjection: 首行未展开 Tab 内的真实范围与两侧保留列数。
     /// 返回：不授予发布权限的完整布局意图。
     public init(
         baseRemoval: ByteRange? = nil,
         targets: [ClipboardBlockTarget],
         additionalRows: Int = 0,
         newRowPadding: Int = 0,
-        originTabX: Double? = nil
+        originTabX: Double? = nil,
+        layoutContext: RectangleLayoutContext? = nil,
+        originProjection: RectangleEditProjection? = nil
     ) {
         self.baseRemoval = baseRemoval
         self.targets = targets
         self.additionalRows = additionalRows
         self.newRowPadding = newRowPadding
         self.originTabX = originTabX
+        self.layoutContext = layoutContext
+        self.originProjection = originProjection
     }
 }

@@ -207,6 +207,87 @@ public struct PositionMap: Sendable {
         }
         return position == entry.upper && entry.lower < entry.upper ? entry.resultEnd : entry.resultStart
     }
+
+    /// 业务作用：外部实际范围使用明确前后侧映射时仍拒绝哨兵和溢出，不能用非法投影扩大视觉编辑权限。
+    /// 参数说明:
+    /// - position: 修改前的非负合法位置，不得为系统哨兵。
+    /// - affinity: 同点插入或替换边界的明确归属。
+    /// 返回：可表示且非哨兵的完整位置；目标正文边界仍由所属快照复验。
+    public func checkedMap(_ position: Int, affinity: PositionAffinity) throws -> Int {
+        guard position >= 0, position != NSNotFound else {
+            throw NateError.invalidRange
+        }
+        if let permutation {
+            let value = permutation.map(position, affinity: affinity)
+            guard value >= 0, value != NSNotFound else {
+                throw NateError.invalidRange
+            }
+            return value
+        }
+        var lower = 0, upper = entries.count
+        var exact: Int?
+        var delta = 0
+        if affinity == .after {
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2
+                if entries[middle].lower <= position {
+                    lower = middle + 1
+                }
+                else {
+                    upper = middle
+                }
+            }
+            if lower > 0 {
+                let entry = entries[lower - 1]
+                if position <= entry.upper {
+                    exact = entry.resultEnd
+                }
+                else {
+                    delta = entry.deltaAfter
+                }
+            }
+        }
+        else {
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2
+                if entries[middle].upper < position {
+                    lower = middle + 1
+                }
+                else {
+                    upper = middle
+                }
+            }
+            if lower < entries.count {
+                let entry = entries[lower]
+                if position < entry.lower {
+                    delta = lower > 0 ? entries[lower - 1].deltaAfter : 0
+                }
+                else {
+                    exact =
+                        position == entry.upper && entry.lower < entry.upper
+                        ? entry.resultEnd : entry.resultStart
+                }
+            }
+            else {
+                delta = entries.last?.deltaAfter ?? 0
+            }
+        }
+        let value: Int
+        if let exact {
+            value = exact
+        }
+        else {
+            let result = position.addingReportingOverflow(delta)
+            guard !result.overflow else {
+                throw NateError.invalidRange
+            }
+            value = result.partialValue
+        }
+        guard value >= 0, value != NSNotFound else {
+            throw NateError.invalidRange
+        }
+        return value
+    }
 }
 
 public enum PositionAffinity: Sendable {

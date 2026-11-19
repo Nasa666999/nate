@@ -47,7 +47,7 @@ extension EditorView {
     /// - line: 当前请求呈现的逻辑行。
     /// 返回：已验证的缓存；缺少结果时暂用中性样式并安排后台计算。
     func syntaxTokens(for line: Int) -> [SyntaxToken] {
-        guard composition == nil, let language else {
+        guard composition == nil || confirmingComposition, let language else {
             return []
         }
         let resource = language.id + ":" + (userLanguage?.name ?? "")

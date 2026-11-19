@@ -29,7 +29,11 @@ public struct SelectionState: Sendable, Equatable, Codable {
     public var retainedBytes: Int {
         let edges: Int
         if case .rectangle(let rectangle) = shape {
-            edges = rectangle.edges.count * MemoryLayout<SelectionVirtualEdge>.stride
+            edges =
+                rectangle.edges.count * MemoryLayout<SelectionVirtualEdge>.stride
+                + (rectangle.layoutContext.map {
+                    $0.fontName.utf8.count + $0.styleIdentity.utf8.count + 128
+                } ?? 0)
         }
         else {
             edges = 0
@@ -66,7 +70,9 @@ public struct SelectionState: Sendable, Equatable, Codable {
                 zeroWidth: rectangle.zeroWidth,
                 edges: rectangle.edges,
                 anchorID: rectangle.anchorID,
-                headID: rectangle.headID
+                headID: rectangle.headID,
+                layoutContext: rectangle.layoutContext,
+                needsRevalidation: rectangle.needsRevalidation
             )
             let edges = Dictionary(
                 uniqueKeysWithValues: validated.edges.map {

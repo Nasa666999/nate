@@ -71,6 +71,10 @@ public struct PreparedClipboardCopy: Sendable {
             permit() && ContinuousClock.now < budget.deadline
         }
         _ = try original.validated(in: snapshot.text, permit: allowed)
+        // 缺少当前列权限时不能把旧投影变为新的剪贴板内容，剪切也依赖同一完整复制门禁。
+        if case .rectangle(let rectangle) = original.shape, rectangle.needsRevalidation {
+            throw NateError.message("矩形正文已经改变，请重新选择边缘后再复制。")
+        }
         let sources: [ClipboardCopySource]
         let shape: ClipboardShape
         let primary: Int

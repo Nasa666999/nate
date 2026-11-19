@@ -30,13 +30,27 @@ extension SelectionState {
     ) throws -> SelectionState {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         let rectangular: Bool
-        if case .rectangle = shape {
-            rectangular = true
+        if case .rectangle(let rectangle) = shape {
+            rectangular = !rectangle.needsRevalidation
         }
         else {
             rectangular = false
         }
         var rows: Set<Int> = []
+        let projections: [UUID: RectangleEditProjection]
+        if case .rectangle(let rectangle) = shape {
+            projections = Dictionary(
+                uniqueKeysWithValues: rectangle.edges.compactMap {
+                    edge in
+                    edge.projection.map {
+                        (edge.selectionID, $0)
+                    }
+                }
+            )
+        }
+        else {
+            projections = [:]
+        }
         for (index, entry) in entries.enumerated() {
             if index & 255 == 0 {
                 if checkingCancellation {
@@ -60,6 +74,13 @@ extension SelectionState {
                 throw NateError.message("虚拟光标必须位于真实行尾。")
             }
             if rectangular {
+                if let projection = projections[entry.id] {
+                    _ = try projection.validated(
+                        for: value,
+                        in: text,
+                        checkingCancellation: checkingCancellation
+                    )
+                }
                 // 完整矩形每行只能有一个目标，跨行范围或重复行会破坏块粘贴和行键权限。
                 guard value.range.upper <= body.upper, rows.insert(row).inserted else {
                     throw NateError.message("矩形选择包含跨行范围或重复逻辑行。")
@@ -74,7 +95,7 @@ extension SelectionState {
                 }
             }
         }
-        if case .rectangle(let rectangle) = shape,
+        if case .rectangle(let rectangle) = shape, !rectangle.needsRevalidation,
             let anchorID = rectangle.anchorID, let headID = rectangle.headID
         {
             // 纵向端点必须覆盖全部现存目标，不能用一个内部主项伪装成完整矩形的活动边缘。

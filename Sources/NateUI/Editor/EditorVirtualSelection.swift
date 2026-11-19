@@ -9,7 +9,7 @@ extension EditorView {
     /// - y: 逻辑行在文档视图中的纵向起点。
     /// 返回：存在当前矩形行时完成实际正文部分的选择呈现并为真，其它选择由普通呈现继续处理。
     func drawRectangularSelection(in layout: LineLayout, line: Int, y: CGFloat) -> Bool {
-        guard composition == nil, let state = viewSelectionState,
+        guard composition == nil, !hasStaleRectangleLayout, let state = viewSelectionState,
             case .rectangle(let rectangle) = state.shape,
             let entry = state.entries.first(where: {
                 document.text.lineNumber(at: $0.selection.range.lower) == line
@@ -86,6 +86,9 @@ extension EditorView {
     /// - selection: 当前视图中的一项完整选择。
     /// 返回：相对真实原生光标的水平偏移，不向正文写入空格。
     func selectionCaretOffset(for selection: TextSelection) -> CGFloat {
+        guard !hasStaleRectangleLayout else {
+            return CGFloat(selection.virtualColumn) * CGFloat(rectangleColumnWidth)
+        }
         var columns = selection.virtualColumn
         if composition == nil, let state = viewSelectionState,
             case .rectangle(let rectangle) = state.shape,
@@ -156,6 +159,9 @@ extension EditorView {
     /// - y: 当前逻辑行在文档视图中的纵向起点。
     /// 返回：只绘制虚拟尾部背景，正文、选择与其它视图保持不变。
     func drawVirtualRectangle(in layout: LineLayout, line: Int, y: CGFloat) {
+        guard !hasStaleRectangleLayout else {
+            return
+        }
         guard composition == nil, let state = viewSelectionState,
             case .rectangle(let rectangle) = state.shape,
             let entry = state.entries.first(where: {

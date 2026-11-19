@@ -73,7 +73,9 @@ extension EditorView {
                         oldRows[row] = entry
                     }
                 }
-                if case .rectangle(let rectangle) = state.shape {
+                if case .rectangle(let rectangle) = state.shape,
+                    rectangle.layoutContext == currentRectangleLayoutContext
+                {
                     oldRectangle = rectangle
                 }
             }
@@ -168,7 +170,8 @@ extension EditorView {
                 zeroWidth: suffix,
                 edges: edges,
                 anchorID: fixedID,
-                headID: head
+                headID: head,
+                layoutContext: currentRectangleLayoutContext
             )
             let state = try SelectionState(
                 entries: entries,

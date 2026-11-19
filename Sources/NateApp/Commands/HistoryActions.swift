@@ -28,7 +28,8 @@ extension ApplicationController {
     /// - backwards: 为真撤销，为假重做。
     /// 返回：成功后刷新实际活动正文；等待期间改动、取消或超量均保留最新正文与历史。
     func performHistoryAction(backwards: Bool) {
-        guard historyAction.task == nil, let (document, window, editor) = quickFindContext(),
+        guard historyAction.task == nil,
+            let (document, window, editor) = quickFindContext(allowingStaleRectangle: true),
             let source = document.buffer.historyRequest(backwards: backwards)
         else {
             return
@@ -47,7 +48,9 @@ extension ApplicationController {
             [weak self, weak window, weak editor] in
             guard let self, let window, let editor, !Task.isCancelled,
                 self.historyAction.generation == request,
-                let (active, currentWindow, currentEditor) = self.quickFindContext(),
+                let (active, currentWindow, currentEditor) = self.quickFindContext(
+                    allowingStaleRectangle: true
+                ),
                 active === document, currentWindow === window, currentEditor === editor,
                 authority.matches(document), editor.selectionGeneration == selection,
                 editor.focusGeneration == focus, self.searchNavigationGeneration == movement,

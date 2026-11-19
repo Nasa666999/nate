@@ -11,6 +11,7 @@ extension EditorView {
         _ content: ClipboardPasteContent,
         deadline: ContinuousClock.Instant
     ) throws -> ClipboardBlockLayout? {
+        try requireCurrentRectangleLayout()
         guard let state = viewSelectionState, state == document.selectionState,
             selectionStateRevision == document.revision
         else {
@@ -147,7 +148,11 @@ extension EditorView {
             targets: targets,
             additionalRows: count - targets.count,
             newRowPadding: Int(padding.rounded()),
-            originTabX: tabX
+            originTabX: tabX,
+            layoutContext: source.currentRectangleLayoutContext,
+            originProjection: originalShape?.edges.first(where: {
+                $0.selectionID == selected[0].id
+            })?.projection
         )
     }
 }

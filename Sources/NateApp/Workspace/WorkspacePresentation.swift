@@ -80,7 +80,8 @@ extension ApplicationController {
         let structureState: String
         if window.editor.document.id == active.buffer.id {
             let editor = window.editor
-            let structure: String? = editor.bracketAnalysisStatus ?? editor.foldingAnalysisStatus
+            let structure: String? =
+                editor.rectangleLayoutStatus ?? editor.bracketAnalysisStatus ?? editor.foldingAnalysisStatus
             let syntax: String? = structure ?? editor.syntaxAnalysisStatus
             let marks: String? = syntax ?? editor.markDisplayStatus
             let temporary: String? = marks ?? editor.textHighlightDisplayStatus

@@ -162,11 +162,11 @@ extension SelectionState {
         )
     }
 
-    /// 业务作用：正文位置映射保持每项稳定身份，普通编辑后的矩形像素意图由调用者明确决定是否继续保留。
+    /// 业务作用：正文位置映射保持每项稳定身份，原生矩形失去当前列权限时仍保留其完整意图。
     /// 参数说明:
     /// - positions: 原正文到结果正文的完整位置图。
     /// - text: 即将显示的结果正文。
-    /// - preservingRectangle: 明确保留矩形形态，适用于已验证的完整行移动。
+    /// - preservingRectangle: 已验证的完整行移动允许矩形继续工作，其它原生变化保留形态并暂停视觉修改。
     /// - permit: 完整映射和验证共用的执行资格。
     /// 返回：身份、主项和方向连续的完整选择；越界、无效矩形或取消时不返回部分选择。
     public func mapped(
@@ -265,7 +265,9 @@ extension SelectionState {
             virtual[entry.id] = column
         }
         let mappedShape: SelectionShape
-        if preservingRectangle, case .rectangle(let rectangle) = shape {
+        if case .rectangle(let rectangle) = shape,
+            preservingRectangle || rectangle.layoutContext != nil || rectangle.needsRevalidation
+        {
             var anchorID = rectangle.anchorID
             var headID = rectangle.headID
             if let anchor = entries.first(where: {
@@ -286,11 +288,33 @@ extension SelectionState {
                 anchorID = forward ? low.id : high.id
                 headID = forward ? high.id : low.id
             }
+            let resultByID = Dictionary(
+                uniqueKeysWithValues: result.map {
+                    ($0.id, $0.selection)
+                }
+            )
             let edges = try rectangle.edges.map {
-                try SelectionVirtualEdge(
+                var projection = $0.projection
+                if let original = projection, let selected = resultByID[$0.selectionID] {
+                    var range = original.range
+                    for map in positions {
+                        try budget.check()
+                        let lower = try map.checkedMap(range.lower, affinity: .after)
+                        let upper = range.isEmpty ? lower : try map.checkedMap(range.upper, affinity: .before)
+                        range = ByteRange(lower, upper)
+                    }
+                    // 原 Tab 被替换或锚点失去原文关系时只撤销视觉编辑证据，选择身份与主项仍随正文保留。
+                    projection = try? RectangleEditProjection(
+                        range: range,
+                        leadingSpaces: original.leadingSpaces,
+                        trailingSpaces: original.trailingSpaces
+                    ).validated(for: selected, in: text, checkingCancellation: checkingCancellation)
+                }
+                return try SelectionVirtualEdge(
                     selectionID: $0.selectionID,
                     leadingColumns: virtual[$0.selectionID] ?? 0,
-                    trailingColumns: $0.trailingColumns
+                    trailingColumns: $0.trailingColumns,
+                    projection: projection
                 )
             }
             mappedShape = .rectangle(
@@ -300,7 +324,9 @@ extension SelectionState {
                     zeroWidth: rectangle.zeroWidth,
                     edges: edges,
                     anchorID: anchorID,
-                    headID: headID
+                    headID: headID,
+                    layoutContext: rectangle.layoutContext,
+                    needsRevalidation: rectangle.needsRevalidation || !preservingRectangle
                 )
             )
         }

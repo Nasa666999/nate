@@ -18,6 +18,7 @@ extension EditorView {
         guard composition == nil, !document.isEditingSuspended else {
             throw NateError.message("请先结束候选或编辑保护，再改变完整选择。")
         }
+        let state = try bindingRectangleLayout(state)
         if window?.firstResponder === self {
             try document.setSelectionState(state)
         }
@@ -44,6 +45,8 @@ extension EditorView {
     /// 返回：完整记录新几何；无效集合撤销稳定状态并提示原因，后续输入不使用旧文档选择。
     func synchronizeLegacyViewSelectionState() {
         clipboard.cancel()
+        rectangleProjectionGeneration = nil
+        rectangleProjectionCache = [:]
         selectionGeneration = UUID()
         do {
             if let viewSelectionState {
@@ -95,6 +98,8 @@ extension EditorView {
         selectionStateRevision = document.revision
         if changed {
             clipboard.cancel()
+            rectangleProjectionGeneration = nil
+            rectangleProjectionCache = [:]
             selectionGeneration = UUID()
         }
         needsDisplay = true

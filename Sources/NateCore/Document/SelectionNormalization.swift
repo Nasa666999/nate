@@ -20,6 +20,10 @@ extension SelectionState {
         let budget = SelectionPreparationBudget(permit: permit)
         try budget.check()
         _ = try validated(in: text, permit: permit)
+        // 映射后的旧列不能降为普通范围继续处理，否则半个 Tab 的选择会扩大为完整字节删除。
+        if case .rectangle(let rectangle) = shape, rectangle.needsRevalidation {
+            throw NateError.message("矩形正文已经改变，请重新选择边缘；原范围与身份保留。")
+        }
         var comparisons = 0
         let ordered = try entries.indices.sorted {
             comparisons += 1

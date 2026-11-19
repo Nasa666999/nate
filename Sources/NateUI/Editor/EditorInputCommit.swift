@@ -55,6 +55,7 @@ extension EditorView {
             confirmingComposition = false
         }
         do {
+            try requireCurrentRectangleLayout()
             let changed: Bool
             if replacement == nil, let state = viewSelectionState, case .rectangle = state.shape {
                 changed = try document.commit(

@@ -71,7 +71,16 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             updateLanguageResource()
         }
     }
-    var languageResource: Data?
+    var languageResource: Data? {
+        didSet {
+            if oldValue != languageResource {
+                updateRectangleStyleIdentity()
+            }
+        }
+    }
+    var rectangleStyleIdentity = ""
+    var rectangleProjectionGeneration: UUID?
+    var rectangleProjectionCache: [UUID: RectangleEditProjection] = [:]
     let brackets = BracketViewState()
     let folds = FoldViewState()
     public var bracketLimits = BracketAnalysisLimits() {
@@ -82,6 +91,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var userLanguage: UDLDefinition? {
         didSet {
             if oldValue?.originalXML != userLanguage?.originalXML {
+                updateRectangleStyleIdentity()
                 invalidateSyntax()
             }
         }
@@ -180,6 +190,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public init(document: DocumentBuffer) {
         self.document = document
         super.init(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        updateRectangleStyleIdentity()
         if let state = document.selectionState {
             adoptViewSelectionState(state)
         }
@@ -247,6 +258,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         )
         if !wrapLines || metrics != layoutMetrics {
             projection.measured.removeAll()
+        }
+        if metrics != layoutMetrics {
+            clipboard.cancel()
         }
         layoutMetrics = metrics
         setFrameSize(

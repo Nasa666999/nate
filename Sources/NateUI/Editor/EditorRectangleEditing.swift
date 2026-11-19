@@ -15,6 +15,7 @@ extension EditorView {
     /// - overwrite: 零宽矩形的单行输入是否覆盖行内一个完整字形或 Tab 内的一列。
     /// 返回：保留原完整选择作为撤销来源的事务；目标或布局失效时不发布中间选择。
     func prepareRectangularInput(_ value: String, overwrite: Bool) throws -> PreparedTransaction {
+        try requireCurrentRectangleLayout()
         let snapshot = document.snapshot
         guard let state = viewSelectionState, state == snapshot.selectionState,
             selectionStateRevision == snapshot.revision, case .rectangle(let shape) = state.shape
@@ -38,6 +39,7 @@ extension EditorView {
     func rectangularInsertionTargets(_ value: String, overwrite: Bool = false) throws
         -> [SelectionInsertionTarget]
     {
+        try requireCurrentRectangleLayout()
         guard let state = viewSelectionState, state == document.selectionState,
             selectionStateRevision == document.revision, case .rectangle(let shape) = state.shape
         else {
@@ -71,6 +73,7 @@ extension EditorView {
     /// 参数说明: 无。
     /// 返回：普通选择为空，矩形返回完整逐行投影；超时、取消或失效时保留原剪贴板与选择。
     func rectangularCopyProjections() throws -> [ClipboardCopyProjection]? {
+        try requireCurrentRectangleLayout()
         guard let state = viewSelectionState, case .rectangle(let shape) = state.shape else {
             return nil
         }
@@ -90,6 +93,14 @@ extension EditorView {
             if a.position > b.position || a.position == b.position && a.offset > b.offset {
                 swap(&a, &b)
             }
+            try verifyRectangleProjection(
+                RectangleEditProjection(
+                    range: ByteRange(a.tab?.lower ?? a.position, b.tab?.upper ?? b.position),
+                    leadingSpaces: a.tab == nil ? 0 : a.offset,
+                    trailingSpaces: b.tab == nil ? 0 : b.columns - b.offset
+                ),
+                for: entry
+            )
             if let tab = a.tab, a.tab == b.tab {
                 projections.append(
                     ClipboardCopyProjection(
@@ -131,6 +142,7 @@ extension EditorView {
         shape: RectangleSelectionShape,
         value: String
     ) throws -> (target: ClipboardBlockTarget, tabX: Double?) {
+        try verifyRectangleProjection(rectangleSourceProjection(entry, shape: shape), for: entry)
         if shape.zeroWidth, value.isEmpty {
             let row = document.text.lineNumber(at: entry.selection.range.lower)
             let edge = try rectangleEditingEdge(row: row, x: shape.headX)
@@ -164,6 +176,7 @@ extension EditorView {
     /// 参数说明: 无。
     /// 返回：当前矩形主项的展示替换意图；普通选择为空，无法取得完整边缘时失败。
     func rectangularCompositionTarget() throws -> SelectionInsertionTarget? {
+        try requireCurrentRectangleLayout()
         guard let state = viewSelectionState, case .rectangle(let shape) = state.shape else {
             return nil
         }
@@ -181,6 +194,7 @@ extension EditorView {
     /// - forward: 为真时删除光标右侧，否则删除左侧。
     /// 返回：全部目标准备完成的原子事务；字形预算、布局或选择失效时保留原正文与完整状态。
     func prepareRectangularDeletion(forward: Bool) throws -> PreparedTransaction {
+        try requireCurrentRectangleLayout()
         let snapshot = document.snapshot
         guard let state = viewSelectionState, state == snapshot.selectionState,
             selectionStateRevision == snapshot.revision, case .rectangle(let shape) = state.shape,
@@ -200,6 +214,7 @@ extension EditorView {
             guard ContinuousClock.now < deadline else {
                 throw NateError.message("列删除边缘准备超过两秒，全部选择保持原状。")
             }
+            try verifyRectangleProjection(rectangleSourceProjection(entry, shape: shape), for: entry)
             let target: SelectionInsertionTarget
             if entry.selection.virtualColumn > 0 {
                 let column = max(0, entry.selection.virtualColumn - (forward ? 0 : 1))
@@ -236,7 +251,8 @@ extension EditorView {
             let edges = try shape.edges.map {
                 try SelectionVirtualEdge(
                     selectionID: $0.selectionID,
-                    leadingColumns: virtual[$0.selectionID] ?? 0
+                    leadingColumns: virtual[$0.selectionID] ?? 0,
+                    projection: $0.projection
                 )
             }
             after = .rectangle(
@@ -246,7 +262,8 @@ extension EditorView {
                     zeroWidth: true,
                     edges: edges,
                     anchorID: shape.anchorID,
-                    headID: shape.headID
+                    headID: shape.headID,
+                    layoutContext: shape.layoutContext
                 )
             )
         }
@@ -285,6 +302,10 @@ extension EditorView {
         var range = ByteRange(a.tab?.lower ?? a.position, b.tab?.upper ?? b.position)
         var leading = a.tab == nil ? 0 : a.offset
         var trailing = b.tab == nil ? 0 : b.columns - b.offset
+        try verifyRectangleProjection(
+            RectangleEditProjection(range: range, leadingSpaces: leading, trailingSpaces: trailing),
+            for: entry
+        )
         var virtual = 0
         if range.isEmpty, entry.selection.virtualColumn > 0 {
             if !value.isEmpty || padEmpty {
@@ -316,6 +337,27 @@ extension EditorView {
             leadingSpaces: leading,
             trailingSpaces: trailing,
             virtualColumnAfter: virtual
+        )
+    }
+
+    /// 业务作用：明确建立矩形时固定实际字节及 Tab 两侧的列数，尚不授权或执行任何正文修改。
+    /// 参数说明:
+    /// - entry: 当前真实行的稳定逻辑选择。
+    /// - shape: 用户明确建立的原生视觉边缘。
+    /// 返回：当前排版完整投影；字形或 Tab 边界不能确定时失败。
+    func rectangleSourceProjection(_ entry: SelectionEntry, shape: RectangleSelectionShape) throws
+        -> RectangleEditProjection
+    {
+        let row = document.text.lineNumber(at: entry.selection.range.lower)
+        var a = try rectangleEditingEdge(row: row, x: shape.anchorX)
+        var b = try rectangleEditingEdge(row: row, x: shape.headX)
+        if a.position > b.position || a.position == b.position && a.offset > b.offset {
+            swap(&a, &b)
+        }
+        return try RectangleEditProjection(
+            range: ByteRange(a.tab?.lower ?? a.position, b.tab?.upper ?? b.position),
+            leadingSpaces: a.tab == nil ? 0 : a.offset,
+            trailingSpaces: b.tab == nil ? 0 : b.columns - b.offset
         )
     }
 

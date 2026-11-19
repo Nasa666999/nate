@@ -7,7 +7,9 @@ extension EditorView: NSMenuItemValidation {
     /// 返回：当前语义可执行时启用；只检查剪贴板类型，不读取其正文。
     public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         let focused = window?.isKeyWindow == true && window?.firstResponder === self
-        let selected = viewSelectionState != nil && selectionStateRevision == document.revision
+        let selected =
+            viewSelectionState != nil && selectionStateRevision == document.revision
+            && !hasStaleRectangleLayout
         switch menuItem.action {
         case #selector(copy(_:)):
             return focused && selected && composition == nil

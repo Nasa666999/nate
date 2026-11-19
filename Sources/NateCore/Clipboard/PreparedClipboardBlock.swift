@@ -33,6 +33,10 @@ public struct PreparedClipboardBlock: Sendable {
             permit() && ContinuousClock.now < budget.deadline
         }
         _ = try original.validated(in: snapshot.text, permit: allowed)
+        // 旧正文上的块边缘不能直接沿新正文展开，避免把保留列当成新的粘贴目标。
+        if case .rectangle(let rectangle) = original.shape, rectangle.needsRevalidation {
+            throw NateError.message("矩形正文已经改变，请重新选择边缘后再粘贴。")
+        }
         let rectanglePayload: Bool
         if case .rectangle = content.payload.shape {
             rectanglePayload = true
@@ -197,9 +201,10 @@ public struct PreparedClipboardBlock: Sendable {
                     anchorX: x,
                     headX: x,
                     zeroWidth: true,
-                    edges: [SelectionVirtualEdge(selectionID: entry.id)],
+                    edges: [SelectionVirtualEdge(selectionID: entry.id, projection: layout.originProjection)],
                     anchorID: entry.id,
-                    headID: entry.id
+                    headID: entry.id,
+                    layoutContext: layout.layoutContext
                 )
             )
         }

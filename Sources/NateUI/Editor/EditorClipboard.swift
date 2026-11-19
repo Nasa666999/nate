@@ -47,6 +47,7 @@ extension EditorView {
     /// - boardCount: 需要绑定的系统剪贴板变化身份，宏和历史直接输入时为空。
     /// 返回：完整发布证据；焦点、候选、权限或选择不足时明确失败。
     func beginClipboardOperation(modifying: Bool, boardCount: Int?) throws -> ClipboardProof {
+        try requireCurrentRectangleLayout()
         guard let window, window.isKeyWindow, window.firstResponder === self else {
             throw NateError.message("剪贴板动作需要实际正文编辑焦点。")
         }

@@ -65,6 +65,10 @@ public struct PreparedSelectionInsertion: Sendable {
             throw NateError.message("逐项输入需要完整源选择和一至十万个独立目标。")
         }
         _ = try original.validated(in: snapshot.text, permit: permit)
+        // 明确结果坐标不能替旧矩形重新授予当前列权限，原正文变化后仍须用户重选。
+        if case .rectangle(let rectangle) = original.shape, rectangle.needsRevalidation {
+            throw NateError.message("矩形正文已经改变，请重新选择边缘后再输入。")
+        }
         let primary = primaryID ?? original.primaryID
         guard
             targets.contains(where: {
