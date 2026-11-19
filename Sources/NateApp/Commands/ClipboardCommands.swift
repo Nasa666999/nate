@@ -126,6 +126,21 @@ extension ApplicationController {
             return editor.validateMenuItem(
                 NSMenuItem(title: "", action: #selector(EditorView.pasteAsPlainText(_:)), keyEquivalent: "")
             )
+        case "pasteHTMLSource": return quickFindContext()?.2.specialPasteAvailable(.htmlSource) == true
+        case "pasteRTFSource": return quickFindContext()?.2.specialPasteAvailable(.rtfSource) == true
+        case "pasteBinary": return quickFindContext()?.2.specialPasteAvailable(.binary) == true
+        case "copyBinary", "cutBinary":
+            guard let editor = quickFindContext()?.2 else {
+                return false
+            }
+            let selector = id == "copyBinary" ? #selector(EditorView.copy(_:)) : #selector(EditorView.cut(_:))
+            return editor.validateMenuItem(
+                NSMenuItem(
+                    title: "",
+                    action: selector,
+                    keyEquivalent: ""
+                )
+            )
         default: return nil
         }
     }

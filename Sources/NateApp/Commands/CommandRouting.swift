@@ -398,6 +398,11 @@ extension ApplicationController {
         case "clearClipboardHistory": clearClipboardHistory()
         case "clipboardCopyLine", "clipboardAdaptEndings": toggleClipboardOption(id)
         case "pasteAsPlainText": quickFindContext()?.2.pasteAsPlainText(nil)
+        case "pasteHTMLSource": quickFindContext()?.2.pasteSpecial(.htmlSource)
+        case "pasteRTFSource": quickFindContext()?.2.pasteSpecial(.rtfSource)
+        case "pasteBinary": quickFindContext()?.2.pasteSpecial(.binary)
+        case "copyBinary": quickFindContext()?.2.copy(nil)
+        case "cutBinary": quickFindContext()?.2.cut(nil)
         case "cancelClipboard": mainWindow?.editor.cancelClipboardOperation()
         case "recordMacro":
             guard !macroPlaying, macroPlayback.task == nil else {

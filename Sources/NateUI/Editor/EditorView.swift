@@ -116,6 +116,14 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var onClipboardCopy: ((Bool, Bool) -> Void)?
     public var copyLineWithoutSelection = true
     public var adaptClipboardLineEndings = false
+    public var clipboardMarkupDecoder:
+        (@Sendable (Data, ClipboardMarkupFormat, ContinuousClock.Instant) throws -> String)?
+    {
+        didSet {
+            // 编码来源改变后旧解码不再拥有正文发布权，即使后来恢复相同资源也不能继续原粘贴。
+            clipboard.cancel()
+        }
+    }
     let clipboard = ClipboardRuntime()
     /// 业务作用：复合编辑持有剪贴板动作身份，外来的复制、剪切或粘贴会撤销旧步骤的继续资格。
     /// 参数说明: 无。

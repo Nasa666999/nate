@@ -52,6 +52,7 @@ extension EditorWindow {
         clone.usesDefaultKeyboardRoutes = editor.usesDefaultKeyboardRoutes
         clone.copyLineWithoutSelection = editor.copyLineWithoutSelection
         clone.adaptClipboardLineEndings = editor.adaptClipboardLineEndings
+        clone.clipboardMarkupDecoder = editor.clipboardMarkupDecoder
         clone.onClipboardCapture = {
             [weak self] in self?.onClipboardCapture?($0)
         }

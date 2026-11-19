@@ -122,6 +122,7 @@ extension ApplicationController {
             "recordMacro", "save", "saveAll", "saveAs", "saveCopy", "fileTasks",
             "find", "replace", "findFiles", "findProjects", "findMark", "findNext", "findPrevious",
             "pasteAsPlainText", "clipboardHistory", "cancelClipboard", "macroLibrary",
+            "pasteHTMLSource", "pasteRTFSource", "pasteBinary", "copyBinary", "cutBinary",
             "lineSort", "cancelLineSort", "selectionChanged", "typingAssistance", "compositionBegan",
             "compositionEnded", "clipboardBegan", "unrecordedEditorCommand",
         ]

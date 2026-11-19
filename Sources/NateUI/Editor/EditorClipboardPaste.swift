@@ -185,7 +185,7 @@ extension EditorView {
     /// - deadline: 所有阶段共同截止。
     /// - adapting: 本次输入实际使用的换行适配选项。
     /// 返回：事务提交成功后为真，包含相同字节仅更新选择的成功；失败不发布正文。
-    private func applyClipboardContent(
+    func applyClipboardContent(
         _ content: ClipboardPasteContent,
         proof: ClipboardProof,
         deadline: ContinuousClock.Instant,

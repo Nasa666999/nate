@@ -61,6 +61,15 @@ extension ApplicationController: NSMenuItemValidation {
         add(edit, "无选区复制与剪切整行", "clipboardCopyLine")
         add(edit, "粘贴换行适配当前文档", "clipboardAdaptEndings")
         add(edit, "粘贴为纯文本", "pasteAsPlainText", key: "V")
+        let specialPaste = NSMenu(title: "特殊粘贴与二进制")
+        for (title, id) in [
+            ("粘贴 HTML 源码", "pasteHTMLSource"), ("粘贴 RTF 源码", "pasteRTFSource"),
+            ("复制二进制内容", "copyBinary"), ("剪切二进制内容", "cutBinary"),
+            ("粘贴二进制内容", "pasteBinary"),
+        ] {
+            add(specialPaste, title, id)
+        }
+        attach(specialPaste, to: edit)
         add(edit, "取消剪贴板准备", "cancelClipboard")
         let cases = NSMenu(title: "大小写")
         for (title, command) in [
