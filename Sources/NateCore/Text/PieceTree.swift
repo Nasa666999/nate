@@ -14,6 +14,7 @@ final class PieceNode: Sendable {
     let last: UInt8?
     let contentFingerprint: UInt64
     let fingerprintPower: UInt64
+    let printableASCII: Bool
 
     /// 业务作用：缓存叶片的坐标与行索引，限制每次局部扫描的规模。
     /// 参数说明:
@@ -31,12 +32,17 @@ final class PieceNode: Sendable {
         last = bytes.last
         var fingerprint: UInt64 = 0
         var power: UInt64 = 1
+        var printableASCII = true
         for byte in bytes {
             fingerprint = fingerprint &* 1_099_511_628_211 &+ UInt64(byte) &+ 1
             power = power &* 1_099_511_628_211
+            if byte < 32 || byte > 126 {
+                printableASCII = false
+            }
         }
         contentFingerprint = fingerprint
         fingerprintPower = power
+        self.printableASCII = printableASCII
     }
 
     /// 业务作用：聚合子树索引，跨节点 CRLF 只计一行。
@@ -56,6 +62,7 @@ final class PieceNode: Sendable {
         last = right.last ?? left.last
         contentFingerprint = left.contentFingerprint &* right.fingerprintPower &+ right.contentFingerprint
         fingerprintPower = left.fingerprintPower &* right.fingerprintPower
+        printableASCII = left.printableASCII && right.printableASCII
     }
 
     /// 业务作用：以文件真实换行统计逻辑行，CRLF 不重复计算。

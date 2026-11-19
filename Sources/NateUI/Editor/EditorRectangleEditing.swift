@@ -369,6 +369,10 @@ extension EditorView {
     private func rectangleEditingEdge(row: Int, x: Double) throws -> RectangleEditingEdge {
         let body = document.text.lineRange(row, includeEnding: false)
         let layout = layoutLine(row)
+        // 原生字形缺席时不授予视觉列写入资格，已有选择和正文必须完整保留。
+        if let reason = layout.unavailableReason {
+            throw NateError.message(reason)
+        }
         let y = layout.caret(at: 0).midY
         let raw = min(
             body.upper,

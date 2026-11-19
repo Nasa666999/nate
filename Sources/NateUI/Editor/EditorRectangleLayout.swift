@@ -156,6 +156,7 @@ extension EditorView {
     func updateRectangleStyleIdentity() {
         var hash = SHA256()
         hash.update(data: Data("NateRectangleStyles".utf8))
+        hash.update(data: EditorNativeLayoutPolicy.identityData)
         for data in [languageResource ?? Data(), userLanguage?.originalXML ?? Data()] {
             hash.update(data: Data(String(data.count).utf8))
             hash.update(data: Data([0]))

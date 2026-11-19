@@ -58,7 +58,7 @@ extension EditorView {
                     )
                 )
             ]
-            x = temporary.rectangleCaretX(at: range.lower, virtual: primary.selection.virtualColumn)
+            x = try temporary.rectangleCaretX(at: range.lower, virtual: primary.selection.virtualColumn)
             originalShape = nil
         case .rectangle(let shape):
             source = self
@@ -114,11 +114,12 @@ extension EditorView {
                 }
                 let point = try source.rectangleHit(row: row, x: x)
                 let body = source.document.text.lineRange(row, includeEnding: false)
+                let end = try source.rectangleCaretX(at: body.upper, virtual: 0)
                 let virtual =
                     point == body.upper
                     ? max(
                         0,
-                        (x - source.rectangleCaretX(at: body.upper, virtual: 0)) / source.rectangleColumnWidth
+                        (x - end) / source.rectangleColumnWidth
                     ) : 0
                 guard virtual.isFinite, virtual <= 1_000_000 else {
                     throw NateError.message("块粘贴定位超过一百万空白列。")

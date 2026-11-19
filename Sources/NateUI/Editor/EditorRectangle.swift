@@ -138,10 +138,10 @@ extension EditorView {
                 )
             }
             let fixed =
-                anchorX ?? oldRectangle?.anchorX
+                try anchorX ?? oldRectangle?.anchorX
                 ?? rectangleCaretX(at: first.selection.anchor, virtual: first.selection.virtualColumn)
             let active =
-                headX ?? oldRectangle?.headX
+                try headX ?? oldRectangle?.headX
                 ?? rectangleCaretX(at: first.selection.head, virtual: first.selection.virtualColumn)
             let low =
                 entries.min {
@@ -207,10 +207,14 @@ extension EditorView {
     /// 参数说明:
     /// - offset: 当前正文的合法端点。
     /// - virtual: 行尾之后尚未写入的空白列。
-    /// 返回：相对正文左边缘的真实像素位置，虚拟部分使用当前字体的空格列宽。
-    func rectangleCaretX(at offset: Int, virtual: Int) -> Double {
+    /// 返回：相对正文左边缘的真实像素位置，虚拟部分使用当前字体空格列宽；缺少原生布局证据时失败。
+    func rectangleCaretX(at offset: Int, virtual: Int) throws -> Double {
         let row = document.text.lineNumber(at: offset)
         let layout = layoutLine(row)
+        // 没有真实光标位置时不能生成零列或 NaN 供后续虚拟空白计算使用。
+        if let reason = layout.unavailableReason {
+            throw NateError.message(reason)
+        }
         let units = document.text.utf16Offset(byte: offset) ?? layout.originUTF16
         return Double(layout.caret(at: units - layout.originUTF16).minX)
             + Double(virtual) * rectangleColumnWidth

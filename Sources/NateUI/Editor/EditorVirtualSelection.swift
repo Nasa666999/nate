@@ -174,7 +174,10 @@ extension EditorView {
         else {
             return
         }
-        let end = layout.caret(at: layout.content.rendered.length)
+        guard layout.renderedRange.upper == layout.range.upper else {
+            return
+        }
+        let end = layout.caret(at: layout.characterCount)
         let width = CGFloat(rectangleColumnWidth)
         NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6).setFill()
         NSRect(

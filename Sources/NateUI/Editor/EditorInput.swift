@@ -236,6 +236,10 @@ extension EditorView {
                     let target = projection.adjacentLine(to: row, direction: vertical)
                     let units = document.text.utf16Offset(byte: head) ?? 0
                     let layout = layoutLine(row)
+                    // 上下移动依赖两行实际字形，任一行缺少证据时不能发布近似光标或部分目标。
+                    if let reason = layout.unavailableReason ?? layoutLine(target).unavailableReason {
+                        throw NateError.message(reason)
+                    }
                     let p = layout.caret(at: units - layout.originUTF16)
                     head = bytePosition(at: NSPoint(x: gutterWidth + p.minX, y: projection.y(of: target) + 9))
                 }

@@ -35,7 +35,7 @@ extension EditorView {
                 let anchor = try rectangleHit(row: row, x: anchorX)
                 let head = try rectangleHit(row: row, x: headX)
                 let body = document.text.lineRange(row, includeEnding: false)
-                let end = rectangleCaretX(at: body.upper, virtual: 0)
+                let end = try rectangleCaretX(at: body.upper, virtual: 0)
                 let leading = max(0, min(anchorX, headX) - end) / width
                 let far = anchorX >= headX ? anchor : head
                 let ending = far == body.upper ? max(0, max(anchorX, headX) - end) / width : 0
@@ -73,6 +73,10 @@ extension EditorView {
     func rectangleHit(row: Int, x: Double) throws -> Int {
         let body = document.text.lineRange(row, includeEnding: false)
         let layout = layoutLine(row)
+        // 暂停排版的行没有像素到原字节的证据，不能用空布局建立矩形目标。
+        if let reason = layout.unavailableReason {
+            throw NateError.message(reason)
+        }
         let hitY = layout.caret(at: 0).midY
         let raw = min(
             body.upper,

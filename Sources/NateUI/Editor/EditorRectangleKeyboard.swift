@@ -58,8 +58,20 @@ extension EditorView {
         else {
             fixed = state.primary
             active = state.primary
-            fixedX = rectangleCaretX(at: fixed.selection.anchor, virtual: fixed.selection.virtualColumn)
-            activeX = rectangleCaretX(at: active.selection.head, virtual: active.selection.virtualColumn)
+            do {
+                fixedX = try rectangleCaretX(
+                    at: fixed.selection.anchor,
+                    virtual: fixed.selection.virtualColumn
+                )
+                activeX = try rectangleCaretX(
+                    at: active.selection.head,
+                    virtual: active.selection.virtualColumn
+                )
+            }
+            catch {
+                onStatus?(error.localizedDescription)
+                return
+            }
         }
         let anchorRow = document.text.lineNumber(at: fixed.selection.anchor)
         var headRow = document.text.lineNumber(at: active.selection.head)

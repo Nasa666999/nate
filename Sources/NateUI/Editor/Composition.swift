@@ -214,7 +214,7 @@ extension EditorView {
     /// 参数说明:
     /// - range: 系统请求的展示范围。
     /// - actualRange: 实际候选锚点范围。
-    /// 返回：屏幕坐标中的原生字形光标矩形。
+    /// 返回：屏幕坐标中的原生字形光标矩形；没有布局证据时返回空矩形及 NSNotFound 范围。
     public func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
         let tree = displayTree
         let requested = range.location == NSNotFound ? selectedRange().location : range.location
@@ -223,6 +223,11 @@ extension EditorView {
             ?? 0
         let line = tree.lineNumber(at: offset)
         let layout = layoutLine(line)
+        // 候选仍由原组合持有，没有字形证据时不能向系统提供伪造的输入锚点。
+        guard layout.unavailableReason == nil else {
+            actualRange?.pointee = NSRange(location: NSNotFound, length: 0)
+            return .zero
+        }
         let units = tree.utf16Offset(byte: offset) ?? 0
         var rect = layout.caret(at: units - layout.originUTF16)
         rect.origin.x += gutterWidth
@@ -243,6 +248,10 @@ extension EditorView {
             return NSNotFound
         }
         let local = convert(window.convertPoint(fromScreen: point), from: nil)
+        // 没有实际字形就没有可信像素命中，文本服务必须收到系统哨兵而非原光标的替代位置。
+        guard layoutLine(projection.line(at: max(0, local.y - 8))).unavailableReason == nil else {
+            return NSNotFound
+        }
         return displayTree.utf16Offset(byte: bytePosition(at: local)) ?? NSNotFound
     }
 }

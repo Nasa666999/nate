@@ -301,7 +301,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// - line: 真实逻辑行号。
     /// 返回：本视图私有的 TextKit 2 段落缓存。
     func layoutLine(_ line: Int) -> LineLayout {
+        let viewport = visibleRect.offsetBy(dx: -gutterWidth, dy: 0)
         if let cached = layouts[line] {
+            cached.updateViewport(viewport)
             return cached
         }
         let tree = displayTree
@@ -316,9 +318,18 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 ? max(80, (enclosingScrollView?.contentSize.width ?? 900) - gutterWidth - 16) : 1_000_000,
             tokens: tokens,
             rtl: rtl,
-            appearance: effectiveAppearance
+            appearance: effectiveAppearance,
+            viewport: wrapLines ? nil : viewport
         )
-        if layouts.count > 512 {
+        // 原生段落的字符与字形都占用缓存，不能仅按行数允许大量长段落同时保留。
+        if layouts.count >= EditorNativeLayoutPolicy.maximumCachedLines
+            || layouts.values.reduce(
+                0,
+                {
+                    $0 + $1.content.rendered.length
+                }
+            ) > EditorNativeLayoutPolicy.maximumCachedCharacters - layout.content.rendered.length
+        {
             layouts.removeAll()
         }
         layouts[line] = layout
@@ -357,6 +368,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         for line in visibleLines {
             let layout = layoutLine(line)
             let y = projection.y(of: line) + 8
+            if layout.unavailableReason != nil {
+                layout.draw(at: NSPoint(x: visibleRect.minX + gutterWidth, y: y), in: context)
+                continue
+            }
             if line == active {
                 NSColor.controlAccentColor.withAlphaComponent(0.05).setFill()
                 NSRect(x: gutterWidth, y: y, width: bounds.width - gutterWidth, height: lineHeight).fill()
@@ -377,22 +392,19 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             }
             drawVirtualRectangle(in: layout, line: line, y: y)
             drawBracketMatch(in: layout, y: y)
-            for fragment in layout.fragments {
-                context.saveGState()
-                fragment.draw(
-                    at: NSPoint(
-                        x: gutterWidth + fragment.layoutFragmentFrame.minX,
-                        y: y + fragment.layoutFragmentFrame.minY
-                    ),
-                    in: context
-                )
-                context.restoreGState()
-            }
+            layout.draw(at: NSPoint(x: gutterWidth, y: y), in: context)
             if showSymbols {
-                drawSymbols(line: line, layout: layout, y: y)
+                drawSymbols(layout: layout, y: y)
             }
-            if composition == nil && caretVisible && window?.firstResponder === self {
+            if composition == nil && caretVisible && window?.firstResponder === self
+                && layout.unavailableReason == nil
+            {
                 for selection in viewSelections where tree.lineNumber(at: selection.head) == line {
+                    guard selection.head >= layout.renderedRange.lower,
+                        selection.head <= layout.renderedRange.upper
+                    else {
+                        continue
+                    }
                     if let offset = tree.utf16Offset(byte: selection.head) {
                         var rect = layout.caret(at: offset - layout.originUTF16)
                         rect.origin.x += gutterWidth + selectionCaretOffset(for: selection)
@@ -403,7 +415,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                     }
                 }
             }
-            if let composition, line == tree.lineNumber(at: composition.originalRange.lower) {
+            if let composition, layout.unavailableReason == nil,
+                line == tree.lineNumber(at: composition.originalRange.lower)
+            {
                 let start = tree.utf16Offset(byte: composition.originalRange.lower) ?? 0
                 let caret = layout.caret(
                     at: start - layout.originUTF16 + composition.virtualPadding
@@ -468,40 +482,12 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let width = wrapLines ? viewport.width : contentWidth
         if abs(frame.height - height) > 0.5 || abs(frame.width - width) > 0.5 {
             setFrameSize(NSSize(width: width, height: height))
+            needsDisplay = true
         }
         if projection.measurementsChanged {
             restoreViewportAnchor(viewportAnchor)
             needsDisplay = true
         }
-    }
-
-    /// 业务作用：为不可见字符提供呈现标记，显示开关不改写文件。
-    /// 参数说明:
-    /// - line: 当前行。
-    /// - layout: 本行原生布局。
-    /// - y: 本行视图纵坐标。
-    /// 返回：绘制空格、Tab 和行终止标记。
-    func drawSymbols(line: Int, layout: LineLayout, y: CGFloat) {
-        let text = displayTree.text(in: layout.range)
-        var offset = 0
-        for ch in text {
-            if ch == " " || ch == "\t" {
-                let position = layout.caret(at: offset)
-                NSAttributedString(
-                    string: ch == " " ? "·" : "→",
-                    attributes: [
-                        .font: font, .foregroundColor: NSColor.tertiaryLabelColor,
-                    ]
-                ).draw(at: NSPoint(x: gutterWidth + position.minX, y: y))
-            }
-            offset += ch.utf16.count
-        }
-        let end = layout.caret(at: offset)
-        NSAttributedString(
-            string: "¬",
-            attributes: [.font: font, .foregroundColor: NSColor.tertiaryLabelColor]
-        )
-        .draw(at: NSPoint(x: gutterWidth + end.minX, y: y))
     }
 
     /// 业务作用：主动导航时显示当前选区，后台保存不会调用此入口。

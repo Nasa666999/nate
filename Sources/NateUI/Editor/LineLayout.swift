@@ -4,13 +4,22 @@ import NateSyntax
 
 @MainActor
 final class LineLayout {
-    let manager: NSTextLayoutManager
-    let content: EditorContentManager
+    private(set) var manager: NSTextLayoutManager
+    private(set) var content: EditorContentManager
     let range: ByteRange
     let originUTF16: Int
     var fragments: [NSTextLayoutFragment] = []
     var height: CGFloat = 20
     var width: CGFloat = 0
+    private let ascii: ASCIILineWindow?
+    private(set) var unavailableReason: String?
+
+    var renderedRange: ByteRange {
+        ascii?.renderedRange ?? content.projection
+    }
+    var characterCount: Int {
+        ascii == nil ? content.rendered.length : range.count
+    }
 
     /// 业务作用：只为当前可见段落建立原生字形、双向排版和命中映射。
     /// 参数说明:
@@ -21,6 +30,8 @@ final class LineLayout {
     /// - tokens: 当前快照语法呈现。
     /// - rtl: 段落基础方向。
     /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
+    /// - viewport: 不换行时的真实可见正文矩形，省略时保留完整原生段落流程。
+    /// - nativeASCII: 已证明独立 ASCII 的有界内部段落，关闭上下文连字与字距调整。
     /// 返回：只读 TextKit 2 布局缓存，控制字符只在呈现副本中使用等长占位，原文与坐标保持一致。
     init(
         snapshot: DocumentSnapshot,
@@ -29,21 +40,60 @@ final class LineLayout {
         width: CGFloat,
         tokens: [SyntaxToken],
         rtl: Bool,
-        appearance: NSAppearance
+        appearance: NSAppearance,
+        viewport: NSRect? = nil,
+        nativeASCII: Bool = false
     ) {
         self.range = range
         originUTF16 = snapshot.text.utf16Offset(byte: range.lower) ?? 0
+        if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {
+            ascii = ASCIILineWindow(
+                snapshot: snapshot,
+                range: range,
+                font: font,
+                appearance: appearance
+            )
+        }
+        else {
+            ascii = nil
+        }
+        if let ascii, let viewport {
+            ascii.updateViewport(viewport)
+            content = ascii.content
+            manager = ascii.manager
+            height = ascii.height
+            self.width = ascii.width
+            return
+        }
+        // 原生引擎会排完整个段落，缺少安全窗口证据时必须在复制原文之前关闭超预算排版。
+        guard range.count <= EditorNativeLayoutPolicy.maximumParagraphBytes else {
+            unavailableReason = "此逻辑行超过 1 MiB 原生段落预算，当前字形呈现已暂停；完整正文、历史和保存内容保持原状。"
+            content = EditorContentManager(
+                snapshot: snapshot,
+                projection: ByteRange(range.lower, range.lower),
+                rendered: NSAttributedString(string: "")
+            )
+            manager = NSTextLayoutManager()
+            content.addTextLayoutManager(manager)
+            return
+        }
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
         paragraph.defaultTabInterval =
             max(1, NSAttributedString(string: " ", attributes: [.font: font]).size().width) * 4
         paragraph.tabStops = []
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: ThemePalette.resolved(.textColor, appearance: appearance),
+            .paragraphStyle: paragraph,
+        ]
+        if nativeASCII {
+            attributes[.ligature] = 0
+            attributes[.kern] = 0
+        }
         let value = NSMutableAttributedString(
             string: LineControlPresentation.render(snapshot.text.text(in: range)),
-            attributes: [
-                .font: font, .foregroundColor: ThemePalette.resolved(.textColor, appearance: appearance),
-                .paragraphStyle: paragraph,
-            ]
+            attributes: attributes
         )
         for token in tokens where token.range.lower < range.upper && token.range.upper > range.lower {
             let clipped = ByteRange(max(range.lower, token.range.lower), min(range.upper, token.range.upper))
@@ -84,6 +134,11 @@ final class LineLayout {
     /// - point: 段落内像素位置。
     /// 返回：段落内合法 UTF-16 位置；系统未命中时按最近真实端点处理，不把系统哨兵用于正文偏移。
     func character(at point: NSPoint) -> Int {
+        if let ascii {
+            let result = ascii.character(at: point)
+            synchronizeASCIIProjection()
+            return result
+        }
         for fragment in fragments {
             for line in fragment.textLineFragments {
                 let box = line.typographicBounds.offsetBy(
@@ -114,6 +169,11 @@ final class LineLayout {
     /// - local: 段落内 UTF-16 位置。
     /// 返回：段落内光标矩形。
     func caret(at local: Int) -> NSRect {
+        if let ascii {
+            let result = ascii.caret(at: local)
+            synchronizeASCIIProjection()
+            return result
+        }
         for fragment in fragments {
             for line in fragment.textLineFragments {
                 let range = line.characterRange
@@ -136,6 +196,12 @@ final class LineLayout {
     /// - range: 本段落内的真实字节选区。
     /// 返回：可能包含多个方向和视觉行的呈现矩形。
     func selectionRects(_ range: ByteRange) -> [NSRect] {
+        guard unavailableReason == nil else {
+            return []
+        }
+        if let ascii {
+            return ascii.selectionRects(range)
+        }
         guard !range.isEmpty, range.lower >= self.range.lower, range.upper <= self.range.upper,
             let a = content.snapshot.text.utf16Offset(byte: range.lower),
             let b = content.snapshot.text.utf16Offset(byte: range.upper),
@@ -164,6 +230,59 @@ final class LineLayout {
             return true
         }
         return result
+    }
+
+    /// 业务作用：滚动保留完整行坐标，只替换已有原生等宽证据的视口片段。
+    /// 参数说明:
+    /// - viewport: 当前实际可见正文区域。
+    /// 返回：普通段落保持原布局，长 ASCII 行同步有界投影。
+    func updateViewport(_ viewport: NSRect) {
+        ascii?.updateViewport(viewport)
+        synchronizeASCIIProjection()
+    }
+
+    /// 业务作用：文本服务投影与当前实际原生片段保持一致，不借旧窗口表示新视口。
+    /// 参数说明: 无。
+    /// 返回：窗口改变时重建只读内容适配，完整正文、行范围和字节位置不变。
+    private func synchronizeASCIIProjection() {
+        guard let ascii, content.projection != ascii.renderedRange else {
+            return
+        }
+        content = ascii.content
+        manager = ascii.manager
+    }
+
+    /// 业务作用：所有字形仍由 TextKit 2 绘制，安全长行只平移当前原生单行片段。
+    /// 参数说明:
+    /// - origin: 完整逻辑行在编辑视图中的起点。
+    /// - context: 当前实际绘制上下文。
+    /// 返回：完整原生段落或有界原生窗口完成呈现，不修改内核文本。
+    func draw(at origin: NSPoint, in context: CGContext) {
+        if let unavailableReason {
+            NSAttributedString(
+                string: unavailableReason,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12),
+                    .foregroundColor: NSColor.systemOrange,
+                ]
+            ).draw(at: origin)
+            return
+        }
+        if let ascii {
+            ascii.draw(at: origin, in: context)
+            return
+        }
+        for fragment in fragments {
+            context.saveGState()
+            fragment.draw(
+                at: NSPoint(
+                    x: origin.x + fragment.layoutFragmentFrame.minX,
+                    y: origin.y + fragment.layoutFragmentFrame.minY
+                ),
+                in: context
+            )
+            context.restoreGState()
+        }
     }
 }
 

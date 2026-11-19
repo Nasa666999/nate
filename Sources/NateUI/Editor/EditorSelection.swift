@@ -5,17 +5,22 @@ extension EditorView {
     /// 业务作用：将原生字形命中映射到完整 UTF-8 边界。
     /// 参数说明:
     /// - point: 本视图坐标。
-    /// 返回：有效正文位置，超出行尾时停在行尾。
+    /// 返回：有效正文位置，超出行尾时停在行尾；缺少字形时保留原光标并反馈原因。
     func bytePosition(at point: NSPoint) -> Int {
         let tree = displayTree
         let line = projection.line(at: max(0, point.y - 8))
         let layout = layoutLine(line)
+        // 没有实际字形时不能把占位起点当成用户新选择，保留原光标并交付具体原因。
+        if let reason = layout.unavailableReason {
+            onStatus?(reason)
+            return min(tree.byteCount, primarySelection?.head ?? tree.lineStart(line))
+        }
         let local = layout.character(
             at: NSPoint(x: max(0, point.x - gutterWidth), y: point.y - projection.y(of: line) - 8)
         )
         // 系统哨兵或越界位置必须先收束到本段范围，再叠加正文起点，不能先做可能溢出的算术。
         let origin = min(tree.utf16Count, max(0, layout.originUTF16))
-        let bounded = min(tree.utf16Count - origin, max(0, min(layout.content.rendered.length, local)))
+        let bounded = min(tree.utf16Count - origin, max(0, min(layout.characterCount, local)))
         var units = origin + bounded
         while units > layout.originUTF16 && tree.byteOffset(utf16: units) == nil {
             units -= 1
@@ -46,12 +51,18 @@ extension EditorView {
             onStatus?("文档处于编辑保护，正文选择保持原状。")
             return
         }
+        let requestedLine = projection.line(at: max(0, point.y - 8))
+        if gutterX >= gutterWidth, let reason = layoutLine(requestedLine).unavailableReason {
+            onStatus?(reason)
+            return
+        }
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard finishComposition() else {
             return
         }
         window?.makeFirstResponder(self)
-        let position = bytePosition(at: point)
+        let position =
+            gutterX < gutterWidth ? document.text.lineStart(requestedLine) : bytePosition(at: point)
         let row = document.text.lineNumber(at: position)
         if bookmarkClick {
             if document.bookmarks.contains(row) {
