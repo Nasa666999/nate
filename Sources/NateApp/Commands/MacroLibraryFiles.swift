@@ -95,12 +95,17 @@ extension ApplicationController {
                 self.exportMacroDefinition(definition)
             }
             panel.onPlay = {
-                [weak self] id, count in
+                [weak self] id, count, untilEnd in
                 guard let self, let definition = self.macroLibrary.previewDefinition, definition.id == id
                 else {
                     return
                 }
-                self.playMacroDefinition(definition, repetitions: count, activatingEditor: true)
+                self.playMacroDefinition(
+                    definition,
+                    repetitions: count,
+                    activatingEditor: true,
+                    untilDocumentEnd: untilEnd
+                )
             }
             panel.onStop = {
                 [weak self] in self?.cancelMacro()

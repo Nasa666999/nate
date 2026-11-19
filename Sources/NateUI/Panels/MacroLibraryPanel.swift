@@ -11,7 +11,7 @@ public final class MacroLibraryPanel: NSWindowController, NSTableViewDataSource,
     public var onRename: ((UUID, String) -> Void)?
     public var onDelete: ((UUID) -> Void)?
     public var onShortcut: ((UUID, MacroShortcut?) -> Void)?
-    public var onPlay: ((UUID, Int) -> Void)?
+    public var onPlay: ((UUID, Int, Bool) -> Void)?
     public var onStop: (() -> Void)?
     public var onReset: (() -> Void)?
     private let definitionsTable = NSTableView()
@@ -20,6 +20,7 @@ public final class MacroLibraryPanel: NSWindowController, NSTableViewDataSource,
     private let nameField = NSTextField()
     private let shortcut = MacroShortcutCapture()
     private let repetitions = NSTextField(string: "1")
+    private let untilEnd = NSButton(checkboxWithTitle: "运行至文档末尾", target: nil, action: nil)
     private let saveButton = NSButton(title: "保存当前录制…", target: nil, action: nil)
     private let importButton = NSButton(title: "导入宏…", target: nil, action: nil)
     private let exportButton = NSButton(title: "导出所选…", target: nil, action: nil)
@@ -129,7 +130,8 @@ public final class MacroLibraryPanel: NSWindowController, NSTableViewDataSource,
         ])
         keys.spacing = 8
         let playback = NSStackView(views: [
-            NSTextField(labelWithString: "重复次数"), repetitions, playButton, stopButton, NSView(), resetButton,
+            NSTextField(labelWithString: "重复次数"), repetitions, untilEnd, playButton, stopButton, NSView(),
+            resetButton,
         ])
         if previewOnly {
             saveButton.title = "保存为命名宏…"
@@ -139,6 +141,9 @@ public final class MacroLibraryPanel: NSWindowController, NSTableViewDataSource,
             keys.isHidden = true
         }
         playback.spacing = 8
+        untilEnd.target = self
+        untilEnd.action = #selector(changeRunMode)
+        untilEnd.toolTip = "每轮完整动作后检查主光标；已经位于文末时不执行，零进展、取消或预算耗尽时停止。"
         let stack = NSStackView(views: [explanation, top, split, naming, keys, feedback, playback])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -371,7 +376,8 @@ public final class MacroLibraryPanel: NSWindowController, NSTableViewDataSource,
         clearShortcutButton.isEnabled = changing
         exportButton.isEnabled = selected && !busy && !playing
         playButton.isEnabled = selected && !busy && !playing
-        repetitions.isEnabled = selected && !busy && !playing
+        untilEnd.isEnabled = selected && !busy && !playing
+        repetitions.isEnabled = selected && !busy && !playing && untilEnd.state != .on
     }
 
     /// 业务作用：完整详情只跟随已明确查看的动作，虚拟列不会提前展开成正文。
@@ -466,12 +472,20 @@ public final class MacroLibraryPanel: NSWindowController, NSTableViewDataSource,
         guard playButton.isEnabled, let macro = selection else {
             return
         }
-        guard let count = Int(repetitions.stringValue), (1...10_000).contains(count) else {
+        let count = untilEnd.state == .on ? 1 : Int(repetitions.stringValue)
+        guard let count, (1...10_000).contains(count) else {
             feedback.stringValue = "重复次数需要一至一万。"
             return
         }
         shortcut.stopCapture()
-        onPlay?(macro.id, count)
+        onPlay?(macro.id, count, untilEnd.state == .on)
+    }
+
+    /// 业务作用：明确选择文末模式后停用次数输入，避免显示与实际执行策略不一致。
+    /// 参数说明: 无。
+    /// 返回：仅改变播放表单，不执行正文动作。
+    @objc private func changeRunMode() {
+        refreshEnabled()
     }
 
     /// 业务作用：停止入口始终作用于真实播放任务，已完成步骤仍保留。

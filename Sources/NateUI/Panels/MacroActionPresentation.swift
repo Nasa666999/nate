@@ -8,6 +8,8 @@ public enum MacroActionPresentation {
     /// 返回：用于列表的有界说明；完整内容另由详情读取。
     public static func summary(_ action: MacroAction) -> String {
         switch action {
+        case .editor(let command):
+            return "编辑动作：" + editorName(command)
         case .input(let text):
             let preview = String(String.UnicodeScalarView(text.unicodeScalars.prefix(60)))
             return "输入 " + visible(preview)
@@ -35,6 +37,8 @@ public enum MacroActionPresentation {
     /// 返回：包含原始 Unicode、NUL 与换行身份的只读详情，不取得播放资格。
     public static func detail(_ action: MacroAction) -> String {
         switch action {
+        case .editor(let command):
+            return "编辑动作：" + editorName(command) + "\n标识：" + command.rawValue
         case .input(let text):
             return "输入 · \(text.utf8.count) 字节\n\n" + visible(text)
         case .command(let name):
@@ -84,6 +88,39 @@ public enum MacroActionPresentation {
         case .length: return "行长度"
         case .reverse: return "反转行序"
         case .random: return "随机行序"
+        }
+    }
+
+    /// 业务作用：方向、选择和删除详情展示实际语义，避免用选择器或光标坐标掩盖执行内容。
+    /// 参数说明:
+    /// - command: 当前受支持的原生编辑动作。
+    /// 返回：不依赖键位配置的中文动作名称。
+    private static func editorName(_ command: EditorCommand) -> String {
+        switch command {
+        case .deleteBackward: return "向前退格"
+        case .deleteForward: return "向后删除"
+        case .moveLeft: return "左移一个字形"
+        case .moveRight: return "右移一个字形"
+        case .moveUp: return "上移一个可见行"
+        case .moveDown: return "下移一个可见行"
+        case .extendLeft: return "向左扩展一个字形"
+        case .extendRight: return "向右扩展一个字形"
+        case .extendUp: return "向上扩展一个可见行"
+        case .extendDown: return "向下扩展一个可见行"
+        case .lineStart: return "移到逻辑行首"
+        case .lineEnd: return "移到逻辑行尾"
+        case .extendLineStart: return "扩展到逻辑行首"
+        case .extendLineEnd: return "扩展到逻辑行尾"
+        case .documentStart: return "移到文档开头"
+        case .documentEnd: return "移到文档末尾"
+        case .extendDocumentStart: return "扩展到文档开头"
+        case .extendDocumentEnd: return "扩展到文档末尾"
+        case .wordLeft: return "移到前一个词边界"
+        case .wordRight: return "移到后一个词边界"
+        case .extendWordLeft: return "向前扩展到词边界"
+        case .extendWordRight: return "向后扩展到词边界"
+        case .selectAll: return "全选正文"
+        case .collapseSelection: return "只保留主选区"
         }
     }
 

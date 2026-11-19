@@ -152,6 +152,7 @@ public struct NamedMacro: Sendable {
         for action in actions {
             switch action {
             case .input(let text), .command(let text): bytes += text.utf8.count
+            case .editor: break
             case .lineSort(let options): bytes += options.localeIdentifier.utf8.count
             case .clipboard(let payload, _):
                 bytes +=

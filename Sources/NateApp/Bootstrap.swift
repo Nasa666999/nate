@@ -431,6 +431,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.onTextInput = {
             [weak self] in self?.recordTextInput($0)
         }
+        window.onEditorCommand = {
+            [weak self] in self?.recordEditorCommand($0)
+        }
         window.onClipboardCapture = {
             [weak self] in self?.rememberClipboard($0)
         }

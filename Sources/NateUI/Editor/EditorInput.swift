@@ -64,20 +64,15 @@ extension EditorView {
     /// 返回：正文命令只使用唯一历史；输入法取消撤去覆盖层后通知临时呈现重新读取已提交正文。
     public override func doCommand(by selector: Selector) {
         let command = NSStringFromSelector(selector)
+        if command != "cancelOperation:" || composition == nil,
+            let semantic = Self.semanticCommand(command)
+        {
+            performEditorCommand(semantic)
+            return
+        }
         guard !document.isEditingSuspended || command == "cancelOperation:" && composition != nil else {
             onStatus?("文档处于编辑保护，输入与选择保持原状。")
             return
-        }
-        if composition != nil, command.hasPrefix("move") || command == "selectAll:" {
-            // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
-            guard finishComposition() else {
-                return
-            }
-        }
-        if composition == nil,
-            command.hasPrefix("move") || command == "selectAll:" || command == "cancelOperation:"
-        {
-            clearRectangularSelection()
         }
         switch command {
         case "complete:": onCommand?("complete")
@@ -93,33 +88,6 @@ extension EditorView {
             }
             insertText(newline + indent, replacementRange: NSRange(location: NSNotFound, length: 0))
         case "insertTab:": insertText("\t", replacementRange: NSRange(location: NSNotFound, length: 0))
-        case "deleteBackward:": delete(forward: false)
-        case "deleteForward:": delete(forward: true)
-        case "moveLeft:", "moveBackward:": move(horizontal: -1)
-        case "moveRight:", "moveForward:": move(horizontal: 1)
-        case "moveLeftAndModifySelection:", "moveBackwardAndModifySelection:":
-            move(horizontal: -1, extend: true)
-        case "moveRightAndModifySelection:", "moveForwardAndModifySelection:":
-            move(horizontal: 1, extend: true)
-        case "moveUp:": move(vertical: -1)
-        case "moveDown:": move(vertical: 1)
-        case "moveUpAndModifySelection:": move(vertical: -1, extend: true)
-        case "moveDownAndModifySelection:": move(vertical: 1, extend: true)
-        case "moveToBeginningOfLine:", "moveToBeginningOfParagraph:", "moveToLeftEndOfLine:":
-            move(edge: -1)
-        case "moveToEndOfLine:", "moveToEndOfParagraph:", "moveToRightEndOfLine:":
-            move(edge: 1)
-        case "moveToBeginningOfLineAndModifySelection:", "moveToLeftEndOfLineAndModifySelection:",
-            "moveToBeginningOfParagraphAndModifySelection:":
-            move(edge: -1, extend: true)
-        case "moveToEndOfLineAndModifySelection:", "moveToRightEndOfLineAndModifySelection:",
-            "moveToEndOfParagraphAndModifySelection:":
-            move(edge: 1, extend: true)
-        case "moveToBeginningOfDocument:": setCaret(0)
-        case "moveToEndOfDocument:": setCaret(document.text.byteCount)
-        case "moveWordLeft:", "moveWordBackward:": moveWord(forward: false)
-        case "moveWordRight:", "moveWordForward:": moveWord(forward: true)
-        case "selectAll:": selectAll(nil)
         case "cancelOperation:":
             if composition != nil {
                 composition = nil
@@ -141,21 +109,25 @@ extension EditorView {
     /// 业务作用：逐字删除不切开扩展字形簇，多光标操作一次提交。
     /// 参数说明:
     /// - forward: 是否删除光标后的字形。
-    /// 返回：一个可撤销事务；虚拟空白删除不写入空格，完整字形边界无法在共享预算内确定时整次不执行。
-    func delete(forward: Bool) {
+    /// 返回：完整事务或合法边界上的无变化为真，候选、权限或边界准备失败为假；虚拟空白不写入正文。
+    @discardableResult
+    func delete(forward: Bool) -> Bool {
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard finishComposition() else {
-            return
+            return false
         }
         if let state = viewSelectionState, case .rectangle(let shape) = state.shape, !shape.zeroWidth {
             // 正宽矩形即使实际字节范围为空也仍有列意图，删除不能退化为移除下一字形或整份 Tab。
-            insertText("", replacementRange: NSRange(location: NSNotFound, length: 0))
-            return
+            return commitTextInput(
+                "",
+                replacementRange: NSRange(location: NSNotFound, length: 0),
+                recording: false
+            )
         }
         if let state = viewSelectionState, case .rectangle = state.shape {
             do {
                 guard synchronizeDocumentSelectionState() else {
-                    return
+                    return false
                 }
                 let changed = try document.commit(prepareRectangularDeletion(forward: forward))
                 refresh(reveal: true)
@@ -165,11 +137,12 @@ extension EditorView {
                 else {
                     onSelection?()
                 }
+                return true
             }
             catch {
                 onStatus?(error.localizedDescription)
+                return false
             }
-            return
         }
         var navigation: GraphemeNavigation
         do {
@@ -177,7 +150,7 @@ extension EditorView {
         }
         catch {
             onStatus?(error.localizedDescription)
-            return
+            return false
         }
         var ranges: [ByteRange] = []
         var after: [TextSelection] = []
@@ -201,7 +174,7 @@ extension EditorView {
             catch {
                 // 所有目标共用完整边界证据；任一目标超限时不能只删除此前已准备的其它光标范围。
                 onStatus?(error.localizedDescription)
-                return
+                return false
             }
             if !range.isEmpty {
                 ranges.append(range)
@@ -242,9 +215,11 @@ extension EditorView {
             else {
                 onSelection?()
             }
+            return true
         }
         catch {
             onStatus?(error.localizedDescription)
+            return false
         }
     }
 
@@ -254,11 +229,12 @@ extension EditorView {
     /// - vertical: 可见行方向，跨过已收起的正文。
     /// - edge: 当前行首或行尾。
     /// - extend: 是否保留固定端。
-    /// 返回：候选确认成功后完整计算全部视图选区；导航不另改正文，确认或边界预算失败保留当前状态。
-    func move(horizontal: Int = 0, vertical: Int = 0, edge: Int = 0, extend: Bool = false) {
+    /// 返回：全部选区移动或合法边界上的无变化为真；候选、边界或预算失败为假且保留当前状态。
+    @discardableResult
+    func move(horizontal: Int = 0, vertical: Int = 0, edge: Int = 0, extend: Bool = false) -> Bool {
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard finishComposition() else {
-            return
+            return false
         }
         do {
             var navigation = try GraphemeNavigation(text: document.text)
@@ -292,49 +268,64 @@ extension EditorView {
             needsDisplay = true
             revealSelection()
             onSelection?()
+            return true
         }
         catch {
             onStatus?(error.localizedDescription)
+            return false
         }
     }
 
     /// 业务作用：按 Unicode 词字符边界跳转，不把字节位置当字符下标。
     /// 参数说明:
     /// - forward: 跳转方向。
-    /// 返回：候选确认且边界证据完整时移动光标；导航不另改正文，确认或字形预算失败保留当前状态。
-    func moveWord(forward: Bool) {
+    /// - extend: 保留每项原固定端以扩展选择。
+    /// 返回：全部目标的词和字形边界完整时移动；一项超限则全部保持原状，不截取部分长词。
+    @discardableResult
+    func moveWord(forward: Bool, extend: Bool = false) -> Bool {
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard finishComposition() else {
-            return
-        }
-        guard let selection = primarySelection else {
-            return
+            return false
         }
         let tree = document.text
-        var position = selection.head
-        var moved = false
         do {
             var navigation = try GraphemeNavigation(text: tree)
-            for _ in 0..<10_000 {
-                let next = try navigation.boundary(from: position, forward: forward)
-                if next == position {
-                    break
+            var remaining = 100_000
+            let after = try viewSelections.map {
+                selection in
+                var position = selection.head
+                var enteredWord = false
+                while true {
+                    guard remaining > 0 else {
+                        throw NateError.message("按词导航超过十万字形共享预算，原选择保持不变。")
+                    }
+                    remaining -= 1
+                    let next = try navigation.boundary(from: position, forward: forward)
+                    if next == position {
+                        break
+                    }
+                    let cluster = tree.text(in: ByteRange(min(position, next), max(position, next)))
+                    let isWord = cluster.contains {
+                        $0.isLetter || $0.isNumber || $0 == "_"
+                    }
+                    if enteredWord && !isWord {
+                        break
+                    }
+                    enteredWord = enteredWord || isWord
+                    position = next
                 }
-                let word = tree.text(in: ByteRange(min(position, next), max(position, next)))
-                if moved
-                    && word.allSatisfy({
-                        !$0.isLetter && !$0.isNumber && $0 != "_"
-                    })
-                {
-                    break
-                }
-                position = next
-                moved = true
+                return TextSelection(anchor: extend ? selection.anchor : position, head: position)
             }
-            setCaret(position)
+            // 多光标共用预算且全部完成后才发布，不能因后一个长词失败而留下部分移动。
+            viewSelections = after
+            needsDisplay = true
+            revealSelection()
+            onSelection?()
+            return true
         }
         catch {
             onStatus?(error.localizedDescription)
+            return false
         }
     }
 

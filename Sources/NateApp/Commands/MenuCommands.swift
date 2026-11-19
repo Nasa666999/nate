@@ -244,6 +244,7 @@ extension ApplicationController: NSMenuItemValidation {
         let macro = NSMenu(title: "宏")
         for (title, id) in [
             ("开始 / 停止录制", "recordMacro"), ("播放一次", "playMacro"), ("重复执行…", "repeatMacro"),
+            ("运行至文档末尾", "macroUntilEnd"),
             ("停止播放", "cancelMacro"),
             ("命名宏管理…", "macroLibrary"), ("保存当前录制为命名宏…", "saveNamedMacro"),
             ("查看已载入宏…", "previewMacro"),

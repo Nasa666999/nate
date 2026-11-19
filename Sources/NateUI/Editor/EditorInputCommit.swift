@@ -18,9 +18,10 @@ extension EditorView {
     /// 参数说明:
     /// - value: 系统最终确认或用户直接输入的完整文字。
     /// - replacementRange: 没有原组合时可指定的 UTF-16 主项替换范围。
+    /// - recording: 普通输入记录原文，语义删除由其独立动作记录，避免同一事务重复进入宏。
     /// 返回：真实提交或相同字节选择收束成功时为真；失败不推进后续导航、保存或关闭。
     @discardableResult
-    func commitTextInput(_ value: String, replacementRange: NSRange) -> Bool {
+    func commitTextInput(_ value: String, replacementRange: NSRange, recording: Bool = true) -> Bool {
         guard !confirmingComposition else {
             return false
         }
@@ -73,7 +74,9 @@ extension EditorView {
             composition = nil
             confirmingComposition = false
             refresh(reveal: true)
-            onTextInput?(value)
+            if recording {
+                onTextInput?(value)
+            }
             if changed {
                 onChange?()
             }

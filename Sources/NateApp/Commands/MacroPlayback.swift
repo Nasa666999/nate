@@ -83,8 +83,9 @@ extension ApplicationController {
     /// 参数说明:
     /// - repetitions: 本次完整播放次数，必须为一至一万。
     /// - actions: 命名定义或预览的完整动作，省略时固定当前临时录制。
+    /// - untilDocumentEnd: 每轮完整动作之间按主光标检查文末。
     /// 返回：合法且空闲时启动一项可取消播放；忙碌或范围无效时不替换现有任务。
-    func startMacro(repetitions: Int, actions: [MacroAction]? = nil) {
+    func startMacro(repetitions: Int, actions: [MacroAction]? = nil, untilDocumentEnd: Bool = false) {
         let selected = actions ?? macroActions
         guard (1...10_000).contains(repetitions), macroPlayback.task == nil, !macroPlaying,
             !macroRecording, !selected.isEmpty
@@ -107,7 +108,11 @@ extension ApplicationController {
             guard let self, runtime.generation == request else {
                 return
             }
-            await self.playMacro(repetitions: repetitions, selectedActions: selected)
+            await self.playMacro(
+                repetitions: repetitions,
+                selectedActions: selected,
+                untilDocumentEnd: untilDocumentEnd
+            )
         }
         refreshMacroLibraryPresentation()
     }
@@ -148,7 +153,7 @@ extension ApplicationController {
         case "recordMacro":
             item.state = macroRecording ? .on : .off
             return !closing && !busy && (macroRecording || quickFindContext() != nil)
-        case "playMacro", "repeatMacro":
+        case "playMacro", "repeatMacro", "macroUntilEnd":
             return !closing && !busy && !macroRecording && !macroActions.isEmpty
                 && quickFindContext() != nil && active?.buffer.isReadOnly == false
         case "cancelMacro":

@@ -109,6 +109,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var syntaxFailedLines: Range<Int>?
     public var onChange: (() -> Void)?
     public var onTextInput: ((String) -> Void)?
+    public var onEditorCommand: ((EditorCommand) -> Void)?
     public var onClipboardCapture: ((ClipboardPayload) -> Void)?
     public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
     public var copyLineWithoutSelection = true

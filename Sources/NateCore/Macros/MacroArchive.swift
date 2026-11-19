@@ -41,6 +41,10 @@ public enum MacroArchive {
                 writer.unsigned(UInt8(1))
                 writer.unsigned(UInt16(name.utf8.count))
                 try writer.append(Data(name.utf8))
+            case .editor(let command):
+                writer.unsigned(UInt8(4))
+                writer.unsigned(UInt16(command.rawValue.utf8.count))
+                try writer.append(Data(command.rawValue.utf8))
             case .lineSort(let options):
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -141,6 +145,15 @@ public enum MacroArchive {
                 let bytes = try reader.bytes(size)
                 try validateSortObject(JSONSerialization.jsonObject(with: bytes))
                 action = .lineSort(try JSONDecoder().decode(LineSortOptions.self, from: bytes))
+            case 4:
+                let size = Int(try reader.unsigned(UInt16.self))
+                let bytes = try reader.bytes(size)
+                guard let name = String(data: bytes, encoding: .utf8),
+                    let command = EditorCommand(rawValue: name)
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                action = .editor(command)
             case 3:
                 let adapting = try reader.unsigned(UInt8.self)
                 guard adapting <= 1 else {
@@ -201,6 +214,13 @@ public enum MacroArchive {
                 try validateSortObject(options)
                 let bytes = try JSONSerialization.data(withJSONObject: options)
                 action = .lineSort(try JSONDecoder().decode(LineSortOptions.self, from: bytes))
+            case "editor":
+                guard Set(fields.keys) == ["_0"], let name = fields["_0"] as? String,
+                    let command = EditorCommand(rawValue: name)
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                action = .editor(command)
             case "clipboard":
                 guard Set(fields.keys) == ["_0", "adaptLineEndings"] else {
                     throw MacroArchiveError.unsupportedFormat

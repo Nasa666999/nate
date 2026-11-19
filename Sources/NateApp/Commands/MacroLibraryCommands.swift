@@ -41,7 +41,8 @@ extension ApplicationController {
                 [weak self] in self?.assignNamedMacroShortcut($0, shortcut: $1)
             }
             panel.onPlay = {
-                [weak self] in self?.playNamedMacro($0, repetitions: $1, activatingEditor: true)
+                [weak self] in
+                self?.playNamedMacro($0, repetitions: $1, activatingEditor: true, untilDocumentEnd: $2)
             }
             panel.onStop = {
                 [weak self] in self?.cancelMacro()
@@ -205,8 +206,14 @@ extension ApplicationController {
     /// - id: 当前仍存在的命名宏身份。
     /// - repetitions: 明确的播放次数。
     /// - activatingEditor: 管理面板按钮是否明确请求回到正文；键盘入口仍要求已有正文焦点。
+    /// - untilDocumentEnd: 按完整轮次检查文末，而非按次数结束。
     /// 返回：目标与候选均允许时启动独立播放，否则保留当前界面和内容。
-    func playNamedMacro(_ id: UUID, repetitions: Int = 1, activatingEditor: Bool = false) {
+    func playNamedMacro(
+        _ id: UUID,
+        repetitions: Int = 1,
+        activatingEditor: Bool = false,
+        untilDocumentEnd: Bool = false
+    ) {
         guard !closing, !macroRecording, !macroPlaying, macroPlayback.task == nil,
             macroLibrary.ready, macroLibrary.task == nil,
             let definition = macroLibrary.definitions.first(where: {
@@ -215,7 +222,12 @@ extension ApplicationController {
         else {
             return
         }
-        playMacroDefinition(definition, repetitions: repetitions, activatingEditor: activatingEditor)
+        playMacroDefinition(
+            definition,
+            repetitions: repetitions,
+            activatingEditor: activatingEditor,
+            untilDocumentEnd: untilDocumentEnd
+        )
     }
 
     /// 业务作用：用户明确播放已查看的动作后复验正文目标，预览文件与已保存宏使用同一播放入口。
@@ -223,8 +235,14 @@ extension ApplicationController {
     /// - definition: 已完整校验且用户明确选择的动作快照。
     /// - repetitions: 一至一万次。
     /// - activatingEditor: 是否由面板明确切回实际编辑器。
+    /// - untilDocumentEnd: 按完整轮次检查主光标是否到达文末。
     /// 返回：不改变临时录制的独立播放；候选或焦点失败不执行。
-    func playMacroDefinition(_ definition: NamedMacro, repetitions: Int, activatingEditor: Bool) {
+    func playMacroDefinition(
+        _ definition: NamedMacro,
+        repetitions: Int,
+        activatingEditor: Bool,
+        untilDocumentEnd: Bool = false
+    ) {
         guard !closing, !macroRecording, !macroPlaying, macroPlayback.task == nil,
             mainWindow?.finishCompositions() != false
         else {
@@ -239,7 +257,7 @@ extension ApplicationController {
         guard quickFindContext() != nil else {
             return
         }
-        startMacro(repetitions: repetitions, actions: definition.actions)
+        startMacro(repetitions: repetitions, actions: definition.actions, untilDocumentEnd: untilDocumentEnd)
     }
 
     /// 业务作用：新建名称避开现存定义，不用覆盖同名记录来保存另一次录制。

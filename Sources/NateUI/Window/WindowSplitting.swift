@@ -82,6 +82,14 @@ extension EditorWindow {
             self.editor = clone
             self.onTextInput?(text)
         }
+        clone.onEditorCommand = {
+            [weak self, weak clone] command in
+            guard let self, let clone else {
+                return
+            }
+            self.editor = clone
+            self.onEditorCommand?(command)
+        }
         clone.onCommand = {
             [weak self] in self?.onCommand?($0)
         }

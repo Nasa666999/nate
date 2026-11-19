@@ -399,6 +399,8 @@ extension ApplicationController {
             refreshMacroLibraryPresentation()
         case "playMacro":
             startMacro(repetitions: 1)
+        case "macroUntilEnd":
+            startMacro(repetitions: 1, untilDocumentEnd: true)
         case "cancelMacro": cancelMacro()
         case "repeatMacro":
             if let value = SystemIntegration.prompt("重复宏", "输入执行次数（1–10000）", initial: "10"),
