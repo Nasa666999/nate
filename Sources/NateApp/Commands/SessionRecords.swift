@@ -48,10 +48,14 @@ struct SessionDocument: Codable, Sendable {
         let state = try values.decodeIfPresent(Data.self, forKey: .selectionArchive).map {
             try SelectionStateArchive.decode($0)
         }
+        let geometries = try values.decode(SelectionGeometries.self, forKey: .selections).values
+        guard state == nil || geometries.isEmpty else {
+            throw NateError.message("会话同时包含两份不同选择来源，原记录保留。")
+        }
         self.init(
             path: try values.decode(String.self, forKey: .path),
             language: try values.decode(String.self, forKey: .language),
-            selections: try state?.selections ?? values.decode([TextSelection].self, forKey: .selections),
+            selections: state?.selections ?? geometries,
             readOnly: try values.decode(Bool.self, forKey: .readOnly),
             bookmarks: try values.decode(Set<Int>.self, forKey: .bookmarks),
             selectionState: state
@@ -66,7 +70,7 @@ struct SessionDocument: Codable, Sendable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(path, forKey: .path)
         try values.encode(language, forKey: .language)
-        try values.encode(selectionState == nil ? selections : [], forKey: .selections)
+        try values.encode(SelectionGeometries(selectionState == nil ? selections : []), forKey: .selections)
         try values.encodeIfPresent(
             selectionState.map {
                 try SelectionStateArchive.encode($0)

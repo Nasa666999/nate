@@ -96,6 +96,9 @@ extension RecoveryStore {
             throw NateError.message("文档超过恢复保护的 1 GB 预算，现有恢复记录继续保留。")
         }
         try checkRecoveryBudget(deadline, permit: permit)
+        guard metadata.selections.count <= SelectionGeometries.maximumCount else {
+            throw NateError.message("恢复选择超过十万项，未写入任何分块或清单。")
+        }
         // 全部选择必须先与同一正文相符，不能先持久化分块再发现稳定身份或 Tab 证据属于其它内容。
         if let state = metadata.selectionState {
             guard state.selections == metadata.selections else {

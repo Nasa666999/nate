@@ -63,7 +63,7 @@ public struct RecoveryDocument: Sendable, Codable {
         try values.encodeIfPresent(baseline, forKey: .baseline)
         try values.encode(language, forKey: .language)
         // 完整归档已有全部几何，旧字段保持可读但不再重复十万项坐标和稳定身份。
-        try values.encode(selectionState == nil ? selections : [], forKey: .selections)
+        try values.encode(SelectionGeometries(selectionState == nil ? selections : []), forKey: .selections)
         try values.encodeIfPresent(
             selectionState.map {
                 try SelectionStateArchive.encode($0)
@@ -86,6 +86,10 @@ public struct RecoveryDocument: Sendable, Codable {
         let state = try archive.map {
             try SelectionStateArchive.decode($0)
         }
+        let geometries = try values.decode(SelectionGeometries.self, forKey: .selections).values
+        guard state == nil || geometries.isEmpty else {
+            throw NateError.message("恢复记录同时包含两份不同选择来源，原记录保留。")
+        }
         self.init(
             id: try values.decode(UUID.self, forKey: .id),
             revision: try values.decode(UInt64.self, forKey: .revision),
@@ -95,7 +99,7 @@ public struct RecoveryDocument: Sendable, Codable {
             encoding: try values.decode(TextEncoding.self, forKey: .encoding),
             baseline: try values.decodeIfPresent(DiskBaseline.self, forKey: .baseline),
             language: try values.decode(String.self, forKey: .language),
-            selections: try state?.selections ?? values.decode([TextSelection].self, forKey: .selections),
+            selections: state?.selections ?? geometries,
             bookmarks: try values.decode(Set<Int>.self, forKey: .bookmarks),
             readOnly: try values.decode(Bool.self, forKey: .readOnly),
             lineEnding: try values.decodeIfPresent(LineEnding.self, forKey: .lineEnding),
