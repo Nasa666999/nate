@@ -4,6 +4,20 @@ import NatePlatform
 import NateStorage
 
 extension ApplicationController {
+    /// 业务作用：复制与剪切只在系统剪贴板及关联正文事务成功后记录当前选择语义，不保存原光标坐标。
+    /// 参数说明:
+    /// - cutting: 本次是否在复制成功后删除正文。
+    /// - copyLine: 本次无选区时是否使用主光标整行。
+    /// 返回：仅同一录制代次追加一项动作；失败、取消或旧录制的迟到回调不追加。
+    func recordClipboardCopy(cutting: Bool, copyLine: Bool) {
+        guard macroRecording, !macroPlaying, clipboardRecordingGeneration == macroRecordingGeneration,
+            quickFindContext() != nil
+        else {
+            return
+        }
+        macroActions.append(.clipboardCopy(cutting: cutting, copyLineWithoutSelection: copyLine))
+    }
+
     /// 业务作用：方向、选择和删除按成功的语义记录，不把光标绝对位置或删除结果当作输入文字。
     /// 参数说明:
     /// - command: 实际正文视图完整执行成功的编辑意图。
@@ -109,6 +123,11 @@ extension ApplicationController {
                     return
                 }
                 switch action {
+                case .clipboardCopy(let cutting, let line):
+                    searchContinuation = nil
+                    guard await editor.copySelection(cutting: cutting, copyLineWithoutSelection: line) else {
+                        return
+                    }
                 case .search(let search):
                     guard await playMacroSearch(search, continuation: &searchContinuation) else {
                         return

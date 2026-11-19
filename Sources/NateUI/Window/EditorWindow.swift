@@ -51,6 +51,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onEditorCommand: ((EditorCommand) -> Void)?
     public var onClipboardCapture: ((ClipboardPayload) -> Void)?
     public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
+    public var onClipboardCopy: ((Bool, Bool) -> Void)?
     public var onWindowClose: (() -> Void)?
     public var onIncrementalQuery: ((String, IncrementalSearchOptions) -> Void)?
     public var onIncrementalOptions: ((IncrementalSearchOptions) -> Void)?
@@ -277,6 +278,9 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         }
         editor.onClipboardPaste = {
             [weak self] in self?.onClipboardPaste?($0, $1)
+        }
+        editor.onClipboardCopy = {
+            [weak self] in self?.onClipboardCopy?($0, $1)
         }
         editor.onSelection = {
             [weak self] in self?.onCommand?("selectionChanged")

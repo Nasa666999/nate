@@ -57,6 +57,14 @@ extension EditorWindow {
         clone.onClipboardPaste = {
             [weak self] in self?.onClipboardPaste?($0, $1)
         }
+        clone.onClipboardCopy = {
+            [weak self, weak clone] cutting, line in
+            guard let self, let clone else {
+                return
+            }
+            self.editor = clone
+            self.onClipboardCopy?(cutting, line)
+        }
         clone.onChange = {
             [weak self, weak clone] in
             guard let self, let clone else {

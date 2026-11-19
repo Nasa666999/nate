@@ -30,6 +30,9 @@ public enum MacroArchive {
             try budget.check()
             try action.validateSupport()
             switch action {
+            case .clipboardCopy(let cutting, let line):
+                writer.unsigned(UInt8(6))
+                writer.unsigned(UInt8((cutting ? 1 : 0) | (line ? 2 : 0)))
             case .search(let search):
                 guard
                     search.options.query.utf8.count + search.options.replacement.utf8.count <= maximumBytes
@@ -136,6 +139,12 @@ public enum MacroArchive {
             try budget.check()
             let action: MacroAction
             switch try reader.unsigned(UInt8.self) {
+            case 6:
+                let flags = try reader.unsigned(UInt8.self)
+                guard flags <= 3 else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                action = .clipboardCopy(cutting: flags & 1 != 0, copyLineWithoutSelection: flags & 2 != 0)
             case 5:
                 let size = Int(try reader.unsigned(UInt32.self))
                 let bytes = try reader.bytes(size)
@@ -217,6 +226,12 @@ public enum MacroArchive {
             }
             let action: MacroAction
             switch kind {
+            case "clipboardCopy":
+                guard Set(fields.keys) == ["cutting", "copyLineWithoutSelection"] else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                let bytes = try JSONSerialization.data(withJSONObject: object)
+                action = try JSONDecoder().decode(MacroAction.self, from: bytes)
             case "search":
                 guard Set(fields.keys) == ["_0"], let search = fields["_0"] else {
                     throw MacroArchiveError.unsupportedFormat

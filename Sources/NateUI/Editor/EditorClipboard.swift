@@ -84,8 +84,10 @@ extension EditorView {
     /// 业务作用：读取和切除共享同一来源，全部内容及结果正文先就绪再触碰系统剪贴板。
     /// 参数说明:
     /// - cutting: 是否同时准备删除事务。
-    /// 返回：启动可取消的完整动作，失败给出原因且不发布部分内容。
-    private func startClipboardCopy(cutting: Bool) {
+    /// - copyLine: 宏固定的整行选项，省略时使用当前视图设置。
+    /// 返回：已启动动作的独立身份；失败为空且不发布部分内容。
+    @discardableResult
+    private func startClipboardCopy(cutting: Bool, copyLine: Bool? = nil) -> UUID? {
         do {
             let proof = try beginClipboardOperation(
                 modifying: cutting,
@@ -94,7 +96,7 @@ extension EditorView {
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
             let projections = try rectangularCopyProjections()
             let targets = cutting && rectangularSelections != nil ? try rectangularInsertionTargets("") : nil
-            let line = copyLineWithoutSelection
+            let line = copyLine ?? copyLineWithoutSelection
             let snapshot = proof.snapshot
             clipboard.task = Task {
                 [weak self] in
@@ -151,6 +153,8 @@ extension EditorView {
                         }
                     }
                     onClipboardCapture?(result.0.payload)
+                    clipboard.succeeded = proof.operation
+                    onClipboardCopy?(cutting, line)
                     onStatus?(cutting ? "已剪切。" : "已复制。")
                 }
                 catch is CancellationError {
@@ -160,9 +164,34 @@ extension EditorView {
                     onStatus?(error.localizedDescription)
                 }
             }
+            return proof.operation
         }
         catch {
             onStatus?(error.localizedDescription)
+            return nil
         }
+    }
+
+    /// 业务作用：宏复用原生复制与剪切的完整发布路径，等待实际成功，不能按任务启动推断已经写入或删除。
+    /// 参数说明:
+    /// - cutting: 是否在完整系统剪贴板写入后删除当前内容。
+    /// - copyLineWithoutSelection: 录制时固定的无选区整行规则，不改变当前偏好。
+    /// 返回：同一动作实际完成时为真；取消、来源改变、权限或系统写入失败时为假。
+    public func copySelection(cutting: Bool, copyLineWithoutSelection: Bool) async -> Bool {
+        guard !Task.isCancelled,
+            let request = startClipboardCopy(cutting: cutting, copyLine: copyLineWithoutSelection),
+            let task = clipboard.task
+        else {
+            return false
+        }
+        await withTaskCancellationHandler(
+            operation: {
+                await task.value
+            },
+            onCancel: {
+                task.cancel()
+            }
+        )
+        return !Task.isCancelled && clipboard.succeeded == request
     }
 }

@@ -440,6 +440,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.onClipboardPaste = {
             [weak self] in self?.recordClipboardPaste($0, adapting: $1)
         }
+        window.onClipboardCopy = {
+            [weak self] in self?.recordClipboardCopy(cutting: $0, copyLine: $1)
+        }
         window.setClipboardOptions(
             copyLine: copyLineWithoutSelection,
             adaptEndings: adaptClipboardLineEndings

@@ -7,6 +7,7 @@ final class ClipboardRuntime {
     static let legacyType = NSPasteboard.PasteboardType("org.nate.text-fragments")
     var generation = UUID()
     var task: Task<Void, Never>?
+    var succeeded: UUID?
     var workerCancel: (@Sendable () -> Void)?
 
     /// 业务作用：每个视图独立持有剪贴板准备权，焦点与选择变化不能借用其它视图动作。

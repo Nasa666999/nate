@@ -8,6 +8,8 @@ public enum MacroActionPresentation {
     /// 返回：用于列表的有界说明；完整内容另由详情读取。
     public static func summary(_ action: MacroAction) -> String {
         switch action {
+        case .clipboardCopy(let cutting, let line):
+            return (cutting ? "剪切" : "复制") + "当前选择" + (line ? " · 无选区时整行" : " · 无选区时不复制整行")
         case .search(let search):
             let name = searchName(search.command)
             let preview = String(String.UnicodeScalarView(search.options.query.unicodeScalars.prefix(60)))
@@ -41,6 +43,9 @@ public enum MacroActionPresentation {
     /// 返回：包含原始 Unicode、NUL 与换行身份的只读详情，不取得播放资格。
     public static func detail(_ action: MacroAction) -> String {
         switch action {
+        case .clipboardCopy(let cutting, let line):
+            return (cutting ? "剪切" : "复制") + "播放时的完整当前选择\n无普通选区时复制主光标整行：\(line)"
+                + "\n成功写入系统剪贴板后才" + (cutting ? "提交删除事务并继续。" : "继续后续动作。")
         case .search(let search):
             let options = search.options
             return searchName(search.command) + "\n模式：" + options.mode.rawValue

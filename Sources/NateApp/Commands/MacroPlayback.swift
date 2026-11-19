@@ -25,6 +25,7 @@ struct MacroPlaybackProof {
     var revision: UInt64
     var documentSelection: UUID
     var viewSelection: UUID
+    var clipboard: UUID
 
     /// 业务作用：固定宏真实作用的文档实例、视图和控制代次，不能沿往返焦点或后来选择继续执行。
     /// 参数说明:
@@ -42,6 +43,7 @@ struct MacroPlaybackProof {
         revision = document.buffer.revision
         documentSelection = document.buffer.selectionGeneration
         viewSelection = editor.selectionGeneration
+        clipboard = editor.clipboardOperationGeneration
     }
 
     /// 业务作用：宏自己的事务可以推进正文，但窗口、焦点和编辑权限必须一直属于原实例。
@@ -66,6 +68,7 @@ struct MacroPlaybackProof {
         matchesAuthority(application) && document.buffer.revision == revision
             && document.buffer.selectionGeneration == documentSelection
             && editor.selectionGeneration == viewSelection
+            && editor.clipboardOperationGeneration == clipboard
     }
 
     /// 业务作用：只在本项真实成功且控制证据仍有效后登记下一项来源，不接受让出事件循环期间的外来变更。
@@ -75,6 +78,7 @@ struct MacroPlaybackProof {
         revision = document.buffer.revision
         documentSelection = document.buffer.selectionGeneration
         viewSelection = editor.selectionGeneration
+        clipboard = editor.clipboardOperationGeneration
     }
 }
 

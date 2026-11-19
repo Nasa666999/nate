@@ -7,6 +7,7 @@ public enum MacroAction: Codable, Sendable {
     case clipboard(ClipboardPayload, adaptLineEndings: Bool)
     case editor(EditorCommand)
     case search(MacroSearchAction)
+    case clipboardCopy(cutting: Bool, copyLineWithoutSelection: Bool)
 
     /// 业务作用：导入和播放前确认每个动作具有当前支持的明确语义，不能跳过未知动作后继续修改。
     /// 参数说明: 无。
@@ -33,7 +34,7 @@ public enum MacroAction: Codable, Sendable {
             else {
                 throw NateError.message("宏排序的语言地区标识为空、包含 NUL 或超过 256 字节。")
             }
-        case .clipboard, .editor:
+        case .clipboard, .editor, .clipboardCopy:
             break
         }
     }

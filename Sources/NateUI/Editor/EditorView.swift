@@ -112,9 +112,16 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var onEditorCommand: ((EditorCommand) -> Void)?
     public var onClipboardCapture: ((ClipboardPayload) -> Void)?
     public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
+    public var onClipboardCopy: ((Bool, Bool) -> Void)?
     public var copyLineWithoutSelection = true
     public var adaptClipboardLineEndings = false
     let clipboard = ClipboardRuntime()
+    /// 业务作用：复合编辑持有剪贴板动作身份，外来的复制、剪切或粘贴会撤销旧步骤的继续资格。
+    /// 参数说明: 无。
+    /// 返回：当前视图独立的剪贴板控制代次，不读取系统剪贴板内容。
+    public var clipboardOperationGeneration: UUID {
+        clipboard.generation
+    }
     public var onSelection: (() -> Void)?
     public var onCommand: ((String) -> Void)?
     public var onOpenURLs: (([URL]) -> Void)?
