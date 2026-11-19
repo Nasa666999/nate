@@ -3,31 +3,6 @@ import NateCore
 import NatePlatform
 import NateStorage
 
-enum MacroAction: Codable, Sendable {
-    case input(String)
-    case command(String)
-    case lineSort(LineSortOptions)
-    case clipboard(ClipboardPayload, adaptLineEndings: Bool)
-
-    /// 业务作用：导入和播放前确认每个动作具有当前支持的明确语义，不能跳过未知动作后继续修改。
-    /// 参数说明: 无。
-    /// 返回：动作名称和独立输入容量合法时继续，未知命令或超量文字时拒绝整份动作列表。
-    func validateSupport() throws {
-        switch self {
-        case .input(let text):
-            guard text.utf8.count <= 64 * 1024 * 1024 else {
-                throw NateError.message("宏输入超过单次 64 MiB 预算。")
-            }
-        case .command(let name):
-            guard TextCommand(rawValue: name) != nil else {
-                throw NateError.message("无法识别的编辑动作“" + name + "”。")
-            }
-        case .lineSort, .clipboard:
-            break
-        }
-    }
-}
-
 extension ApplicationController {
     /// 业务作用：只记录已提交的语义输入，预编辑和磁盘保存不进入宏。
     /// 参数说明:
@@ -180,7 +155,7 @@ extension ApplicationController {
         Task {
             do {
                 try await fileIO.run {
-                    let data = try JSONEncoder().encode(actions)
+                    let data = try MacroArchive.encode(actions)
                     let expected =
                         FileManager.default.fileExists(atPath: url.path)
                         ? try self.fileAccess.baseline(url) : nil
@@ -214,19 +189,17 @@ extension ApplicationController {
                     token in
                     let data = try self.fileAccess.readData(
                         url,
-                        maximumBytes: 8_388_608,
+                        maximumBytes: MacroArchive.maximumBytes,
                         permit: {
                             !token.isCancelled
                         }
                     ).data
-                    let actions = try JSONDecoder().decode([MacroAction].self, from: data)
-                    guard actions.count <= 10_000 else {
-                        throw NateError.message("宏动作超过 10000 项。")
-                    }
-                    for action in actions {
-                        try action.validateSupport()
-                    }
-                    return actions
+                    return try MacroArchive.decode(
+                        data,
+                        permit: {
+                            !token.isCancelled
+                        }
+                    )
                 }
                 macroActions = actions
                 SystemIntegration.alert("宏已载入", "\(actions.count) 个动作。选择“播放一次”或“重复执行”后才会修改文档。")
