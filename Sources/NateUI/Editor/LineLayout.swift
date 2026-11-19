@@ -48,30 +48,13 @@ final class LineLayout {
         for token in tokens where token.range.lower < range.upper && token.range.upper > range.lower {
             let clipped = ByteRange(max(range.lower, token.range.lower), min(range.upper, token.range.upper))
             if let ns = snapshot.text.nsRange(clipped) {
-                value.addAttribute(
-                    .foregroundColor,
-                    value: ThemePalette.resolved(
-                        token.foreground.flatMap(ThemePalette.hexColor) ?? ThemePalette.color(token.kind),
-                        appearance: appearance
-                    ),
-                    range: NSRange(location: ns.location - originUTF16, length: ns.length)
-                )
-                let tokenRange = NSRange(location: ns.location - originUTF16, length: ns.length)
-                var styledFont = font
-                if token.fontStyle & 1 != 0 {
-                    styledFont = NSFontManager.shared.convert(styledFont, toHaveTrait: .boldFontMask)
-                }
-                if token.fontStyle & 2 != 0 {
-                    styledFont = NSFontManager.shared.convert(styledFont, toHaveTrait: .italicFontMask)
-                }
-                value.addAttribute(.font, value: styledFont, range: tokenRange)
-                if token.fontStyle & 4 != 0 {
-                    value.addAttribute(
-                        .underlineStyle,
-                        value: NSUnderlineStyle.single.rawValue,
-                        range: tokenRange
+                value.addAttributes(
+                    SyntaxPresentation.attributes(token: token, font: font, appearance: appearance),
+                    range: NSRange(
+                        location: ns.location - originUTF16,
+                        length: ns.length
                     )
-                }
+                )
             }
         }
         content = EditorContentManager(snapshot: snapshot, projection: range, rendered: value)

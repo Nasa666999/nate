@@ -31,6 +31,8 @@ extension ApplicationController: NSMenuItemValidation {
             ("关闭未修改文档", "closeClean", ""), ("关闭非固定文档", "closeUnpinned", ""),
             ("恢复最近关闭", "reopenClosed", "T"), ("保存会话…", "saveSession", ""), ("打开会话…", "openSession", ""),
             ("页面设置…", "pageSetup", ""), ("打印…", "print", "p"),
+            ("打印选区…", "printSelection", ""), ("立即打印", "printImmediately", ""),
+            ("打印设置…", "printSettings", ""),
         ] {
             add(file, title, id, key: key)
         }
@@ -369,6 +371,23 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "cancelTextTool" {
             return textTools.task != nil
+        }
+        if ["print", "printImmediately", "printSelection", "printSettings", "pageSetup"].contains(id) {
+            guard !closing, !printing.busy, let document = active, !document.closing,
+                !document.buffer.isEditingSuspended, mainWindow?.hasMarkedEditorInput == false
+            else {
+                return false
+            }
+            if id == "printSelection" {
+                guard let (_, _, editor) = quickFindContext(), let state = editor.viewSelectionState,
+                    state.entries.count == 1, case .stream = state.shape,
+                    let entry = state.entries.first, !entry.selection.range.isEmpty,
+                    entry.selection.virtualColumn == 0
+                else {
+                    return false
+                }
+            }
+            return true
         }
         if id.hasPrefix("tool:") {
             let digest = ["tool:md5", "tool:sha1", "tool:sha256", "tool:sha512"].contains(id)

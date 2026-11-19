@@ -30,7 +30,7 @@ public struct PrintDecoration: Sendable, Equatable, Codable {
     ) throws {
         guard fontName.utf8.count <= 256,
             fontName.unicodeScalars.allSatisfy({
-                !CharacterSet.controlCharacters.contains($0)
+                $0.properties.generalCategory != .control && !CharacterSet.newlines.contains($0)
             }),
             fontSize.isFinite, (6...72).contains(fontSize)
         else {
@@ -39,7 +39,7 @@ public struct PrintDecoration: Sendable, Equatable, Codable {
         for value in [left, middle, right] {
             guard value.utf8.count <= 4096,
                 value.unicodeScalars.allSatisfy({
-                    !CharacterSet.controlCharacters.contains($0)
+                    $0.properties.generalCategory != .control && !CharacterSet.newlines.contains($0)
                 })
             else {
                 throw NateError.message("打印页眉页脚各区最多 4 KiB，且不能包含控制字符或换行。")

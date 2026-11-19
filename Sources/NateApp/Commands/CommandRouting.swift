@@ -491,7 +491,10 @@ extension ApplicationController {
                 refreshUI()
             }
         case "print": printDocument()
-        case "pageSetup": NSPageLayout().runModal()
+        case "printSelection": printDocument(selectionOnly: true)
+        case "printImmediately": printDocument(immediately: true)
+        case "printSettings": showPrintSettings()
+        case "pageSetup": showPageSetup()
         case "exportHTML", "exportRTF": exportDocument(html: id == "exportHTML")
         case "markdownPreview": previewMarkdown()
         case "compare": compareDocuments()

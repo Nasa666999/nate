@@ -4,44 +4,53 @@ import NateCore
 import NatePlatform
 import NateStorage
 import NateSyntax
+import NateUI
 import WebKit
 
 extension ApplicationController {
     /// 业务作用：打印使用独立正文与样式快照，不触碰活动编辑器的布局和历史。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - selectionOnly: 是否仅打印当前一个明确连续选区。
+    /// - immediately: 是否使用当前系统打印机及已有纸张设置立即打印。
     /// 返回：完整样式可用时交给系统处理分页和输出；失败显示原因，不启动打印。
-    func printDocument() {
-        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
-        guard mainWindow?.editor.finishComposition() != false else {
+    func printDocument(selectionOnly: Bool = false, immediately: Bool = false) {
+        guard !closing, !printing.busy else {
             return
         }
-        guard let active else {
+        // 打开模态面板本身也会转移输入焦点；候选期间先在原窗口反馈，不让错误弹窗间接确认候选。
+        guard mainWindow?.hasMarkedEditorInput == false else {
+            mainWindow?.status.stringValue = "请先确认或取消输入法候选，再发起打印。"
             return
         }
-        let info = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo.shared
-        let width = max(100, info.paperSize.width - info.leftMargin - info.rightMargin)
-        let view = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 100))
-        view.isRichText = true
+        printing.busy = true
+        defer {
+            printing.busy = false
+        }
         do {
-            view.textStorage?.setAttributedString(try styledSnapshot(active))
+            let job = try prepareCurrentPrintJob(selectionOnly: selectionOnly)
+            if immediately {
+                job.info.jobDisposition = .spool
+            }
+            let operation = NSPrintOperation(
+                view: job.view,
+                printInfo: job.info
+            )
+            operation.jobTitle = job.title
+            operation.showsPrintPanel = !immediately
+            operation.showsProgressPanel = true
+            operation.printPanel.options.formUnion([
+                .showsPageRange, .showsCopies, .showsPaperSize, .showsOrientation, .showsScaling,
+                .showsPreview,
+            ])
+            let success = operation.run()
+            if let failure = job.view.failure {
+                throw NateError.message(failure)
+            }
+            mainWindow?.status.stringValue = success ? "打印作业已交由系统完成。" : "打印已取消，正文和保存状态保持原状。"
         }
         catch {
             SystemIntegration.alert("无法生成打印内容", error.localizedDescription)
-            return
         }
-        view.isHorizontallyResizable = false
-        view.isVerticallyResizable = true
-        view.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        view.layoutManager?.ensureLayout(for: view.textContainer ?? NSTextContainer())
-        if let container = view.textContainer, let layout = view.layoutManager {
-            view.setFrameSize(
-                NSSize(width: width, height: max(100, layout.usedRect(for: container).height + 30))
-            )
-        }
-        let operation = NSPrintOperation(view: view, printInfo: info)
-        operation.showsPrintPanel = true
-        operation.showsProgressPanel = true
-        operation.run()
     }
 
     /// 业务作用：为打印和富文本导出独立建立固定样式，不保存为原文件。
