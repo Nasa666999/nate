@@ -33,7 +33,14 @@ public enum SearchScope {
             return ResolvedSearchScope(range: nil, options: effective, description: "当前文档 · 方向导航")
         }
         if options.selectionOnly {
+            // 视觉列和行尾虚拟空白不代表一个连续原文范围，不能沿其几何外观扩大替换权限。
+            if let state = snapshot.selectionState, state.selections == selections,
+                case .rectangle = state.shape
+            {
+                throw NateError.message("矩形选区不能使用连续选区范围锁。")
+            }
             guard selections.count == 1, let range = selections.first?.range, !range.isEmpty,
+                selections.first?.virtualColumn == 0,
                 snapshot.text.isBoundary(range.lower), snapshot.text.isBoundary(range.upper)
             else {
                 throw NateError.message("选区内操作需要一个有效连续选区；多选和矩形选区不能使用此范围锁。")

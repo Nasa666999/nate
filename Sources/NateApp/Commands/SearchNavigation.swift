@@ -78,6 +78,8 @@ extension ApplicationController {
         let focus = editor.focusGeneration
         let selection = editor.primarySelection?.range ?? ByteRange(0, 0)
         let input = SearchRequestInput(findWindow)
+        let recording = macroRecordingGeneration
+        let staying = findWindow?.stayAfterReplace ?? true
         let continuing =
             searchNavigationEvidence?.continues(
                 buffer: buffer,
@@ -140,6 +142,14 @@ extension ApplicationController {
                     return
                 }
                 guard let hit = result.hits.first else {
+                    if !afterReplacement {
+                        self.recordMacroSearch(
+                            action,
+                            options: options,
+                            staying: staying,
+                            generation: recording
+                        )
+                    }
                     self.findWindow?.feedback.stringValue =
                         action == "replaceOne"
                         ? "当前选区不是该条件的完整匹配，请先查找。"
@@ -175,6 +185,9 @@ extension ApplicationController {
                     ? "已替换 1 处。" : (afterReplacement ? "已替换 1 处；" : "") + "已定位当前匹配。"
                 self.mainWindow?.refreshEditors()
                 self.refreshUI()
+                if !afterReplacement {
+                    self.recordMacroSearch(action, options: options, staying: staying, generation: recording)
+                }
                 if action == "replaceOne", self.findWindow?.stayAfterReplace == false {
                     self.search(
                         options.backwards ? "previous" : "next",

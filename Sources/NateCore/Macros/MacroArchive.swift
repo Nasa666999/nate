@@ -30,6 +30,19 @@ public enum MacroArchive {
             try budget.check()
             try action.validateSupport()
             switch action {
+            case .search(let search):
+                guard
+                    search.options.query.utf8.count + search.options.replacement.utf8.count <= maximumBytes
+                        - writer.data.count - 37
+                else {
+                    throw NateError.message("宏搜索原文与归档索引超过 8 MiB。")
+                }
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+                let data = try encoder.encode(search)
+                writer.unsigned(UInt8(5))
+                writer.unsigned(UInt32(data.count))
+                try writer.append(data)
             case .input(let text):
                 guard text.utf8.count <= maximumBytes - writer.data.count - 37 else {
                     throw NateError.message("宏输入与归档索引超过 8 MiB。")
@@ -123,6 +136,11 @@ public enum MacroArchive {
             try budget.check()
             let action: MacroAction
             switch try reader.unsigned(UInt8.self) {
+            case 5:
+                let size = Int(try reader.unsigned(UInt32.self))
+                let bytes = try reader.bytes(size)
+                try validateSearchObject(JSONSerialization.jsonObject(with: bytes))
+                action = .search(try JSONDecoder().decode(MacroSearchAction.self, from: bytes))
             case 0:
                 let size = Int(try reader.unsigned(UInt32.self))
                 let bytes = try reader.bytes(size)
@@ -199,6 +217,13 @@ public enum MacroArchive {
             }
             let action: MacroAction
             switch kind {
+            case "search":
+                guard Set(fields.keys) == ["_0"], let search = fields["_0"] else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                try validateSearchObject(search)
+                let bytes = try JSONSerialization.data(withJSONObject: search)
+                action = .search(try JSONDecoder().decode(MacroSearchAction.self, from: bytes))
             case "input", "command":
                 guard Set(fields.keys) == ["_0"] else {
                     throw MacroArchiveError.unsupportedFormat
@@ -240,6 +265,24 @@ public enum MacroArchive {
         }
         try budget.check()
         return actions
+    }
+
+    /// 业务作用：完整搜索状态不能忽略未来字段后按另一种表达式、范围或替换策略执行。
+    /// 参数说明:
+    /// - object: 从有界归档读取的单个搜索动作对象。
+    /// 返回：包装及全部当前选项字段明确且完整时继续，其它格式拒绝。
+    private static func validateSearchObject(_ object: Any) throws {
+        guard let fields = object as? [String: Any],
+            Set(fields.keys) == ["command", "options", "stayAfterReplace"],
+            let options = fields["options"] as? [String: Any],
+            Set(options.keys) == [
+                "query", "replacement", "mode", "caseSensitive", "wholeWord", "dotMatchesNewline",
+                "wrap", "backwards", "selectionOnly", "recursive", "includeHidden", "ignoreOpenBuffers",
+                "maxMatches", "stepLimit",
+            ]
+        else {
+            throw MacroArchiveError.unsupportedFormat
+        }
     }
 
     /// 业务作用：排序参数必须完整保留当前三个公开字段，不能忽略未来字段后按另一种键解释宏。

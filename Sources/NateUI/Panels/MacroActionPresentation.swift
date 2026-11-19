@@ -8,6 +8,10 @@ public enum MacroActionPresentation {
     /// 返回：用于列表的有界说明；完整内容另由详情读取。
     public static func summary(_ action: MacroAction) -> String {
         switch action {
+        case .search(let search):
+            let name = searchName(search.command)
+            let preview = String(String.UnicodeScalarView(search.options.query.unicodeScalars.prefix(60)))
+            return name + " · " + search.options.mode.rawValue + " · " + visible(preview)
         case .editor(let command):
             return "编辑动作：" + editorName(command)
         case .input(let text):
@@ -37,6 +41,14 @@ public enum MacroActionPresentation {
     /// 返回：包含原始 Unicode、NUL 与换行身份的只读详情，不取得播放资格。
     public static func detail(_ action: MacroAction) -> String {
         switch action {
+        case .search(let search):
+            let options = search.options
+            return searchName(search.command) + "\n模式：" + options.mode.rawValue
+                + "\n区分大小写：\(options.caseSensitive)\n全词：\(options.wholeWord)\n点匹配换行：\(options.dotMatchesNewline)"
+                + "\n循环：\(options.wrap)\n反向：\(options.backwards)\n仅选区：\(options.selectionOnly)\n替换后停留：\(search.stayAfterReplace)"
+                + "\n匹配上限：\(options.maxMatches)\n计算上限：\(options.stepLimit)"
+                + "\n递归目录：\(options.recursive)\n隐藏文件：\(options.includeHidden)\n忽略打开缓冲区：\(options.ignoreOpenBuffers)（目录选项不用于当前文档动作）"
+                + "\n\n查找原文：\n" + visible(options.query) + "\n\n替换原文：\n" + visible(options.replacement)
         case .editor(let command):
             return "编辑动作：" + editorName(command) + "\n标识：" + command.rawValue
         case .input(let text):
@@ -121,6 +133,19 @@ public enum MacroActionPresentation {
         case .extendWordRight: return "向后扩展到词边界"
         case .selectAll: return "全选正文"
         case .collapseSelection: return "只保留主选区"
+        }
+    }
+
+    /// 业务作用：搜索预览明确区分导航、单项替换和整批替换，防止只看表达式而误判修改范围。
+    /// 参数说明:
+    /// - command: 当前文档搜索动作。
+    /// 返回：实际执行范围的中文名称。
+    private static func searchName(_ command: MacroSearchCommand) -> String {
+        switch command {
+        case .next: return "查找下一处"
+        case .previous: return "查找上一处"
+        case .replaceOne: return "替换当前完整匹配"
+        case .replaceAll: return "替换当前文档全部适用匹配"
         }
     }
 

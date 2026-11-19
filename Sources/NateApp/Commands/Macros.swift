@@ -45,7 +45,7 @@ extension ApplicationController {
     /// - repetitions: 用户指定次数。
     /// - selectedActions: 命名宏或文件预览明确选择的动作，省略时使用当前临时录制。
     /// - untilDocumentEnd: 每轮完整动作之间按主光标检查文末，不采用固定次数。
-    /// 返回：动作失败、取消或失权立即停止；正文与完整选择无净进展时停止，文末模式另有执行预算。
+    /// 返回：动作失败、取消或失权立即停止；正文、完整选择与空命中继续状态无净进展时停止，文末模式另有执行预算。
     func playMacro(repetitions: Int, selectedActions: [MacroAction]? = nil, untilDocumentEnd: Bool = false)
         async
     {
@@ -73,6 +73,8 @@ extension ApplicationController {
         else {
             return
         }
+        // 明确播放接管新的编辑意图，旧查询必须先失去发布权，不能迟到移动宏正在使用的光标。
+        suspendSearchForInput()
         var proof = MacroPlaybackProof(document: document, window: window, editor: editor)
         macroPlaying = true
         defer {
@@ -81,6 +83,7 @@ extension ApplicationController {
         }
         let deadline = ContinuousClock.now.advanced(by: .seconds(300))
         var completedActions = 0
+        var searchContinuation: MacroSearchContinuation?
         for _ in 0..<(untilDocumentEnd ? 1_000_000 : repetitions) {
             guard macroPlayback.generation == generation, proof.matches(self)
             else {
@@ -88,6 +91,7 @@ extension ApplicationController {
             }
             let revision = active.buffer.revision
             let originalSelection = editor.viewSelectionState
+            let originalContinuation = searchContinuation
             if untilDocumentEnd, editor.primarySelection?.head == active.buffer.text.byteCount {
                 mainWindow?.status.stringValue = "宏已到达文档末尾。"
                 return
@@ -105,15 +109,22 @@ extension ApplicationController {
                     return
                 }
                 switch action {
+                case .search(let search):
+                    guard await playMacroSearch(search, continuation: &searchContinuation) else {
+                        return
+                    }
                 case .editor(let command):
+                    searchContinuation = nil
                     guard editor.performEditorCommand(command) else {
                         return
                     }
                 case .input(let text):
+                    searchContinuation = nil
                     guard insert(text) else {
                         return
                     }
                 case .command(let name):
+                    searchContinuation = nil
                     if let command = TextCommand(rawValue: name) {
                         if let options = command.lineSortOptions {
                             guard await playLineSort(options) else {
@@ -131,10 +142,12 @@ extension ApplicationController {
                         return
                     }
                 case .lineSort(let options):
+                    searchContinuation = nil
                     guard await playLineSort(options) else {
                         return
                     }
                 case .clipboard(let payload, let adapt):
+                    searchContinuation = nil
                     guard let editor = quickFindContext()?.2,
                         await editor.pastePayload(payload, adaptLineEndings: adapt)
                     else {
@@ -148,8 +161,10 @@ extension ApplicationController {
                 proof.advance()
                 await Task.yield()
             }
-            if active.buffer.revision == revision && editor.viewSelectionState == originalSelection {
-                mainWindow?.status.stringValue = "宏已停止：完整一轮的正文和选择均没有净进展。"
+            if active.buffer.revision == revision && editor.viewSelectionState == originalSelection
+                && searchContinuation == originalContinuation
+            {
+                mainWindow?.status.stringValue = "宏已停止：完整一轮的正文、选择和空命中状态均没有净进展。"
                 return
             }
         }

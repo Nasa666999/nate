@@ -1,4 +1,5 @@
 import Foundation
+import NateCore
 import NateSearch
 
 public struct SearchResultCondition: Sendable {

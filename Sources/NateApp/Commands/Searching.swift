@@ -129,6 +129,13 @@ extension ApplicationController {
             return
         }
         let input = SearchRequestInput(findWindow)
+        let recording = macroRecordingGeneration
+        let staying = findWindow?.stayAfterReplace ?? true
+        if macroRecording, !macroPlaying, !afterReplacement,
+            MacroSearchCommand(rawValue: action) == nil
+        {
+            mainWindow?.status.stringValue = "此搜索动作不进入宏；可录制当前文档的前后查找、单次替换和全部替换。"
+        }
         if action == "files" || action == "replaceFiles" {
             searchDirectory(
                 directory,
@@ -412,6 +419,9 @@ extension ApplicationController {
                 }
                 self.mainWindow?.refreshEditors()
                 self.refreshUI()
+                if action == "replaceAll", skipped == 0 {
+                    self.recordMacroSearch(action, options: options, staying: staying, generation: recording)
+                }
             }
             catch is CancellationError {
                 // 错误反馈同样属于原查询，不能覆盖用户已经改写的表达式状态。

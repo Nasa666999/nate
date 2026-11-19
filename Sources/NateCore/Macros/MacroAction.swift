@@ -6,12 +6,15 @@ public enum MacroAction: Codable, Sendable {
     case lineSort(LineSortOptions)
     case clipboard(ClipboardPayload, adaptLineEndings: Bool)
     case editor(EditorCommand)
+    case search(MacroSearchAction)
 
     /// 业务作用：导入和播放前确认每个动作具有当前支持的明确语义，不能跳过未知动作后继续修改。
     /// 参数说明: 无。
     /// 返回：动作名称、输入容量和区域参数合法时继续，未知命令或超量内容时拒绝整份动作列表。
     public func validateSupport() throws {
         switch self {
+        case .search(let action):
+            try action.validateSupport()
         case .input(let text):
             guard text.utf8.count <= 64 * 1024 * 1024 else {
                 throw NateError.message("宏输入超过单次 64 MiB 预算。")
