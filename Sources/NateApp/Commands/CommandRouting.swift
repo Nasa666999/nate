@@ -381,22 +381,25 @@ extension ApplicationController {
         case "pasteAsPlainText": quickFindContext()?.2.pasteAsPlainText(nil)
         case "cancelClipboard": mainWindow?.editor.cancelClipboardOperation()
         case "recordMacro":
+            guard !macroPlaying, macroPlayback.task == nil else {
+                return
+            }
+            guard macroRecording || quickFindContext() != nil else {
+                return
+            }
             macroRecording.toggle()
             if macroRecording {
                 macroActions = []
             }
             refreshUI()
         case "playMacro":
-            Task {
-                await playMacro(repetitions: 1)
-            }
+            startMacro(repetitions: 1)
+        case "cancelMacro": cancelMacro()
         case "repeatMacro":
             if let value = SystemIntegration.prompt("重复宏", "输入执行次数（1–10000）", initial: "10"),
                 let count = Int(value)
             {
-                Task {
-                    await playMacro(repetitions: max(1, min(10000, count)))
-                }
+                startMacro(repetitions: max(1, min(10000, count)))
             }
         case "saveMacro": saveMacro()
         case "loadMacro": loadMacro()

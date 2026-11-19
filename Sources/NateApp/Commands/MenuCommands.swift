@@ -244,6 +244,7 @@ extension ApplicationController: NSMenuItemValidation {
         let macro = NSMenu(title: "宏")
         for (title, id) in [
             ("开始 / 停止录制", "recordMacro"), ("播放一次", "playMacro"), ("重复执行…", "repeatMacro"),
+            ("停止播放", "cancelMacro"),
             ("保存宏…", "saveMacro"), ("载入宏…", "loadMacro"), ("运行外部命令…", "run"),
         ] {
             add(macro, title, id)
@@ -312,6 +313,9 @@ extension ApplicationController: NSMenuItemValidation {
             return true
         }
         if let enabled = validateClipboardMenu(menuItem, id: id) {
+            return enabled
+        }
+        if let enabled = validateMacroMenu(menuItem, id: id) {
             return enabled
         }
         if id == "resetSidebarRecovery" {
@@ -392,12 +396,6 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "symbolsList" {
             menuItem.state = mainWindow?.isStructureVisible == true ? .on : .off
-        }
-        if id == "recordMacro" {
-            menuItem.state = macroRecording ? .on : .off
-        }
-        if id == "playMacro" {
-            return !macroRecording && !macroActions.isEmpty
         }
         if id == "cancelExternalCommand" {
             return externalCommandTask != nil

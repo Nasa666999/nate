@@ -125,6 +125,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var macroRecordingGeneration = UUID()
     var macroActions: [MacroAction] = []
     var macroPlaying = false
+    let macroPlayback = MacroPlaybackRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []

@@ -66,6 +66,7 @@ extension ApplicationController {
             return
         }
         let actions = macroActions
+        let generation = macroPlayback.generation
         do {
             for action in actions {
                 try action.validateSupport()
@@ -76,16 +77,19 @@ extension ApplicationController {
             return
         }
         // 未知动作已经整份拒绝后才允许确认原候选，非法宏不能以输入法确认的副作用改变正文。
-        guard mainWindow?.editor.finishComposition() != false, self.active === active else {
+        guard mainWindow?.editor.finishComposition() != false, self.active === active,
+            macroPlayback.generation == generation,
+            let (document, window, editor) = quickFindContext(), document === active
+        else {
             return
         }
+        var proof = MacroPlaybackProof(document: document, window: window, editor: editor)
         macroPlaying = true
         defer {
             macroPlaying = false
         }
         for _ in 0..<repetitions {
-            guard !Task.isCancelled, !closing, self.active === active, !active.buffer.isReadOnly,
-                !active.buffer.isEditingSuspended
+            guard macroPlayback.generation == generation, proof.matches(self)
             else {
                 break
             }
@@ -93,8 +97,7 @@ extension ApplicationController {
             let selectionGeneration = active.buffer.selectionGeneration
             for action in actions {
                 // 每个后台动作返回后重新取得原实例与实际焦点，宏不能沿后续同名标签继续编辑。
-                guard !Task.isCancelled, !closing, self.active === active, !active.buffer.isReadOnly,
-                    !active.buffer.isEditingSuspended, quickFindContext()?.0 === active
+                guard macroPlayback.generation == generation, proof.matches(self)
                 else {
                     return
                 }
@@ -131,6 +134,11 @@ extension ApplicationController {
                         return
                     }
                 }
+                // 成功结果先成为下一项的明确来源，再让用户事件进入；让出后发生的外来编辑不能被收编。
+                guard macroPlayback.generation == generation, proof.matchesAuthority(self) else {
+                    return
+                }
+                proof.advance()
                 await Task.yield()
             }
             if active.buffer.revision == revision && active.buffer.selectionGeneration == selectionGeneration
@@ -163,7 +171,9 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：持久化当前语义动作列表。
     func saveMacro() {
-        guard !macroActions.isEmpty, let url = SystemIntegration.chooseSave(name: "Macro.natemacro") else {
+        guard !macroPlaying, macroPlayback.task == nil, !macroRecording,
+            !macroActions.isEmpty, let url = SystemIntegration.chooseSave(name: "Macro.natemacro")
+        else {
             return
         }
         let actions = macroActions
@@ -193,7 +203,9 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：保留旧宏直到新配置完整解码成功。
     func loadMacro() {
-        guard let url = SystemIntegration.chooseFiles().first else {
+        guard !macroPlaying, macroPlayback.task == nil, !macroRecording,
+            let url = SystemIntegration.chooseFiles().first
+        else {
             return
         }
         Task {
