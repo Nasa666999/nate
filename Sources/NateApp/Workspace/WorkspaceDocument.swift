@@ -77,7 +77,10 @@ final class WorkspaceDocument {
         dirtyHint || encoding != savedEncoding
     }
     var recoveryMetadataKey: String {
-        recoveryDocument().metadataKey
+        var metadata = recoveryDocument()
+        metadata.selections = []
+        metadata.selectionState = nil
+        return metadata.metadataKey + ":" + buffer.selectionGeneration.uuidString
     }
 
     /// 业务作用：建立标签元数据，正文身份不随路径改变。
@@ -162,7 +165,42 @@ final class WorkspaceDocument {
             bookmarks: buffer.bookmarks,
             readOnly: buffer.isReadOnly,
             lineEnding: buffer.format.lineEnding,
-            pinned: pinned
+            pinned: pinned,
+            selectionState: buffer.selectionState
         )
+    }
+
+    /// 业务作用：恢复完整选择时保留全部稳定身份和形态，只有旧式记录才按合法几何重建。
+    /// 参数说明:
+    /// - record: 已与同一正文完成存储校验的恢复元数据。
+    /// 返回：完整状态原样安装；旧记录至少建立原点光标，非法完整状态直接失败且不降级。
+    func restoreSelections(from record: RecoveryDocument) throws {
+        try restoreSelections(record.selectionState, legacySelections: record.selections)
+    }
+
+    /// 业务作用：恢复副本与命名会话使用同一选择入口，旧式虚拟光标只在真实行尾继续存在。
+    /// 参数说明:
+    /// - state: 存在时必须完整安装的稳定选择。
+    /// - legacySelections: 仅没有完整归档时使用的旧几何。
+    /// 返回：安装原完整状态或合法旧几何；非法完整状态失败且不丢弃其中部分身份。
+    func restoreSelections(_ state: SelectionState?, legacySelections: [TextSelection]) throws {
+        if let state {
+            try buffer.setSelectionState(state)
+        }
+        else {
+            let values = legacySelections.filter {
+                value in
+                guard buffer.text.isBoundary(value.anchor), buffer.text.isBoundary(value.head),
+                    (0...1_000_000).contains(value.virtualColumn)
+                else {
+                    return false
+                }
+                let body = buffer.text.lineRange(buffer.text.lineNumber(at: value.head), includeEnding: false)
+                return value.virtualColumn == 0 || value.range.isEmpty && value.head == body.upper
+            }
+            try buffer.setSelectionState(
+                SelectionState(selections: values.isEmpty ? [TextSelection(anchor: 0, head: 0)] : values)
+            )
+        }
     }
 }

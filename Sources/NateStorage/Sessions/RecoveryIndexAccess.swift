@@ -10,7 +10,7 @@ extension RecoveryStore {
     public func publish(_ references: [RecoveryReference], active: UUID?) throws {
         try FileStorage.validateFileURL(directory)
         let deadline = ContinuousClock.now.advanced(by: RecoveryLimits.processingTime)
-        try validateReferences(references, deadline: deadline)
+        let hasCompleteSelections = try validateReferences(references, deadline: deadline)
         guard
             active == nil
                 || references.contains(where: {
@@ -21,7 +21,10 @@ extension RecoveryStore {
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        let data = try encoder.encode(RecoveryIndex(active: active, documents: references))
+        // 完整选择使用独立存储格式，旧程序必须拒绝读取和覆盖，不能忽略新字段后只恢复一个光标。
+        let data = try encoder.encode(
+            RecoveryIndex(format: hasCompleteSelections ? 3 : 2, active: active, documents: references)
+        )
         guard data.count <= RecoveryLimits.metadataBytes else {
             throw NateError.message("恢复工作区索引超过 8 MB 预算。")
         }
@@ -52,13 +55,13 @@ extension RecoveryStore {
                 fallback.active = nil
             }
             // 旧索引能解码不代表其正文依赖完好，不能用失效记录覆盖唯一有效的上一索引。
-            try validateReferences(fallback.documents, deadline: deadline)
+            _ = try validateReferences(fallback.documents, deadline: deadline)
             let previousData = try encoder.encode(fallback)
             var old: DiskBaseline?
             if try recoveryFileExists(previous) {
                 let existing = try readRecoveryIndex(previous)
                 // 上一索引也可能承载较新格式或损坏现场，当前索引有效不能授予覆盖这些记录的权限。
-                try validateReferences(existing.index.documents, deadline: deadline)
+                _ = try validateReferences(existing.index.documents, deadline: deadline)
                 old = existing.bytes.baseline
             }
             _ = try FileStorage.save(previousData, to: previous, expected: old)
@@ -77,14 +80,17 @@ extension RecoveryStore {
     /// 参数说明:
     /// - references: 将被可靠索引引用的完整文档集合。
     /// - deadline: 本次整个索引动作的处理截止时间。
-    /// 返回：身份、依赖、UTF-8 和工作区累计规模全部符合预算时继续。
-    func validateReferences(_ references: [RecoveryReference], deadline: ContinuousClock.Instant) throws {
+    /// 返回：身份、依赖、UTF-8 和工作区累计规模全部合法时，说明是否需要完整选择存储格式。
+    func validateReferences(_ references: [RecoveryReference], deadline: ContinuousClock.Instant) throws
+        -> Bool
+    {
         guard references.count <= RecoveryLimits.documents,
             Set(references.map(\.id)).count == references.count
         else {
             throw NateError.message("恢复工作区文档数量或身份不合法。")
         }
         var total = 0
+        var hasCompleteSelections = false
         var verified: [String: RecoveryChunkReference] = [:]
         for reference in references {
             try checkRecoveryBudget(
@@ -102,10 +108,13 @@ extension RecoveryStore {
                 guard document.id == reference.id else {
                     throw NateError.message("恢复文档身份不符合索引。")
                 }
+                _ = try document.selectionState?.validated(in: PieceTree(document.text))
+                hasCompleteSelections = hasCompleteSelections || document.selectionState != nil
                 count = document.text.utf8.count
             }
             else {
                 let manifest = try readManifest(reference)
+                hasCompleteSelections = hasCompleteSelections || manifest.metadata.selectionState != nil
                 count = manifest.byteCount
                 for chunk in manifest.chunks {
                     try checkRecoveryBudget(
@@ -130,11 +139,16 @@ extension RecoveryStore {
                         verified[chunk.checksum] = chunk
                     }
                 }
+                if manifest.metadata.selectionState != nil {
+                    // 索引发布会使这份选择成为恢复入口，实际正文与逐行投影也必须在发布前完整相符。
+                    _ = try loadSnapshot(reference, deadline: deadline)
+                }
             }
             guard count <= RecoveryLimits.documentBytes, count <= RecoveryLimits.workspaceBytes - total else {
                 throw NateError.message("恢复正文超过单文档 1 GB 或工作区 2 GB 预算。")
             }
             total += count
         }
+        return hasCompleteSelections
     }
 }

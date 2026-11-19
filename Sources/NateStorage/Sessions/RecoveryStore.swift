@@ -11,6 +11,7 @@ public struct RecoveryDocument: Sendable, Codable {
     public var baseline: DiskBaseline?
     public var language: String
     public var selections: [TextSelection]
+    public var selectionState: SelectionState?
     public var bookmarks: Set<Int>
     public var readOnly: Bool
     public var lineEnding: LineEnding?
@@ -44,6 +45,7 @@ public struct RecoveryDocument: Sendable, Codable {
         case readOnly
         case lineEnding
         case pinned
+        case selectionArchive
     }
 
     /// 业务作用：按固定行号编码书签，避免集合遍历顺序导致相同恢复元数据生成不同清单。
@@ -60,11 +62,46 @@ public struct RecoveryDocument: Sendable, Codable {
         try values.encode(encoding, forKey: .encoding)
         try values.encodeIfPresent(baseline, forKey: .baseline)
         try values.encode(language, forKey: .language)
-        try values.encode(selections, forKey: .selections)
+        // 完整归档已有全部几何，旧字段保持可读但不再重复十万项坐标和稳定身份。
+        try values.encode(selectionState == nil ? selections : [], forKey: .selections)
+        try values.encodeIfPresent(
+            selectionState.map {
+                try SelectionStateArchive.encode($0)
+            },
+            forKey: .selectionArchive
+        )
         try values.encode(bookmarks.sorted(), forKey: .bookmarks)
         try values.encode(readOnly, forKey: .readOnly)
         try values.encodeIfPresent(lineEnding, forKey: .lineEnding)
         try values.encodeIfPresent(pinned, forKey: .pinned)
+    }
+
+    /// 业务作用：有完整选择归档的记录只允许完整恢复，损坏或未知格式不能降级成旧几何。
+    /// 参数说明:
+    /// - decoder: 已由所属恢复文件限制容量的解码器。
+    /// 返回：保留全部选择身份的元数据；旧记录继续使用原几何，正文边界由载入入口另行验证。
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let archive = try values.decodeIfPresent(Data.self, forKey: .selectionArchive)
+        let state = try archive.map {
+            try SelectionStateArchive.decode($0)
+        }
+        self.init(
+            id: try values.decode(UUID.self, forKey: .id),
+            revision: try values.decode(UInt64.self, forKey: .revision),
+            name: try values.decode(String.self, forKey: .name),
+            text: try values.decode(String.self, forKey: .text),
+            path: try values.decodeIfPresent(String.self, forKey: .path),
+            encoding: try values.decode(TextEncoding.self, forKey: .encoding),
+            baseline: try values.decodeIfPresent(DiskBaseline.self, forKey: .baseline),
+            language: try values.decode(String.self, forKey: .language),
+            selections: try state?.selections ?? values.decode([TextSelection].self, forKey: .selections),
+            bookmarks: try values.decode(Set<Int>.self, forKey: .bookmarks),
+            readOnly: try values.decode(Bool.self, forKey: .readOnly),
+            lineEnding: try values.decodeIfPresent(LineEnding.self, forKey: .lineEnding),
+            pinned: try values.decodeIfPresent(Bool.self, forKey: .pinned),
+            selectionState: state
+        )
     }
 
     /// 业务作用：固定已提交正文及恢复所需元数据，不包含输入法预编辑。
@@ -82,6 +119,7 @@ public struct RecoveryDocument: Sendable, Codable {
     /// - readOnly: 编辑器只读状态。
     /// - lineEnding: 新插入换行的规则，旧记录可为空。
     /// - pinned: 标签固定状态；旧记录可为空并按未固定恢复。
+    /// - selectionState: 可选的完整选择身份与形态，存在时与 selections 必须一致。
     /// 返回：可校验、独立于原路径的恢复内容。
     public init(
         id: UUID,
@@ -96,7 +134,8 @@ public struct RecoveryDocument: Sendable, Codable {
         bookmarks: Set<Int>,
         readOnly: Bool,
         lineEnding: LineEnding? = nil,
-        pinned: Bool? = nil
+        pinned: Bool? = nil,
+        selectionState: SelectionState? = nil
     ) {
         self.id = id
         self.revision = revision
@@ -111,6 +150,7 @@ public struct RecoveryDocument: Sendable, Codable {
         self.readOnly = readOnly
         self.lineEnding = lineEnding
         self.pinned = pinned
+        self.selectionState = selectionState
     }
 }
 

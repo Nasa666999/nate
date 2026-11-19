@@ -12,7 +12,7 @@ extension RecoveryStore {
     /// - reference: 已完成正文和索引持久化的快照。
     /// 返回：最近 100 份关闭内容的可靠索引，原工作区仍可继续更新。
     public func archive(_ reference: RecoveryReference) throws {
-        try validateReferences([reference], deadline: .now.advanced(by: RecoveryLimits.processingTime))
+        _ = try validateReferences([reference], deadline: .now.advanced(by: RecoveryLimits.processingTime))
         var references = try archivedReferences()
         references.removeAll {
             $0.id == reference.id

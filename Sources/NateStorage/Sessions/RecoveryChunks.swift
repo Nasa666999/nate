@@ -96,6 +96,13 @@ extension RecoveryStore {
             throw NateError.message("文档超过恢复保护的 1 GB 预算，现有恢复记录继续保留。")
         }
         try checkRecoveryBudget(deadline, permit: permit)
+        // 全部选择必须先与同一正文相符，不能先持久化分块再发现稳定身份或 Tab 证据属于其它内容。
+        if let state = metadata.selectionState {
+            guard state.selections == metadata.selections else {
+                throw NateError.message("恢复选择几何与完整身份不一致，原记录保留。")
+            }
+            _ = try state.validated(in: text, permit: permit)
+        }
         try prepareRecoveryDirectory()
         var chunks: [RecoveryChunkReference] = []
         try text.forEachChunk {
@@ -109,6 +116,7 @@ extension RecoveryStore {
         var record = metadata
         record.text = ""
         let manifest = RecoveryManifest(
+            format: record.selectionState == nil ? 2 : 3,
             metadata: record,
             byteCount: text.byteCount,
             utf16Count: text.utf16Count,
@@ -116,7 +124,8 @@ extension RecoveryStore {
             chunks: chunks
         )
         let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
+        // Base64 中的斜线不需要 JSON 转义，避免合法十万项身份因字节分布不同而超出清单预算。
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(manifest)
         guard data.count <= RecoveryLimits.metadataBytes else {
             throw NateError.message("恢复元数据超过 8 MB 预算。")

@@ -80,6 +80,13 @@ extension RecoveryStore {
             catch is CancellationError {
                 throw CancellationError()
             }
+            catch let error as SelectionArchiveError {
+                // 新格式保存的完整意图不能被较旧索引替换，避免随后自动保存覆盖更完整的记录。
+                throw error
+            }
+            catch let error as RecoveryUnsupportedFormat {
+                throw error
+            }
             catch {
                 found = true
                 lastError = error
@@ -119,6 +126,7 @@ extension RecoveryStore {
                 throw NateError.message("恢复文档身份或正文大小不符合记录。")
             }
             let tree = PieceTree(record.text)
+            _ = try record.selectionState?.validated(in: tree, permit: permit)
             record.text = ""
             return RecoveredSnapshot(metadata: record, text: tree, reference: reference)
         }
@@ -149,6 +157,7 @@ extension RecoveryStore {
         guard text.byteCount == manifest.byteCount, text.utf16Count == manifest.utf16Count else {
             throw NateError.message("恢复正文总长度不符合清单。")
         }
+        _ = try manifest.metadata.selectionState?.validated(in: text, permit: permit)
         return RecoveredSnapshot(metadata: manifest.metadata, text: text, reference: reference)
     }
 
@@ -179,8 +188,10 @@ extension RecoveryStore {
     func readRecoveryIndex(_ url: URL) throws -> (index: RecoveryIndex, bytes: FileReadEvidence) {
         let bytes = try readRecoveryFile(url, maximumBytes: RecoveryLimits.metadataBytes)
         let index = try JSONDecoder().decode(RecoveryIndex.self, from: bytes.data)
-        guard index.format == 1 || index.format == 2,
-            index.documents.count <= RecoveryLimits.documents,
+        guard (1...3).contains(index.format) else {
+            throw RecoveryUnsupportedFormat()
+        }
+        guard index.documents.count <= RecoveryLimits.documents,
             Set(index.documents.map(\.id)).count == index.documents.count,
             index.active == nil
                 || index.documents.contains(where: {
@@ -207,7 +218,13 @@ extension RecoveryStore {
             RecoveryManifest.self,
             from: readSnapshotData(reference, permit: permit)
         )
-        guard manifest.format == 2, manifest.metadata.id == reference.id, manifest.metadata.text.isEmpty,
+        guard manifest.format == 2 || manifest.format == 3 else {
+            throw RecoveryUnsupportedFormat()
+        }
+        guard (manifest.format == 3) == (manifest.metadata.selectionState != nil) else {
+            throw NateError.message("恢复清单格式与完整选择字段不一致，原记录保留。")
+        }
+        guard manifest.metadata.id == reference.id, manifest.metadata.text.isEmpty,
             manifest.byteCount >= 0, manifest.byteCount <= RecoveryLimits.documentBytes,
             manifest.utf16Count >= 0, manifest.utf16Count <= manifest.byteCount,
             manifest.chunks.count <= RecoveryLimits.chunksPerDocument

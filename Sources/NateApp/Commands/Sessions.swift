@@ -4,25 +4,13 @@ import NateCore
 import NatePlatform
 import NateStorage
 
-struct SessionFile: Codable, Sendable {
-    var format = 1
-    var documents: [SessionDocument]
-}
-
-struct SessionDocument: Codable, Sendable {
-    var path: String
-    var language: String
-    var selections: [TextSelection]
-    var readOnly: Bool
-    var bookmarks: Set<Int>
-}
-
 extension ApplicationController {
     /// 业务作用：命名会话记录已命名文件及位置，临时文档继续由独立恢复存储保护。
     /// 参数说明: 无。
     /// 返回：安全写入可迁移的文件清单，不把临时正文藏入普通路径列表。
     func saveSession() async {
-        guard await flushRecovery(), let url = SystemIntegration.chooseSave(name: "Workspace.natesession")
+        guard mainWindow?.finishCompositions() != false, await flushRecovery(),
+            let url = SystemIntegration.chooseSave(name: "Workspace.natesession")
         else {
             return
         }
@@ -36,12 +24,25 @@ extension ApplicationController {
                 language: document.language,
                 selections: document.buffer.selections,
                 readOnly: document.buffer.isReadOnly,
-                bookmarks: document.buffer.bookmarks
+                bookmarks: document.buffer.bookmarks,
+                selectionState: document.buffer.selectionState
             )
         }
         do {
             try await fileIO.run {
-                let data = try JSONEncoder().encode(SessionFile(documents: entries))
+                guard
+                    entries.allSatisfy({
+                        $0.selectionState != nil
+                    })
+                else {
+                    throw NateError.message("当前文档缺少完整选择身份，请重新选择正文后再保存会话。")
+                }
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+                let data = try encoder.encode(SessionFile(documents: entries))
+                guard data.count <= 8_388_608 else {
+                    throw NateError.message("会话元数据超过 8 MiB，原文件保留。")
+                }
                 let expected =
                     FileManager.default.fileExists(atPath: url.path) ? try self.fileAccess.baseline(url) : nil
                 _ = try self.fileOperations.save(
@@ -67,6 +68,10 @@ extension ApplicationController {
     /// - url: 用户选择的会话文件。
     /// 返回：逐项打开有效文件，部分失败按实际清单显示。
     func loadSession(_ url: URL) async {
+        // 候选仍持有原输入目标，必须成功确认后才能由会话改变选择与编辑权限。
+        guard mainWindow?.finishCompositions() != false else {
+            return
+        }
         do {
             let session = try await readIO.readCancellable {
                 token in
@@ -78,7 +83,7 @@ extension ApplicationController {
                     }
                 ).data
                 let session = try JSONDecoder().decode(SessionFile.self, from: data)
-                guard session.format == 1, session.documents.count <= 10_000 else {
+                guard (session.format == 1 || session.format == 2), session.documents.count <= 10_000 else {
                     throw NateError.message("会话格式或文档数量不受支持。")
                 }
                 return session
@@ -88,6 +93,7 @@ extension ApplicationController {
                 return
             }
             var skipped: [String] = []
+            var selectionFailures: [String] = []
             for entry in session.documents {
                 guard entry.path.hasPrefix("/"), !entry.path.hasPrefix("//"), !entry.path.contains("://"),
                     FileManager.default.fileExists(atPath: entry.path)
@@ -108,19 +114,37 @@ extension ApplicationController {
                     skipped.append(entry.path)
                     continue
                 }
+                guard mainWindow?.finishCompositions() != false else {
+                    return
+                }
                 document.language = entry.language
                 document.languageExplicit = true
-                document.buffer.selections = entry.selections.filter {
-                    document.buffer.text.isBoundary($0.anchor) && document.buffer.text.isBoundary($0.head)
+                if let state = entry.selectionState {
+                    do {
+                        try document.buffer.setSelectionState(state)
+                    }
+                    catch {
+                        // 路径正文可能在会话保存后改变，保留已打开内容和当前合法光标，不丢弃部分稳定身份。
+                        selectionFailures.append(entry.path + "：" + error.localizedDescription)
+                    }
                 }
-                if document.buffer.selections.isEmpty {
-                    document.buffer.selections = [TextSelection(anchor: 0, head: 0)]
+                else {
+                    try document.restoreSelections(nil, legacySelections: entry.selections)
                 }
                 document.buffer.isReadOnly = entry.readOnly
                 document.buffer.bookmarks = entry.bookmarks
             }
-            if !skipped.isEmpty {
-                mainWindow?.showResults("会话部分载入，以下路径未打开：\n" + skipped.joined(separator: "\n"))
+            if !skipped.isEmpty || !selectionFailures.isEmpty {
+                let paths = skipped.isEmpty ? "" : "以下路径未打开：\n" + skipped.joined(separator: "\n")
+                let selections =
+                    selectionFailures.isEmpty
+                    ? "" : "以下完整选择与当前正文不符，保留当前光标：\n" + selectionFailures.joined(separator: "\n")
+                mainWindow?.showResults(
+                    "会话部分载入\n"
+                        + [paths, selections].filter {
+                            !$0.isEmpty
+                        }.joined(separator: "\n")
+                )
             }
             mainWindow?.editor.refresh(reveal: true)
             refreshUI()

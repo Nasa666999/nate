@@ -281,18 +281,11 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 document.savedEncoding = record.encoding
                 document.language = record.language
                 document.pinned = record.pinned ?? false
-                document.buffer.selections = record.selections.filter {
-                    document.buffer.text.isBoundary($0.anchor) && document.buffer.text.isBoundary($0.head)
-                }
-                if document.buffer.selections.isEmpty {
-                    document.buffer.selections = [TextSelection(anchor: 0, head: 0)]
-                }
+                try document.restoreSelections(from: record)
                 document.buffer.bookmarks = record.bookmarks
                 document.buffer.isReadOnly = record.readOnly
                 document.recoveryReference = reference
                 document.recoveryRevision = record.revision
-                // 已恢复引用已经通过完整依赖校验；按原元数据记账，不能把随后默认化的视图状态冒充持久化。
-                document.lastRecoveryMetadata = record.metadataKey
                 document.state = "恢复正文已载入 · 尚未选择原文件"
                 if let path = record.path {
                     // 恢复正文先显示，原路径核验完成前不授予自动写入权。
@@ -300,6 +293,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                     document.pendingOriginalBaseline = record.baseline
                     document.state = "恢复内容已载入 · 原路径正在核验"
                 }
+                // 完整状态已从同一正文恢复，运行代次用于后续轻量比较；旧记录留待下一周期写入完整身份。
+                document.lastRecoveryMetadata =
+                    record.selectionState == nil ? "" : document.recoveryMetadataKey
                 documents.append(document)
             }
             activeID = restored.active

@@ -95,12 +95,7 @@ extension ApplicationController {
             document.pinned = record.pinned ?? false
             document.languageExplicit = true
             document.buffer.bookmarks = record.bookmarks
-            document.buffer.selections = record.selections.filter {
-                tree.isBoundary($0.anchor) && tree.isBoundary($0.head)
-            }
-            if document.buffer.selections.isEmpty {
-                document.buffer.selections = [TextSelection(anchor: 0, head: 0)]
-            }
+            try document.restoreSelections(from: record)
             document.buffer.isReadOnly = record.readOnly
             document.state = "保留工作区的独立恢复副本"
             if record.id == payload.active {
