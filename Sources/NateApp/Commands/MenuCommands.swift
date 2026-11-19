@@ -245,12 +245,20 @@ extension ApplicationController: NSMenuItemValidation {
         add(tools, "取消文本工具转换", "cancelTextTool")
         for (title, id) in [
             ("JSON 格式化", "tool:json"), ("XML 格式化", "tool:xml"),
-            ("文本转 HEX", "tool:hexEncode"), ("HEX 转文本", "tool:hexDecode"), ("MD5 摘要", "tool:md5"),
-            ("SHA-1 摘要", "tool:sha1"), ("SHA-256 摘要", "tool:sha256"), ("SHA-512 摘要", "tool:sha512"),
+            ("文本转 HEX", "tool:hexEncode"), ("HEX 转文本", "tool:hexDecode"),
             ("导出 HTML…", "exportHTML"), ("导出 RTF…", "exportRTF"), ("Markdown 预览", "markdownPreview"),
             ("文档比较…", "compare"), ("字符与进制转换…", "characterConverter"),
         ] {
             add(tools, title, id)
+        }
+        for algorithm in DigestAlgorithm.allCases {
+            let menu = NSMenu(title: algorithm.title + " 摘要")
+            add(menu, "直接输入文本…", "digest:\(algorithm.rawValue):text")
+            add(menu, "按行独立文本…", "digest:\(algorithm.rawValue):lines")
+            add(menu, "多个磁盘文件…", "digest:\(algorithm.rawValue):files")
+            add(menu, "当前选区到剪贴板", "digest:\(algorithm.rawValue):selection")
+            add(menu, "当前选区或全文到剪贴板", "tool:\(algorithm.rawValue)")
+            attach(menu, to: tools)
         }
         let mime = NSMenu(title: "MIME 编解码")
         for (title, id) in [
@@ -370,7 +378,23 @@ extension ApplicationController: NSMenuItemValidation {
             return enabled
         }
         if id == "cancelTextTool" {
-            return textTools.task != nil
+            return textTools.task != nil || digests.task != nil
+        }
+        if id.hasPrefix("digest:") {
+            guard !closing, mainWindow?.hasMarkedEditorInput != true else {
+                return false
+            }
+            if id.hasSuffix(":selection") {
+                guard textTools.task == nil, let (_, _, editor) = quickFindContext(),
+                    let state = editor.viewSelectionState, state.entries.count == 1,
+                    case .stream = state.shape, let entry = state.entries.first,
+                    !entry.selection.range.isEmpty, entry.selection.virtualColumn == 0
+                else {
+                    return false
+                }
+                return true
+            }
+            return digests.task == nil
         }
         if ["print", "printImmediately", "printSelection", "printSettings", "pageSetup"].contains(id) {
             guard !closing, !printing.busy, let document = active, !document.closing,

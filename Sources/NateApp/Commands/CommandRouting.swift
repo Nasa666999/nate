@@ -18,6 +18,10 @@ extension ApplicationController {
             return
         }
         noteUnrecordedMacroCommand(id)
+        if id.hasPrefix("digest:") {
+            routeDigest(id)
+            return
+        }
         if id == "unrecordedEditorCommand" {
             if macroRecording, !macroPlaying {
                 macroRecorder.noteSkipped(id, title: "当前原生按键动作")
@@ -304,7 +308,9 @@ extension ApplicationController {
         case "typingAssistance": requestCompletion(automatic: true)
         case "completePath": requestPathCompletion()
         case "cancelReads": readIO.cancelReads()
-        case "cancelTextTool": cancelTextTool()
+        case "cancelTextTool":
+            cancelTextTool()
+            cancelDigest()
         case "cancelExternalCommand": externalCommandTask?.cancel()
         case "fileTasks": showFileTasks()
         case "lastExternalOutput":

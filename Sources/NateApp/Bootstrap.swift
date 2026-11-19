@@ -139,6 +139,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let keyboardMap = KeyboardMapRuntime()
     let runCommands = RunCommandRuntime()
     let textTools = TextToolRuntime()
+    let digests = DigestRuntime()
     let printing = PrintRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []

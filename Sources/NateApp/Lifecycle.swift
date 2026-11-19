@@ -54,6 +54,7 @@ extension ApplicationController {
         cancelHistoryAction()
         cancelLineSort()
         cancelTextTool()
+        cancelDigest()
         cancelQuickFind()
         mainWindow?.refreshSelectedTextHighlights()
         cancelBookmarkAction()

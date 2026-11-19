@@ -89,6 +89,17 @@ extension ApplicationController {
                             throw NateError.message("工具完整输入超过 64 MiB，原内容保持不变。")
                         }
                         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+                        if let algorithm = DigestAlgorithm(rawValue: name) {
+                            let values = try TextDigests.values(
+                                text: snapshot.text,
+                                range: range,
+                                deadline: deadline,
+                                permit: {
+                                    !token.isCancelled
+                                }
+                            )
+                            return PreparedTextTool.digest(values.value(for: algorithm))
+                        }
                         let source = snapshot.text.text(in: range)
                         let data: Data
                         if let operation = MIMEOperation(rawValue: name) {
@@ -115,9 +126,6 @@ extension ApplicationController {
                             )
                         else {
                             return PreparedTextTool.bytes(data)
-                        }
-                        if digest {
-                            return PreparedTextTool.digest(value)
                         }
                         let plan = try PreparedSelectionInsertion(
                             snapshot: snapshot,
