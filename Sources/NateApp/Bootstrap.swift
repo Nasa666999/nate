@@ -127,10 +127,14 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var macroActions: [MacroAction] = [] {
         didSet {
             macroActionsGeneration = UUID()
+            if !macroRecording {
+                macroRecorder.reset()
+            }
         }
     }
     var macroPlaying = false
     let macroPlayback = MacroPlaybackRuntime()
+    let macroRecorder = MacroRecordingRuntime()
     let macroLibrary = MacroLibraryRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []

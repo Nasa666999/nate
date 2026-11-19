@@ -148,22 +148,9 @@ public struct NamedMacro: Sendable {
     /// - nameBytes: 名称字节数。
     /// 返回：包含原文、载荷索引和编码的估计保留容量。
     private static func footprint(_ actions: [MacroAction], archiveBytes: Int, nameBytes: Int) -> Int {
-        var bytes = archiveBytes + nameBytes + actions.count * MemoryLayout<MacroAction>.stride + 128
+        var bytes = archiveBytes + nameBytes + 128
         for action in actions {
-            switch action {
-            case .input(let text), .command(let text): bytes += text.utf8.count
-            case .editor, .clipboardCopy: break
-            case .search(let action):
-                bytes += action.options.query.utf8.count + action.options.replacement.utf8.count
-            case .lineSort(let options): bytes += options.localeIdentifier.utf8.count
-            case .clipboard(let payload, _):
-                bytes +=
-                    payload.fragments.count
-                    * (MemoryLayout<ClipboardFragment>.stride + MemoryLayout<Int>.stride)
-                bytes += payload.fragments.reduce(0) {
-                    $0 + $1.text.utf8.count
-                }
-            }
+            bytes += action.retainedByteEstimate()
         }
         return bytes
     }

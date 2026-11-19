@@ -150,7 +150,7 @@ extension ApplicationController {
                     _ = editor.setRectangularSelections(plan.selections, zeroWidth: zeroWidth)
                 }
                 if self.macroRecording, !self.macroPlaying, self.macroRecordingGeneration == recording {
-                    self.macroActions.append(.lineSort(options))
+                    self.appendRecordedMacroAction(.lineSort(options))
                 }
                 if changed {
                     self.didEdit()
@@ -159,6 +159,9 @@ extension ApplicationController {
                 window.status.stringValue =
                     "行排序已完成，共 \(plan.sourceLines.count) 行。"
                     + (plan.reassignedEndings ? "已重新分配原结束符，保留混合换行字节与空行数量。" : "")
+                    + (self.macroRecorder.notice.map {
+                        " " + $0
+                    } ?? "")
             }
             catch {
                 if current() {

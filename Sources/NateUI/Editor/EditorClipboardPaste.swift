@@ -224,8 +224,8 @@ extension EditorView {
             onChange?()
         }
         onClipboardCapture?(content.payload)
-        onClipboardPaste?(content.payload, adapting)
         onStatus?("已粘贴。")
+        onClipboardPaste?(content.payload, adapting)
         return true
     }
 }

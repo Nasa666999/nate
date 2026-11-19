@@ -17,6 +17,15 @@ extension ApplicationController {
         else {
             return
         }
+        noteUnrecordedMacroCommand(id)
+        if id == "unrecordedEditorCommand" {
+            if macroRecording, !macroPlaying {
+                macroRecorder.noteSkipped(id, title: "当前原生按键动作")
+                refreshUI()
+                refreshMacroLibraryPresentation()
+            }
+            return
+        }
         if id.hasPrefix("sort:") {
             let fields = id.split(separator: ":")
             if fields.count == 3, let kind = LineSortKind(rawValue: String(fields[1])),
@@ -393,6 +402,7 @@ extension ApplicationController {
             }
             macroRecording.toggle()
             if macroRecording {
+                macroRecorder.reset()
                 macroActions = []
             }
             refreshUI()

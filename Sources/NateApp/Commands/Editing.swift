@@ -22,7 +22,7 @@ extension ApplicationController {
         do {
             try active.buffer.perform(command)
             if macroRecording && !macroPlaying {
-                macroActions.append(.command(command.rawValue))
+                appendRecordedMacroAction(.command(command.rawValue))
             }
             mainWindow?.editor.refresh(reveal: true)
             didEdit()

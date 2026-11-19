@@ -95,6 +95,11 @@ extension ApplicationController {
             else {
                 return
             }
+            if macroRecording, !macroPlaying {
+                macroRecorder.noteSkipped(action, title: action == "clearSearchMarks" ? "清除查找标记" : "复制查找标记")
+                refreshUI()
+                refreshMacroLibraryPresentation()
+            }
             if action == "clearSearchMarks" {
                 clearSearchMarks()
             }
@@ -134,6 +139,8 @@ extension ApplicationController {
         if macroRecording, !macroPlaying, !afterReplacement,
             MacroSearchCommand(rawValue: action) == nil
         {
+            macroRecorder.noteSkipped("search:" + action, title: "跨范围搜索、计数或标记")
+            refreshMacroLibraryPresentation()
             mainWindow?.status.stringValue = "此搜索动作不进入宏；可录制当前文档的前后查找、单次替换和全部替换。"
         }
         if action == "files" || action == "replaceFiles" {

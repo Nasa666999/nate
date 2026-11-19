@@ -280,7 +280,7 @@ extension ApplicationController {
         let runtime = macroLibrary
         let playing = macroPlaying || macroPlayback.task != nil
         if let panel = runtime.panel {
-            let warning = [runtime.failure, macroShortcutWarning()].compactMap {
+            let warning = [runtime.failure, macroShortcutWarning(), macroRecorder.notice].compactMap {
                 $0
             }.joined(separator: "\n")
             panel.update(

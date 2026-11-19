@@ -30,7 +30,7 @@ extension ApplicationController {
             return
         }
         do {
-            macroActions.append(
+            appendRecordedMacroAction(
                 .search(try MacroSearchAction(command: command, options: options, stayAfterReplace: staying))
             )
         }

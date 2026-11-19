@@ -154,8 +154,8 @@ extension EditorView {
                     }
                     onClipboardCapture?(result.0.payload)
                     clipboard.succeeded = proof.operation
-                    onClipboardCopy?(cutting, line)
                     onStatus?(cutting ? "已剪切。" : "已复制。")
+                    onClipboardCopy?(cutting, line)
                 }
                 catch is CancellationError {
                     onStatus?("剪贴板动作已取消或来源已改变，未提交旧结果。")

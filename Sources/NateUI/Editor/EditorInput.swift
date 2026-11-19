@@ -102,7 +102,9 @@ extension EditorView {
                 needsDisplay = true
                 onSelection?()
             }
-        default: NSSound.beep()
+        default:
+            onCommand?("unrecordedEditorCommand")
+            NSSound.beep()
         }
     }
 

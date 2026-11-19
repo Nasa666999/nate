@@ -15,7 +15,7 @@ extension ApplicationController {
         else {
             return
         }
-        macroActions.append(.clipboardCopy(cutting: cutting, copyLineWithoutSelection: copyLine))
+        appendRecordedMacroAction(.clipboardCopy(cutting: cutting, copyLineWithoutSelection: copyLine))
     }
 
     /// 业务作用：方向、选择和删除按成功的语义记录，不把光标绝对位置或删除结果当作输入文字。
@@ -26,7 +26,7 @@ extension ApplicationController {
         guard macroRecording, !macroPlaying, quickFindContext() != nil else {
             return
         }
-        macroActions.append(.editor(command))
+        appendRecordedMacroAction(.editor(command))
     }
 
     /// 业务作用：只记录已提交的语义输入，预编辑和磁盘保存不进入宏。
@@ -37,7 +37,7 @@ extension ApplicationController {
         guard macroRecording, !macroPlaying, quickFindContext() != nil else {
             return
         }
-        macroActions.append(.input(value))
+        appendRecordedMacroAction(.input(value))
     }
 
     /// 业务作用：粘贴宏记录实际载荷与明确换行选项，目标 Tab 保留或定位空白不会变成输入内容。
@@ -51,7 +51,7 @@ extension ApplicationController {
         else {
             return
         }
-        macroActions.append(.clipboard(payload, adaptLineEndings: adapting))
+        appendRecordedMacroAction(.clipboard(payload, adaptLineEndings: adapting))
     }
 
     /// 业务作用：按有界次数播放语义动作，循环间让出主事件循环。
