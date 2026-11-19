@@ -16,6 +16,11 @@ final class TextToolRuntime {
     var succeeded: UUID?
     var bytesPanel: ByteResultPanel?
     var exportTask: Task<Void, Never>?
+    var converterPanel: CharacterConverterPanel?
+    var converterOrigin: RunCommandSourceProof?
+    var hexOptions = HexEncodingOptions()
+    var hexDefaults: UserDefaults?
+    var hexWarning: String?
 
     /// 业务作用：文本工具独立限制同步转换并保留实际占用，不与文件读写或进程执行相互阻塞。
     /// 参数说明: 无。
@@ -57,6 +62,8 @@ extension ApplicationController {
         cancelTextTool()
         let runtime = textTools, request = runtime.generation
         let snapshot = document.buffer.snapshot
+        let hexOptions = name == "hexEncode" ? currentHexOptions() : runtime.hexOptions
+        let hexWarning = name == "hexEncode" ? runtime.hexWarning : nil
         let range =
             entry.selection.range.isEmpty ? ByteRange(0, snapshot.text.byteCount) : entry.selection.range
         let proof = RunCommandSourceProof(
@@ -102,7 +109,27 @@ extension ApplicationController {
                         }
                         let source = snapshot.text.text(in: range)
                         let data: Data
-                        if let operation = MIMEOperation(rawValue: name) {
+                        if name == "hexEncode" {
+                            data = try HexCodec.encode(
+                                Data(source.utf8),
+                                options: hexOptions,
+                                lineEnding: snapshot.format.lineEnding,
+                                deadline: deadline,
+                                permit: {
+                                    !token.isCancelled
+                                }
+                            )
+                        }
+                        else if name == "hexDecode" {
+                            data = try HexCodec.decode(
+                                Data(source.utf8),
+                                deadline: deadline,
+                                permit: {
+                                    !token.isCancelled
+                                }
+                            )
+                        }
+                        else if let operation = MIMEOperation(rawValue: name) {
                             data = try MIMECodec.transform(
                                 operation,
                                 data: Data(source.utf8),
@@ -158,6 +185,9 @@ extension ApplicationController {
                         self.didEdit()
                     }
                     window.status.stringValue = "文本转换已完整完成，可撤销。"
+                    if let hexWarning {
+                        window.status.stringValue += " " + hexWarning
+                    }
                 case .bytes(let data):
                     self.showTextToolBytes(data, name: name)
                     window.status.stringValue = "解码得到非 UTF-8 字节，原文保持不变；完整结果已在独立窗口提供。"

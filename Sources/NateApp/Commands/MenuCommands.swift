@@ -245,7 +245,8 @@ extension ApplicationController: NSMenuItemValidation {
         add(tools, "取消文本工具转换", "cancelTextTool")
         for (title, id) in [
             ("JSON 格式化", "tool:json"), ("XML 格式化", "tool:xml"),
-            ("文本转 HEX", "tool:hexEncode"), ("HEX 转文本", "tool:hexDecode"),
+            ("ASCII / UTF-8 转 HEX", "tool:hexEncode"), ("HEX 转文本 / 原字节", "tool:hexDecode"),
+            ("HEX 转换格式…", "hexConversionSettings"),
             ("导出 HTML…", "exportHTML"), ("导出 RTF…", "exportRTF"), ("Markdown 预览", "markdownPreview"),
             ("文档比较…", "compare"), ("字符与进制转换…", "characterConverter"),
         ] {
@@ -379,6 +380,9 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "cancelTextTool" {
             return textTools.task != nil || digests.task != nil
+        }
+        if id == "characterConverter" || id == "hexConversionSettings" {
+            return !closing && mainWindow?.hasMarkedEditorInput != true
         }
         if id.hasPrefix("digest:") {
             guard !closing, mainWindow?.hasMarkedEditorInput != true else {

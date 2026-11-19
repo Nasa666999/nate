@@ -505,6 +505,7 @@ extension ApplicationController {
         case "markdownPreview": previewMarkdown()
         case "compare": compareDocuments()
         case "characterConverter": characterConverter()
+        case "hexConversionSettings": showHexConversionSettings()
         case "preferences": showPreferences()
         case "saveBackupPreferences": showSaveBackupPreferences()
         case "savedBackups": showSavedBackups()
