@@ -48,7 +48,20 @@ extension ApplicationController {
     func macroShortcutConflict(_ shortcut: MacroShortcut, excluding id: UUID, in root: NSMenu? = nil)
         -> String?
     {
-        let ignored = "savedMacro:" + id.uuidString
+        commandShortcutConflict(shortcut, excluding: "savedMacro:" + id.uuidString, in: root)
+    }
+
+    /// 业务作用：独立命令库共用实际组合所有者，宏与运行配置不能沿不同检查规则争用同一键位。
+    /// 参数说明:
+    /// - shortcut: 当前待保存的完整逻辑组合。
+    /// - ignored: 本次修改的原稳定命令，其旧绑定不构成自冲突。
+    /// - root: 可选的正在构建的新菜单。
+    /// 返回：真实冲突所有者的完整名称，无冲突为空。
+    func commandShortcutConflict(
+        _ shortcut: KeyboardShortcut,
+        excluding ignored: String,
+        in root: NSMenu? = nil
+    ) -> String? {
         if keyboardMap.ready, let resolution = keyboardMap.resolution {
             if let owner = resolution.owners[shortcut], owner != ignored {
                 return keyboardMap.catalog.first(where: {

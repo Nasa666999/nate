@@ -249,11 +249,15 @@ extension ApplicationController: NSMenuItemValidation {
             ("停止播放", "cancelMacro"),
             ("命名宏管理…", "macroLibrary"), ("保存当前录制为命名宏…", "saveNamedMacro"),
             ("查看已载入宏…", "previewMacro"),
-            ("保存宏…", "saveMacro"), ("载入宏…", "loadMacro"), ("运行外部命令…", "run"),
+            ("保存宏…", "saveMacro"), ("载入宏…", "loadMacro"),
         ] {
             add(macro, title, id)
         }
         attach(macro, to: bar)
+        let run = NSMenu(title: "运行")
+        add(run, "一次运行…", "run")
+        add(run, "命名运行配置…", "runCommands")
+        attach(run, to: bar)
         let windows = NSMenu(title: "窗口")
         add(windows, "下一个标签", "nextTab")
         add(windows, "上一个标签", "previousTab")
@@ -267,6 +271,7 @@ extension ApplicationController: NSMenuItemValidation {
         attach(help, to: bar)
         installKeyboardMap(in: bar)
         appendMacroLibraryMenu(to: macro, root: bar)
+        appendRunCommandMenu(to: run, root: bar)
         NSApp.mainMenu = bar
     }
 
@@ -317,6 +322,14 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if id.hasPrefix("savedRun:") {
+            return !closing && runCommands.ready && runCommands.task == nil
+                && runCommands.prepareTask == nil && runCommands.importTask == nil
+                && externalCommandTask == nil && active != nil
+                && runCommands.library.commands.contains(where: {
+                    "savedRun:" + $0.id.uuidString == id
+                })
         }
         if let enabled = validateClipboardMenu(menuItem, id: id) {
             return enabled

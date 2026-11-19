@@ -106,6 +106,20 @@ extension ApplicationController {
                 )
             )
         }
+        for command in runCommands.library.commands {
+            entries.append(
+                KeyboardCommandEntry(
+                    id: "savedRun:" + command.id.uuidString,
+                    title: command.name,
+                    category: "运行 / 命名配置",
+                    defaults: command.shortcut.map {
+                        [$0]
+                    } ?? [],
+                    items: [],
+                    managedElsewhere: true
+                )
+            )
+        }
         _ = try entries.map {
             try CommandKeyBinding(command: $0.id, shortcuts: $0.defaults)
         }

@@ -32,13 +32,18 @@ extension ApplicationController {
             }
             panel.onManageExternal = {
                 [weak self] command in
-                guard let self, command.hasPrefix("savedMacro:"),
-                    let id = UUID(uuidString: String(command.dropFirst(11)))
-                else {
+                guard let self else {
                     return
                 }
-                self.showMacroLibrary()
-                self.macroLibrary.panel?.selectMacro(id)
+                if command.hasPrefix("savedMacro:"), let id = UUID(uuidString: String(command.dropFirst(11)))
+                {
+                    self.showMacroLibrary()
+                    self.macroLibrary.panel?.selectMacro(id)
+                }
+                if command.hasPrefix("savedRun:"), let id = UUID(uuidString: String(command.dropFirst(9))) {
+                    self.showRunCommands()
+                    self.runCommands.panel?.selectCommand(id)
+                }
             }
             panel.onApplyImport = {
                 [weak self] in

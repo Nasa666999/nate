@@ -73,6 +73,8 @@ extension ApplicationController {
         cancelMacro()
         macroLibrary.importTask?.cancel()
         cancelKeyboardMapImport()
+        cancelRunCommandImport()
+        cancelRunCommandPreparation()
         let protectedDocuments = documents
         // 先冻结所有现有正文，再等待外部动作，使最后确认的正文在等待期间保持不变。
         for document in protectedDocuments {
@@ -94,6 +96,7 @@ extension ApplicationController {
                         || historyPersistence.task != nil
                         || macroLibrary.task != nil
                         || keyboardMap.task != nil
+                        || runCommands.task != nil
                         || !closingDocumentIDs.isEmpty
                 }
             )
@@ -118,6 +121,13 @@ extension ApplicationController {
                 mainWindow?.status.stringValue = "快捷键映射仍在确认，已取消退出；请等待后重试。"
                 return
             }
+            // 配置发布可能已经替换原文件，实际任务未返回前不能把未确认状态当作已保存并结束进程。
+            guard runCommands.task == nil else {
+                restoreAfterCancelledExit(protectedDocuments)
+                sender.reply(toApplicationShouldTerminate: false)
+                mainWindow?.status.stringValue = "运行配置仍在确认，已取消退出；请等待后重试。"
+                return
+            }
             // 既有关闭仍可能移除或恢复标签，成员集合未收束时不能确认最终退出索引。
             guard closingDocumentIDs.isEmpty else {
                 SystemIntegration.alert("关闭流程尚未完成，已取消退出", "正文保持保护；请等待当前关闭返回，再重新退出。文件写入任务仍可从工具菜单查看。")
@@ -134,6 +144,9 @@ extension ApplicationController {
             }
             if !keyboardMap.writable, let failure = keyboardMap.failure {
                 failures.append("快捷键：" + failure)
+            }
+            if !runCommands.writable, let failure = runCommands.failure {
+                failures.append("运行配置：" + failure)
             }
             if !(await flushSidebarRecovery(until: deadline)) {
                 failures.append(sidebarRecovery.failure ?? "侧栏恢复状态尚未确认保存。")

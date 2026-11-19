@@ -43,6 +43,10 @@ extension ApplicationController {
             playNamedMacro(value)
             return
         }
+        if id.hasPrefix("savedRun:"), let value = UUID(uuidString: String(id.dropFirst(9))) {
+            prepareNamedRunCommand(value)
+            return
+        }
         if id.hasPrefix("markStyle:"), let command = styleMarkAction(for: id) {
             routeStyleMark(command.style, action: command.action)
             return
@@ -268,12 +272,14 @@ extension ApplicationController {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
         case "compositionBegan":
+            cancelRunCommandPreparation()
             suspendSearchForInput()
             mainWindow?.refreshSelectedTextHighlights()
         case "compositionEnded":
             refreshVisibleIncrementalHighlights()
             mainWindow?.refreshSelectedTextHighlights()
         case "selectionChanged":
+            cancelRunCommandPreparation()
             cancelLineSort()
             cancelHistoryAction()
             cancelMultipleSelection()
@@ -425,6 +431,7 @@ extension ApplicationController {
         case "saveNamedMacro": saveRecordingToLibrary()
         case "previewMacro": showTemporaryMacroPreview()
         case "run": configureRun()
+        case "runCommands": showRunCommands()
         case "saveSession":
             Task {
                 await saveSession()

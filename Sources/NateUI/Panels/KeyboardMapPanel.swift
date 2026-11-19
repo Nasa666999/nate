@@ -350,6 +350,7 @@ public final class KeyboardMapPanel: NSWindowController, NSTableViewDataSource, 
         defaultButton.isEnabled =
             command?.requested != nil && writable && !busy
         externalButton.isHidden = command?.managedElsewhere != true
+        externalButton.title = command?.id.hasPrefix("savedRun:") == true ? "在运行配置中设置…" : "在宏管理中设置…"
         externalButton.isEnabled = command?.available == true && !busy
         guard let command else {
             details.string = "没有符合筛选的命令。"
@@ -365,7 +366,8 @@ public final class KeyboardMapPanel: NSWindowController, NSTableViewDataSource, 
             + "\n默认：" + show(command.defaults) + "\n期望：" + show(command.requested ?? command.defaults)
             + "\n实际启用：" + show(command.active)
             + (command.available ? "" : "\n当前应用未提供该命令，保留覆盖且不执行。")
-            + (command.managedElsewhere ? "\n此命令由宏管理保存绑定。" : "")
+            + (command.managedElsewhere
+                ? (command.id.hasPrefix("savedRun:") ? "\n此命令由运行配置保存绑定。" : "\n此命令由宏管理保存绑定。") : "")
             + (command.notes.isEmpty ? "" : "\n" + command.notes.joined(separator: "\n"))
     }
 
