@@ -100,6 +100,7 @@ public enum FileStorage {
     /// - data: 已完成严格编码的文件字节。
     /// - url: 用户确认的目标。
     /// - expected: 已有文件必须匹配的基线；新建目标必须不存在。
+    /// - resolvingDirectoryLinks: 用户文件可沿已确认的目录别名，专属配置关闭此项以逐层拒绝目录链接。
     /// - permit: 发布前仍必须有效的请求权限。
     /// - authority: 单次发布权，防止取消与原子替换之间出现不确定的授权顺序。
     /// - observe: 实际执行阶段的只读观察入口。
@@ -108,6 +109,7 @@ public enum FileStorage {
         _ data: Data,
         to url: URL,
         expected: DiskBaseline?,
+        resolvingDirectoryLinks: Bool = true,
         permit: @Sendable () -> Bool = {
             true
         },
@@ -121,12 +123,17 @@ public enum FileStorage {
         }
         try validateFileURL(url)
         observe(.checkingBaseline)
-        let target =
-            expected.map {
-                URL(fileURLWithPath: $0.resolvedPath)
-            }
-            ?? url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL
-            .appendingPathComponent(url.lastPathComponent)
+        let target: URL
+        if let expected {
+            target = URL(fileURLWithPath: expected.resolvedPath)
+        }
+        else {
+            let parent = url.deletingLastPathComponent()
+            let fixed =
+                resolvingDirectoryLinks
+                ? parent.resolvingSymlinksInPath().standardizedFileURL : parent.standardizedFileURL
+            target = fixed.appendingPathComponent(url.lastPathComponent)
+        }
         // 新目标尚不存在时不能依赖整条路径解析；先固定已有父目录，避免别名在发布前后产生不同路径证据。
         let publishedPath = target.path
         let expectedDigest = digest(data)
@@ -152,11 +159,22 @@ public enum FileStorage {
         // 目录读取可能等待系统隐私授权，必须在替换原文件之前取得同步描述符，不能先产生未确认覆盖。
         observe(.preparingDirectory)
         let parent = target.deletingLastPathComponent()
-        // 用户目录允许合法链接别名，实际描述符身份与发布前路径复验共同约束写入目标。
-        let directory = Darwin.open(
-            parent.resolvingSymlinksInPath().standardizedFileURL.path,
-            O_RDONLY | O_CLOEXEC | O_DIRECTORY
-        )
+        let directory: Int32
+        if resolvingDirectoryLinks {
+            // 用户目录允许已确认的链接别名，实际描述符身份与发布前路径复验共同约束目标。
+            directory = Darwin.open(
+                parent.resolvingSymlinksInPath().standardizedFileURL.path,
+                O_RDONLY | O_CLOEXEC | O_DIRECTORY
+            )
+        }
+        else {
+            // 私有配置逐段以 O_NOFOLLOW 取得原目录描述符，路径复验之间的新链接也不能取得写入权。
+            directory = try DirectoryContents.openDirectory(
+                root: URL(fileURLWithPath: "/", isDirectory: true),
+                directory: parent,
+                permit: permit
+            )
+        }
         guard directory >= 0 else {
             throw posix("无法取得目标目录同步权限，原文件未覆盖")
         }
@@ -265,7 +283,21 @@ public enum FileStorage {
         let flags: UInt32 = expected == nil ? UInt32(RENAME_EXCL) : 0
         var currentDirectory = stat()
         // 同步描述符与即将发布的路径必须仍属于同一目录，目录被替换后不能继续沿用旧同步权威。
-        guard stat(parent.path, &currentDirectory) == 0,
+        let directoryCheck: Int32
+        if resolvingDirectoryLinks {
+            directoryCheck = stat(parent.path, &currentDirectory)
+        }
+        else {
+            // 发布仍沿已取得的目录描述符执行，当前路径必须再次通过逐层无链接验证并指向同一目录。
+            let verified = try DirectoryContents.openDirectory(
+                root: URL(fileURLWithPath: "/", isDirectory: true),
+                directory: parent,
+                permit: permit
+            )
+            directoryCheck = fstat(verified, &currentDirectory)
+            Darwin.close(verified)
+        }
+        guard directoryCheck == 0,
             currentDirectory.st_dev == directoryIdentity.st_dev,
             currentDirectory.st_ino == directoryIdentity.st_ino
         else {

@@ -15,6 +15,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "设置…", "preferences", key: ",")
         add(application, "补全与参数提示…", "assistancePreferences")
         add(application, "保存时备份设置…", "saveBackupPreferences")
+        add(application, "快捷键映射器…", "keyboardMap")
         application.addItem(.separator())
         let hide = NSMenuItem(title: "隐藏 Nate", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hide.target = NSApp
@@ -264,6 +265,7 @@ extension ApplicationController: NSMenuItemValidation {
         let help = NSMenu(title: "帮助")
         add(help, "使用说明", "help")
         attach(help, to: bar)
+        installKeyboardMap(in: bar)
         appendMacroLibraryMenu(to: macro, root: bar)
         NSApp.mainMenu = bar
     }

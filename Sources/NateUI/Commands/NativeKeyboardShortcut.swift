@@ -22,6 +22,10 @@ public enum NativeKeyboardShortcut {
                 return result + "F\(scalar.value - 0xF704 + 1)"
             }
             let names: [UInt32: String] = [
+                3: "⌤",
+                8: "⌫",
+                9: "⇥",
+                13: "↩",
                 UInt32(NSUpArrowFunctionKey): "↑",
                 UInt32(NSDownArrowFunctionKey): "↓",
                 UInt32(NSLeftArrowFunctionKey): "←",
@@ -66,6 +70,14 @@ public enum NativeKeyboardShortcut {
             }
         }
         return result
+    }
+
+    /// 业务作用：归档使用稳定 Backspace 身份，原生菜单使用 AppKit 实际匹配的 Delete 字符。
+    /// 参数说明:
+    /// - shortcut: 已通过完整门禁的逻辑组合。
+    /// 返回：可被实际原生菜单触发的按键，不改变配置中的规范身份。
+    public static func menuKey(_ shortcut: KeyboardShortcut) -> String {
+        shortcut.key == "\u{8}" ? "\u{7F}" : shortcut.key
     }
 
     /// 业务作用：菜单大写字母包含隐式 Shift，冲突检查不能把 Command-V 与 Command-Shift-V 混为一项。

@@ -8,14 +8,15 @@ public struct KeyboardShortcut: Sendable, Codable, Hashable {
     /// 参数说明:
     /// - key: 单个 Unicode 标量对应的原生菜单键。
     /// - modifiers: Command、Option、Control、Shift 分别使用位 1、2、4、8。
-    /// 返回：带 Command、Option 或 Control 的组合，或 F1 至 F35；字母使用小写身份，其它单键、控制字符或未知位拒绝。
+    /// 返回：带 Command、Option 或 Control 的组合，或 F1 至 F35；支持 Tab、Return、Enter 和 Backspace 的修饰组合，其它控制键拒绝。
     public init(key: String, modifiers: UInt8) throws {
         guard key.utf8.count <= 4 else {
             throw NateError.message("快捷键不是单个实际键。")
         }
-        let normalized = key.lowercased()
+        let normalized = key == "\u{7F}" ? "\u{8}" : key.lowercased()
         guard normalized.unicodeScalars.count == 1, let scalar = normalized.unicodeScalars.first,
-            scalar.value >= 32, scalar.value != 127, modifiers <= 15,
+            (scalar.value >= 32 && scalar.value != 127 || [3, 8, 9, 13].contains(scalar.value)),
+            modifiers <= 15,
             modifiers & 7 != 0 || (0xF704...0xF726).contains(scalar.value)
         else {
             throw NateError.message("快捷键需要单个键与 Command、Option 或 Control；功能键可单独使用。")

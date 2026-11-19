@@ -263,6 +263,23 @@ public final class MacroLibraryPanel: NSWindowController, NSTableViewDataSource,
             ? definitions[definitionsTable.selectedRow] : nil
     }
 
+    /// 业务作用：其它命令管理入口按稳定身份定位原宏，不播放动作或把旧行号当成新定义。
+    /// 参数说明:
+    /// - id: 当前宏库中的明确身份。
+    /// 返回：存在时选择并显示对应定义，不存在时保留原选择。
+    public func selectMacro(_ id: UUID) {
+        guard
+            let row = definitions.firstIndex(where: {
+                $0.id == id
+            })
+        else {
+            return
+        }
+        definitionsTable.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        definitionsTable.scrollRowToVisible(row)
+        refreshSelection()
+    }
+
     /// 业务作用：两个列表只枚举当前完整宏与所选宏的实际动作，不读取磁盘或正文。
     /// 参数说明:
     /// - tableView: 请求数量的宏列表或动作列表。

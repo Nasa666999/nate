@@ -7,7 +7,7 @@ extension EditorView {
     /// - event: 当前键盘事件。
     /// 返回：系统文本解释或统一命令分发，不重复插入键盘文字。
     public override func keyDown(with event: NSEvent) {
-        if composition == nil,
+        if usesDefaultKeyboardRoutes, composition == nil,
             event.modifierFlags.intersection([.control, .option, .shift, .command]) == [
                 .control, .option, .shift,
             ],
@@ -22,7 +22,7 @@ extension EditorView {
         if composition == nil, completionPanel?.handle(event) == true {
             return
         }
-        if composition == nil, let key = event.charactersIgnoringModifiers,
+        if usesDefaultKeyboardRoutes, composition == nil, let key = event.charactersIgnoringModifiers,
             let command = CompatibilityShortcut.command(
                 key: key,
                 modifiers: NativeKeyboardShortcut.modifierBits(event.modifierFlags)

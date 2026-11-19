@@ -24,7 +24,7 @@ extension ApplicationController {
                     item.toolTip = "快捷键未启用，与“" + conflict + "”冲突。"
                 }
                 else {
-                    item.keyEquivalent = shortcut.key
+                    item.keyEquivalent = NativeKeyboardShortcut.menuKey(shortcut)
                     item.keyEquivalentModifierMask = macroShortcutModifiers(shortcut)
                 }
             }
@@ -49,6 +49,14 @@ extension ApplicationController {
         -> String?
     {
         let ignored = "savedMacro:" + id.uuidString
+        if keyboardMap.ready, let resolution = keyboardMap.resolution {
+            if let owner = resolution.owners[shortcut], owner != ignored {
+                return keyboardMap.catalog.first(where: {
+                    $0.id == owner
+                })?.title ?? owner
+            }
+            return nil
+        }
         var pending = (root ?? NSApp.mainMenu)?.items ?? []
         while let item = pending.popLast() {
             if let submenu = item.submenu {

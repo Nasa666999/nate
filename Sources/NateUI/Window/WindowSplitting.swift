@@ -49,6 +49,7 @@ extension EditorWindow {
         }
         clone.showSymbols = editor.showSymbols
         clone.wrapLines = editor.wrapLines
+        clone.usesDefaultKeyboardRoutes = editor.usesDefaultKeyboardRoutes
         clone.copyLineWithoutSelection = editor.copyLineWithoutSelection
         clone.adaptClipboardLineEndings = editor.adaptClipboardLineEndings
         clone.onClipboardCapture = {
@@ -133,6 +134,18 @@ extension EditorWindow {
             editor.cancelClipboardOperation()
             editor.copyLineWithoutSelection = copyLine
             editor.adaptClipboardLineEndings = adaptEndings
+        }
+    }
+
+    /// 业务作用：完整自定义路由取得按键身份后关闭旧兼容入口，删除绑定不能留下隐藏执行路径。
+    /// 参数说明:
+    /// - active: 当前是否仍由编辑器内置兼容规则分发。
+    /// 返回：同一窗口所有克隆采用一致规则，新克隆继承当前状态。
+    public func setDefaultKeyboardRoutes(active: Bool) {
+        for view in editorSplit.arrangedSubviews {
+            if let editor = (view as? NSScrollView)?.documentView as? EditorView {
+                editor.usesDefaultKeyboardRoutes = active
+            }
         }
     }
 

@@ -39,7 +39,7 @@ public struct DirectoryContents: Sendable {
             throw NateError.message("目录条目上限必须介于 1 与 20000。")
         }
         try check(permit)
-        let descriptor = try openDirectory(root: root, directory: directory)
+        let descriptor = try openDirectory(root: root, directory: directory, permit: permit)
         guard let stream = fdopendir(descriptor) else {
             close(descriptor)
             throw failure("无法枚举目录")
@@ -147,8 +147,16 @@ public struct DirectoryContents: Sendable {
     /// 参数说明:
     /// - root: 原始根 URL，先校验再标准化。
     /// - directory: 原始目标 URL。
+    /// - permit: 逐段访问期间仍有效的资格。
     /// 返回：调用者负责关闭的目录描述符；越界、链接和权限变化均拒绝。
-    private static func openDirectory(root: URL, directory: URL) throws -> Int32 {
+    static func openDirectory(
+        root: URL,
+        directory: URL,
+        permit: @Sendable () -> Bool = {
+            true
+        }
+    ) throws -> Int32 {
+        try check(permit)
         try FileStorage.validateFileURL(root)
         try FileStorage.validateFileURL(directory)
         let root = root.standardizedFileURL
@@ -169,6 +177,7 @@ public struct DirectoryContents: Sendable {
             if !sameDirectory {
                 let relative = String(decoding: pathBytes.dropFirst(prefixBytes.count), as: UTF8.self)
                 for component in relative.split(separator: "/") {
+                    try check(permit)
                     // O_NOFOLLOW 逐层禁止链接，根之外的新目标不能因路径替换取得读取资格。
                     let next = openat(
                         descriptor,
@@ -182,6 +191,7 @@ public struct DirectoryContents: Sendable {
                     descriptor = next
                 }
             }
+            try check(permit)
             return descriptor
         }
         catch {

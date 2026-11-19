@@ -17,6 +17,9 @@ public final class MacroShortcutCapture: NSView {
         }
     }
     public var onError: ((String) -> Void)?
+    public var isCapturing: Bool {
+        recording
+    }
     private var recording = false
     private var monitor: Any?
     public override var acceptsFirstResponder: Bool {

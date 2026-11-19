@@ -136,6 +136,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let macroPlayback = MacroPlaybackRuntime()
     let macroRecorder = MacroRecordingRuntime()
     let macroLibrary = MacroLibraryRuntime()
+    let keyboardMap = KeyboardMapRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []
@@ -226,6 +227,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             loadClipboardOptions(from: .standard)
             configureClipboardHistory()
             configureMacroLibrary()
+            configureKeyboardMap()
             await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。

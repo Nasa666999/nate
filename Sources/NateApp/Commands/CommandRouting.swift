@@ -421,6 +421,7 @@ extension ApplicationController {
         case "saveMacro": saveMacro()
         case "loadMacro": loadMacro()
         case "macroLibrary": showMacroLibrary()
+        case "keyboardMap": showKeyboardMap()
         case "saveNamedMacro": saveRecordingToLibrary()
         case "previewMacro": showTemporaryMacroPreview()
         case "run": configureRun()
