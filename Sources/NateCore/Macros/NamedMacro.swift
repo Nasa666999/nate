@@ -1,45 +1,6 @@
 import Foundation
 
-public struct MacroShortcut: Sendable, Codable, Hashable {
-    public let key: String
-    public let modifiers: UInt8
-
-    /// 业务作用：宏快捷键使用单个实际键和明确修饰键，不让普通输入字符变成隐式播放命令。
-    /// 参数说明:
-    /// - key: 单个 Unicode 标量对应的原生菜单键。
-    /// - modifiers: Command、Option、Control、Shift 分别使用位 1、2、4、8。
-    /// 返回：带 Command、Option 或 Control 的组合，或 F1 至 F35；字母使用菜单键的小写身份，其它单键、控制字符或未知位拒绝。
-    public init(key: String, modifiers: UInt8) throws {
-        guard key.utf8.count <= 4 else {
-            throw NateError.message("宏快捷键不是单个实际键。")
-        }
-        let normalized = key.lowercased()
-        guard normalized.unicodeScalars.count == 1, let scalar = normalized.unicodeScalars.first,
-            scalar.value >= 32, scalar.value != 127, modifiers <= 15,
-            modifiers & 7 != 0 || (0xF704...0xF726).contains(scalar.value)
-        else {
-            throw NateError.message("宏快捷键需要单个键与 Command、Option 或 Control；功能键可单独使用。")
-        }
-        self.key = normalized
-        self.modifiers = modifiers
-    }
-
-    /// 业务作用：恢复快捷键仍沿同一按键门禁，文件字段不能截获普通文字输入。
-    /// 参数说明:
-    /// - decoder: 所属配置提供的有界解码器。
-    /// 返回：完整合法的快捷键；未知位或非法键拒绝。
-    public init(from decoder: any Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        try self.init(
-            key: values.decode(String.self, forKey: .key),
-            modifiers: values.decode(UInt8.self, forKey: .modifiers)
-        )
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case key, modifiers
-    }
-}
+public typealias MacroShortcut = KeyboardShortcut
 
 public struct NamedMacro: Sendable {
     public let id: UUID

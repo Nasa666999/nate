@@ -22,38 +22,14 @@ extension EditorView {
         if composition == nil, completionPanel?.handle(event) == true {
             return
         }
-        if composition == nil && event.modifierFlags.contains(.control),
-            let key = event.charactersIgnoringModifiers?.lowercased()
+        if composition == nil, let key = event.charactersIgnoringModifiers,
+            let command = CompatibilityShortcut.command(
+                key: key,
+                modifiers: NativeKeyboardShortcut.modifierBits(event.modifierFlags)
+            )
         {
-            let commands = [
-                "h": "replace", "f": "find", "s": "save", "n": "new", "o": "open", "w": "close", "g": "goto",
-            ]
-            if let functionKey = UnicodeScalar(NSF3FunctionKey), key == String(functionKey) {
-                let previous = event.modifierFlags.contains(.shift)
-                let temporary = event.modifierFlags.contains(.option)
-                onCommand?(
-                    temporary
-                        ? (previous ? "volatileFindPrevious" : "volatileFindNext")
-                        : (previous ? "selectFindPrevious" : "selectFindNext")
-                )
-                return
-            }
-            if key == "\t" {
-                onCommand?(event.modifierFlags.contains(.shift) ? "previousTab" : "nextTab")
-                return
-            }
-            if key == "i", event.modifierFlags.contains(.option) {
-                onCommand?("incrementalSearch")
-                return
-            }
-            if key == "b" {
-                onCommand?(event.modifierFlags.contains(.option) ? "selectBracketPair" : "matchingBracket")
-                return
-            }
-            if let command = commands[key] {
-                onCommand?(command)
-                return
-            }
+            onCommand?(command)
+            return
         }
         interpretKeyEvents([event])
     }

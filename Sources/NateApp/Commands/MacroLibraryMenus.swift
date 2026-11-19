@@ -36,16 +36,7 @@ extension ApplicationController {
     /// - shortcut: 已验证的逻辑组合。
     /// 返回：对应 AppKit 菜单修饰键集合。
     func macroShortcutModifiers(_ shortcut: MacroShortcut) -> NSEvent.ModifierFlags {
-        var result: NSEvent.ModifierFlags = []
-        for (bit, flag) in [
-            (UInt8(1), NSEvent.ModifierFlags.command), (UInt8(2), .option), (UInt8(4), .control),
-            (UInt8(8), .shift),
-        ] {
-            if shortcut.modifiers & bit != 0 {
-                result.insert(flag)
-            }
-        }
-        return result
+        NativeKeyboardShortcut.modifiers(shortcut)
     }
 
     /// 业务作用：相同原生组合不能覆盖已有菜单动作，包括其它命名宏和系统编辑器命令。
@@ -58,7 +49,6 @@ extension ApplicationController {
         -> String?
     {
         let ignored = "savedMacro:" + id.uuidString
-        let flags = macroShortcutModifiers(shortcut)
         var pending = (root ?? NSApp.mainMenu)?.items ?? []
         while let item = pending.popLast() {
             if let submenu = item.submenu {
@@ -67,10 +57,14 @@ extension ApplicationController {
             guard item.representedObject as? String != ignored, !item.keyEquivalent.isEmpty else {
                 continue
             }
-            let modifiers = item.keyEquivalentModifierMask.intersection([.command, .option, .control, .shift])
-            if item.keyEquivalent.lowercased() == shortcut.key && modifiers == flags {
+            if NativeKeyboardShortcut.menu(key: item.keyEquivalent, modifiers: item.keyEquivalentModifierMask)
+                == shortcut
+            {
                 return item.title
             }
+        }
+        if let command = CompatibilityShortcut.command(key: shortcut.key, modifiers: shortcut.modifiers) {
+            return menuCommandTitle(command, in: root) ?? "编辑器兼容快捷键"
         }
         return nil
     }

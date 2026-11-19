@@ -128,15 +128,10 @@ extension ApplicationController {
         guard !quiet.contains(id) else {
             return
         }
-        var pending = NSApp.mainMenu?.items ?? []
-        while let item = pending.popLast() {
-            if item.representedObject as? String == id {
-                macroRecorder.noteSkipped(id, title: item.title)
-                refreshUI()
-                refreshMacroLibraryPresentation()
-                return
-            }
-            pending.append(contentsOf: item.submenu?.items ?? [])
+        if let title = menuCommandTitle(id) {
+            macroRecorder.noteSkipped(id, title: title)
+            refreshUI()
+            refreshMacroLibraryPresentation()
         }
     }
 }

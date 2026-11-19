@@ -94,15 +94,11 @@ public final class MacroShortcutCapture: NSView {
             stopCapture()
             return
         }
-        guard let key = event.characters(byApplyingModifiers: [])?.lowercased(), !key.isEmpty else {
-            return
-        }
-        let flags = event.modifierFlags
-        let modifiers: UInt8 =
-            (flags.contains(.command) ? 1 : 0) | (flags.contains(.option) ? 2 : 0)
-            | (flags.contains(.control) ? 4 : 0) | (flags.contains(.shift) ? 8 : 0)
         do {
-            shortcut = try MacroShortcut(key: key, modifiers: modifiers)
+            guard let value = try NativeKeyboardShortcut.capture(event) else {
+                return
+            }
+            shortcut = value
             stopCapture()
         }
         catch {
@@ -115,19 +111,7 @@ public final class MacroShortcutCapture: NSView {
     /// - value: 可选的完整绑定。
     /// 返回：可读的修饰键与实际键名称；无绑定时显示明确提示。
     public static func label(_ value: MacroShortcut?) -> String {
-        guard let value else {
-            return "点击录制快捷键"
-        }
-        var result = ""
-        for (bit, symbol) in [(UInt8(4), "⌃"), (UInt8(2), "⌥"), (UInt8(8), "⇧"), (UInt8(1), "⌘")] {
-            if value.modifiers & bit != 0 {
-                result += symbol
-            }
-        }
-        if let scalar = value.key.unicodeScalars.first, (0xF704...0xF726).contains(scalar.value) {
-            return result + "F\(scalar.value - 0xF704 + 1)"
-        }
-        return result + (value.key == " " ? "Space" : value.key.uppercased())
+        NativeKeyboardShortcut.label(value)
     }
 
     /// 业务作用：录制区域使用实际外观与焦点状态绘制，不把键盘事件权限藏在普通输入框中。
