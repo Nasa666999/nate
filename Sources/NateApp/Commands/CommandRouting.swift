@@ -272,6 +272,7 @@ extension ApplicationController {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
         case "compositionBegan":
+            cancelTextTool()
             cancelRunCommandPreparation()
             suspendSearchForInput()
             mainWindow?.refreshSelectedTextHighlights()
@@ -279,6 +280,7 @@ extension ApplicationController {
             refreshVisibleIncrementalHighlights()
             mainWindow?.refreshSelectedTextHighlights()
         case "selectionChanged":
+            cancelTextTool()
             cancelRunCommandPreparation()
             cancelLineSort()
             cancelHistoryAction()
@@ -302,6 +304,7 @@ extension ApplicationController {
         case "typingAssistance": requestCompletion(automatic: true)
         case "completePath": requestPathCompletion()
         case "cancelReads": readIO.cancelReads()
+        case "cancelTextTool": cancelTextTool()
         case "cancelExternalCommand": externalCommandTask?.cancel()
         case "fileTasks": showFileTasks()
         case "lastExternalOutput":

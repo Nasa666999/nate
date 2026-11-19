@@ -53,6 +53,7 @@ extension ApplicationController {
         cancelColumnInsertion()
         cancelHistoryAction()
         cancelLineSort()
+        cancelTextTool()
         cancelQuickFind()
         mainWindow?.refreshSelectedTextHighlights()
         cancelBookmarkAction()

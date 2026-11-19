@@ -138,6 +138,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let macroLibrary = MacroLibraryRuntime()
     let keyboardMap = KeyboardMapRuntime()
     let runCommands = RunCommandRuntime()
+    let textTools = TextToolRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []
@@ -543,6 +544,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return
         }
         cancelCompletion()
+        cancelTextTool()
         activeID = id
         mainWindow?.showDocument(document.buffer)
         if mainWindow?.isIncrementalSearchVisible == true {
@@ -564,6 +566,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         cancelColumnInsertion()
         cancelHistoryAction()
         cancelLineSort()
+        cancelTextTool()
         // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
         cancelSearchResultExport()
         cancelSearchResultPathOpen()

@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import NateCore
 import NatePlatform
+import NateStorage
 
 enum TextTools {
     /// 业务作用：执行明确的文本与字节转换，非法输入在事务提交前失败。
@@ -12,6 +13,18 @@ enum TextTools {
     /// 返回：完整转换或摘要，不修改源文件。
     static func transform(_ name: String, text: String) throws -> String {
         let data = Data(text.utf8)
+        if let operation = MIMEOperation(rawValue: name) {
+            let result = try MIMECodec.transform(operation, data: data)
+            guard
+                let value = String(
+                    data: result,
+                    encoding: .utf8
+                )
+            else {
+                throw NateError.message("解码结果是非 UTF-8 字节，必须通过独立字节结果查看与导出。")
+            }
+            return value
+        }
         switch name {
         case "json":
             let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
@@ -30,30 +43,6 @@ enum TextTools {
             }
             let document = try XMLDocument(data: data, options: [.nodeLoadExternalEntitiesNever])
             return document.xmlString(options: [.nodePrettyPrint])
-        case "base64Encode": return data.base64EncodedString()
-        case "base64Decode":
-            let normalized = text.filter {
-                !$0.isWhitespace
-            }
-            guard let decoded = Data(base64Encoded: normalized),
-                let value = String(data: decoded, encoding: .utf8)
-            else {
-                throw NateError.message("不是合法 Base64 或解码结果不是 UTF-8 文本。")
-            }
-            return value
-        case "urlEncode":
-            let safe = CharacterSet(
-                charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
-            )
-            guard let result = text.addingPercentEncoding(withAllowedCharacters: safe) else {
-                throw NateError.invalidText
-            }
-            return result
-        case "urlDecode":
-            guard let result = text.removingPercentEncoding else {
-                throw NateError.message("URL 转义序列无效。")
-            }
-            return result
         case "hexEncode":
             return data.map {
                 String(format: "%02X", $0)
@@ -100,45 +89,6 @@ enum TextTools {
 }
 
 extension ApplicationController {
-    /// 业务作用：后台转换固定快照，迟到结果不能覆盖新的用户输入。
-    /// 参数说明:
-    /// - name: 具体工具。
-    /// 返回：摘要复制到剪贴板，其余转换以一次事务应用到原范围。
-    func runTextTool(_ name: String) {
-        guard let active else {
-            return
-        }
-        let snapshot = active.buffer.snapshot
-        let range =
-            active.buffer.primarySelection.flatMap {
-                $0.range.isEmpty ? nil : $0.range
-            }
-            ?? ByteRange(0, snapshot.text.byteCount)
-        Task {
-            do {
-                let result = try await Task.detached {
-                    try TextTools.transform(name, text: snapshot.text.text(in: range))
-                }.value
-                if ["md5", "sha1", "sha256", "sha512"].contains(name) {
-                    SystemIntegration.copy(result)
-                    mainWindow?.showResults("\(name.uppercased()) · UTF-8 原换行 · 已复制\n\(result)")
-                }
-                else {
-                    try active.buffer.commit(
-                        [TextEdit(range, result)],
-                        expectedRevision: snapshot.revision,
-                        name: name
-                    )
-                    mainWindow?.editor.refresh()
-                    didEdit()
-                }
-            }
-            catch {
-                SystemIntegration.alert("转换失败", error.localizedDescription)
-            }
-        }
-    }
-
     /// 业务作用：查看 Unicode 标量的字符与进制表示，不猜测多字符为单字节。
     /// 参数说明: 无。
     /// 返回：显示输入文本每个标量的十进制、十六进制、八进制和二进制值。

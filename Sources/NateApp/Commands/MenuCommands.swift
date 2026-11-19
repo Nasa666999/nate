@@ -240,9 +240,9 @@ extension ApplicationController: NSMenuItemValidation {
         add(tools, "取消文件读取", "cancelReads")
         add(tools, "取消外部命令", "cancelExternalCommand")
         add(tools, "上次外部命令结果", "lastExternalOutput")
+        add(tools, "取消文本工具转换", "cancelTextTool")
         for (title, id) in [
-            ("JSON 格式化", "tool:json"), ("XML 格式化", "tool:xml"), ("Base64 编码", "tool:base64Encode"),
-            ("Base64 解码", "tool:base64Decode"), ("URL 编码", "tool:urlEncode"), ("URL 解码", "tool:urlDecode"),
+            ("JSON 格式化", "tool:json"), ("XML 格式化", "tool:xml"),
             ("文本转 HEX", "tool:hexEncode"), ("HEX 转文本", "tool:hexDecode"), ("MD5 摘要", "tool:md5"),
             ("SHA-1 摘要", "tool:sha1"), ("SHA-256 摘要", "tool:sha256"), ("SHA-512 摘要", "tool:sha512"),
             ("导出 HTML…", "exportHTML"), ("导出 RTF…", "exportRTF"), ("Markdown 预览", "markdownPreview"),
@@ -250,6 +250,30 @@ extension ApplicationController: NSMenuItemValidation {
         ] {
             add(tools, title, id)
         }
+        let mime = NSMenu(title: "MIME 编解码")
+        for (title, id) in [
+            ("Base64 编码（带填充）", "tool:base64Encode"),
+            ("Base64 编码（无填充）", "tool:base64EncodeUnpadded"),
+            ("Base64 编码（64 列 LF）", "tool:base64EncodeWrapped"),
+            ("Base64 逐行编码", "tool:base64EncodeByLine"),
+            ("Base64 严格解码", "tool:base64Decode"),
+            ("Base64 分段解码（保留分隔符）", "tool:base64DecodeSegments"),
+            ("Base64 逐行解码", "tool:base64DecodeByLine"),
+            ("Quoted-Printable 编码", "tool:quotedPrintableEncode"),
+            ("Quoted-Printable 解码", "tool:quotedPrintableDecode"),
+            ("URL 编码（RFC 3986）", "tool:urlEncode"),
+            ("URL 编码（RFC 1738）", "tool:urlEncodeRFC1738"),
+            ("URL 编码（扩展）", "tool:urlEncodeExtended"),
+            ("URL 编码（全部字节）", "tool:urlEncodeFull"),
+            ("URL 逐行编码（RFC 1738）", "tool:urlEncodeRFC1738ByLine"),
+            ("URL 逐行编码（扩展）", "tool:urlEncodeExtendedByLine"),
+            ("URL 逐行编码（全部字节）", "tool:urlEncodeFullByLine"),
+            ("URL 解码", "tool:urlDecode"),
+            ("SAML 解码（URL / Base64 / DEFLATE）", "tool:samlDecode"),
+        ] {
+            add(mime, title, id)
+        }
+        attach(mime, to: tools)
         attach(tools, to: bar)
         let macro = NSMenu(title: "宏")
         for (title, id) in [
@@ -342,6 +366,20 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if let enabled = validateClipboardMenu(menuItem, id: id) {
             return enabled
+        }
+        if id == "cancelTextTool" {
+            return textTools.task != nil
+        }
+        if id.hasPrefix("tool:") {
+            let digest = ["tool:md5", "tool:sha1", "tool:sha256", "tool:sha512"].contains(id)
+            guard textTools.task == nil, let (document, _, editor) = quickFindContext(),
+                digest || !document.buffer.isReadOnly,
+                let state = editor.viewSelectionState, state.entries.count == 1,
+                case .stream = state.shape, state.entries.first?.selection.virtualColumn == 0
+            else {
+                return false
+            }
+            return true
         }
         if let enabled = validateMacroMenu(menuItem, id: id) {
             return enabled
