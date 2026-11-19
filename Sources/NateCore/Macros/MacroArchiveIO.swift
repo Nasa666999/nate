@@ -29,6 +29,17 @@ struct MacroArchiveBudget: Sendable {
 struct MacroArchiveWriter {
     var data = Data()
     let budget: MacroArchiveBudget
+    let maximumBytes: Int
+
+    /// 业务作用：单个宏与宏库共用固定字段编码，各自保留明确的完整归档容量。
+    /// 参数说明:
+    /// - budget: 所属完整归档的共同执行预算。
+    /// - maximumBytes: 所属协议固定的归档字节上限，不接受用户输入。
+    /// 返回：尚未追加字段的有界编码器。
+    init(budget: MacroArchiveBudget, maximumBytes: Int = MacroArchive.maximumBytes) {
+        self.budget = budget
+        self.maximumBytes = maximumBytes
+    }
 
     /// 业务作用：宏协议的固定字段使用小端布局，归档不依赖宿主内存表示。
     /// 参数说明:
@@ -43,11 +54,11 @@ struct MacroArchiveWriter {
     /// 业务作用：每份动作数据先通过剩余容量门禁，不能先建立超大中间归档才拒绝保存。
     /// 参数说明:
     /// - bytes: 一个完整字段的原始内容。
-    /// 返回：归档仍不超过 8 MiB；取消、截止或超量时不提供部分内容。
+    /// 返回：归档仍在所属协议容量内；取消、截止或超量时不提供部分内容。
     mutating func append(_ bytes: Data) throws {
         try budget.check()
-        guard bytes.count <= MacroArchive.maximumBytes - data.count else {
-            throw NateError.message("宏归档超过 8 MiB，原文件保留。")
+        guard bytes.count <= maximumBytes - data.count else {
+            throw NateError.message("宏归档超过所属存储容量，原文件保留。")
         }
         data.append(bytes)
     }

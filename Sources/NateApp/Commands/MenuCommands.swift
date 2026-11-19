@@ -245,6 +245,8 @@ extension ApplicationController: NSMenuItemValidation {
         for (title, id) in [
             ("开始 / 停止录制", "recordMacro"), ("播放一次", "playMacro"), ("重复执行…", "repeatMacro"),
             ("停止播放", "cancelMacro"),
+            ("命名宏管理…", "macroLibrary"), ("保存当前录制为命名宏…", "saveNamedMacro"),
+            ("查看已载入宏…", "previewMacro"),
             ("保存宏…", "saveMacro"), ("载入宏…", "loadMacro"), ("运行外部命令…", "run"),
         ] {
             add(macro, title, id)
@@ -261,6 +263,7 @@ extension ApplicationController: NSMenuItemValidation {
         let help = NSMenu(title: "帮助")
         add(help, "使用说明", "help")
         attach(help, to: bar)
+        appendMacroLibraryMenu(to: macro, root: bar)
         NSApp.mainMenu = bar
     }
 

@@ -70,6 +70,8 @@ extension ApplicationController {
         cancelCompletion()
         cancelStructure()
         externalCommandTask?.cancel()
+        cancelMacro()
+        macroLibrary.importTask?.cancel()
         let protectedDocuments = documents
         // 先冻结所有现有正文，再等待外部动作，使最后确认的正文在等待期间保持不变。
         for document in protectedDocuments {
@@ -89,6 +91,7 @@ extension ApplicationController {
                 while: {
                     externalCommandTask != nil || searchTask != nil || searchSettingsTask != nil
                         || historyPersistence.task != nil
+                        || macroLibrary.task != nil
                         || !closingDocumentIDs.isEmpty
                 }
             )
@@ -97,6 +100,13 @@ extension ApplicationController {
                 restoreAfterCancelledExit(protectedDocuments)
                 sender.reply(toApplicationShouldTerminate: false)
                 mainWindow?.status.stringValue = "历史归档仍在确认，已取消退出；请等待后重试。"
+                return
+            }
+            // 宏库可能仍在发布完整定义，未返回的替换不能在进程结束时被当成保存成功。
+            guard macroLibrary.task == nil else {
+                restoreAfterCancelledExit(protectedDocuments)
+                sender.reply(toApplicationShouldTerminate: false)
+                mainWindow?.status.stringValue = "命名宏仍在确认，已取消退出；请等待后重试。"
                 return
             }
             // 既有关闭仍可能移除或恢复标签，成员集合未收束时不能确认最终退出索引。
@@ -109,6 +119,9 @@ extension ApplicationController {
             var failures: [String] = []
             if historyPersistence.enabled, let failure = historyPersistence.failure {
                 failures.append(failure)
+            }
+            if !macroLibrary.writable, let failure = macroLibrary.failure {
+                failures.append("命名宏：" + failure)
             }
             if !(await flushSidebarRecovery(until: deadline)) {
                 failures.append(sidebarRecovery.failure ?? "侧栏恢复状态尚未确认保存。")

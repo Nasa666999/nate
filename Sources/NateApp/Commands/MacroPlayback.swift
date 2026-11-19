@@ -82,10 +82,12 @@ extension ApplicationController {
     /// 业务作用：菜单启动的宏保留实际任务，重复点击不会创建并发播放。
     /// 参数说明:
     /// - repetitions: 本次完整播放次数，必须为一至一万。
+    /// - actions: 命名定义或预览的完整动作，省略时固定当前临时录制。
     /// 返回：合法且空闲时启动一项可取消播放；忙碌或范围无效时不替换现有任务。
-    func startMacro(repetitions: Int) {
+    func startMacro(repetitions: Int, actions: [MacroAction]? = nil) {
+        let selected = actions ?? macroActions
         guard (1...10_000).contains(repetitions), macroPlayback.task == nil, !macroPlaying,
-            !macroRecording, !macroActions.isEmpty
+            !macroRecording, !selected.isEmpty
         else {
             return
         }
@@ -99,13 +101,15 @@ extension ApplicationController {
                 if runtime.taskID == request {
                     runtime.task = nil
                     runtime.taskID = nil
+                    self?.refreshMacroLibraryPresentation()
                 }
             }
             guard let self, runtime.generation == request else {
                 return
             }
-            await self.playMacro(repetitions: repetitions)
+            await self.playMacro(repetitions: repetitions, selectedActions: selected)
         }
+        refreshMacroLibraryPresentation()
     }
 
     /// 业务作用：明确停止先收回后续动作权限，再取消正在等待的计算，已提交步骤仍保留并可撤销。
@@ -114,6 +118,7 @@ extension ApplicationController {
     func cancelMacro() {
         macroPlayback.generation = UUID()
         macroPlayback.task?.cancel()
+        refreshMacroLibraryPresentation()
     }
 
     /// 业务作用：宏菜单与实际录制、播放任务共用启用状态，不能在播放间隙替换动作列表。
@@ -123,7 +128,23 @@ extension ApplicationController {
     /// 返回：属于宏菜单时提供明确状态，其它命令为空。
     func validateMacroMenu(_ item: NSMenuItem, id: String) -> Bool? {
         let busy = macroPlaying || macroPlayback.task != nil
+        if id.hasPrefix("savedMacro:") {
+            guard let value = UUID(uuidString: String(id.dropFirst(11))) else {
+                return false
+            }
+            return !closing && !busy && !macroRecording && macroLibrary.ready && macroLibrary.task == nil
+                && macroLibrary.definitions.contains(where: {
+                    $0.id == value
+                })
+                && quickFindContext() != nil && active?.buffer.isReadOnly == false
+        }
         switch id {
+        case "macroLibrary":
+            return !closing && applicationSupport != nil
+        case "saveNamedMacro":
+            return canChangeMacroLibrary() && !macroActions.isEmpty
+        case "previewMacro":
+            return !closing && !busy && macroLibrary.previewDefinition != nil
         case "recordMacro":
             item.state = macroRecording ? .on : .off
             return !closing && !busy && (macroRecording || quickFindContext() != nil)

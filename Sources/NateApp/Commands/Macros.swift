@@ -32,15 +32,16 @@ extension ApplicationController {
     /// 业务作用：按有界次数播放语义动作，循环间让出主事件循环。
     /// 参数说明:
     /// - repetitions: 用户指定次数。
+    /// - selectedActions: 命名宏或文件预览明确选择的动作，省略时使用当前临时录制。
     /// 返回：输入、转换、排序或粘贴失败立即停止，取消、切换或只读时停止；正文和选择均无进展时结束重复。
-    func playMacro(repetitions: Int) async {
-        guard (1...10_000).contains(repetitions), macroActions.count <= 10_000,
-            !macroRecording, !macroPlaying, !macroActions.isEmpty,
+    func playMacro(repetitions: Int, selectedActions: [MacroAction]? = nil) async {
+        let actions = selectedActions ?? macroActions
+        guard (1...10_000).contains(repetitions), actions.count <= 10_000,
+            !macroRecording, !macroPlaying, !actions.isEmpty,
             let active
         else {
             return
         }
-        let actions = macroActions
         let generation = macroPlayback.generation
         do {
             for action in actions {
@@ -62,6 +63,7 @@ extension ApplicationController {
         macroPlaying = true
         defer {
             macroPlaying = false
+            refreshMacroLibraryPresentation()
         }
         for _ in 0..<repetitions {
             guard macroPlayback.generation == generation, proof.matches(self)
@@ -179,34 +181,23 @@ extension ApplicationController {
     /// 返回：保留旧宏直到新配置完整解码成功。
     func loadMacro() {
         guard !macroPlaying, macroPlayback.task == nil, !macroRecording,
+            mainWindow?.finishCompositions() != false,
             let url = SystemIntegration.chooseFiles().first
         else {
             return
         }
-        Task {
-            do {
-                let actions = try await readIO.readCancellable {
-                    token in
-                    let data = try self.fileAccess.readData(
-                        url,
-                        maximumBytes: MacroArchive.maximumBytes,
-                        permit: {
-                            !token.isCancelled
-                        }
-                    ).data
-                    return try MacroArchive.decode(
-                        data,
-                        permit: {
-                            !token.isCancelled
-                        }
-                    )
+        macroLibrary.importTask?.cancel()
+        let request = UUID()
+        macroLibrary.importTaskID = request
+        macroLibrary.importTask = Task {
+            [weak self] in
+            defer {
+                if self?.macroLibrary.importTaskID == request {
+                    self?.macroLibrary.importTask = nil
+                    self?.macroLibrary.importTaskID = nil
                 }
-                macroActions = actions
-                SystemIntegration.alert("宏已载入", "\(actions.count) 个动作。选择“播放一次”或“重复执行”后才会修改文档。")
             }
-            catch {
-                SystemIntegration.alert("宏载入失败", error.localizedDescription)
-            }
+            await self?.importTemporaryMacro(url)
         }
     }
 }

@@ -30,6 +30,10 @@ extension ApplicationController {
             edit(command)
             return
         }
+        if id.hasPrefix("savedMacro:"), let value = UUID(uuidString: String(id.dropFirst(11))) {
+            playNamedMacro(value)
+            return
+        }
         if id.hasPrefix("markStyle:"), let command = styleMarkAction(for: id) {
             routeStyleMark(command.style, action: command.action)
             return
@@ -392,6 +396,7 @@ extension ApplicationController {
                 macroActions = []
             }
             refreshUI()
+            refreshMacroLibraryPresentation()
         case "playMacro":
             startMacro(repetitions: 1)
         case "cancelMacro": cancelMacro()
@@ -403,6 +408,9 @@ extension ApplicationController {
             }
         case "saveMacro": saveMacro()
         case "loadMacro": loadMacro()
+        case "macroLibrary": showMacroLibrary()
+        case "saveNamedMacro": saveRecordingToLibrary()
+        case "previewMacro": showTemporaryMacroPreview()
         case "run": configureRun()
         case "saveSession":
             Task {

@@ -123,9 +123,15 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
     }
     var macroRecordingGeneration = UUID()
-    var macroActions: [MacroAction] = []
+    var macroActionsGeneration = UUID()
+    var macroActions: [MacroAction] = [] {
+        didSet {
+            macroActionsGeneration = UUID()
+        }
+    }
     var macroPlaying = false
     let macroPlayback = MacroPlaybackRuntime()
+    let macroLibrary = MacroLibraryRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []
@@ -215,6 +221,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             loadMultipleSelectionOptions(from: .standard)
             loadClipboardOptions(from: .standard)
             configureClipboardHistory()
+            configureMacroLibrary()
             await loadSearchSettings()
             if arguments.noRestore {
                 // 跳过恢复时先保留整个旧工作区，不能用空索引覆盖其唯一正文引用。
