@@ -8,6 +8,24 @@ enum MacroAction: Codable, Sendable {
     case command(String)
     case lineSort(LineSortOptions)
     case clipboard(ClipboardPayload, adaptLineEndings: Bool)
+
+    /// 业务作用：导入和播放前确认每个动作具有当前支持的明确语义，不能跳过未知动作后继续修改。
+    /// 参数说明: 无。
+    /// 返回：动作名称和独立输入容量合法时继续，未知命令或超量文字时拒绝整份动作列表。
+    func validateSupport() throws {
+        switch self {
+        case .input(let text):
+            guard text.utf8.count <= 64 * 1024 * 1024 else {
+                throw NateError.message("宏输入超过单次 64 MiB 预算。")
+            }
+        case .command(let name):
+            guard TextCommand(rawValue: name) != nil else {
+                throw NateError.message("无法识别的编辑动作“" + name + "”。")
+            }
+        case .lineSort, .clipboard:
+            break
+        }
+    }
 }
 
 extension ApplicationController {
@@ -39,12 +57,28 @@ extension ApplicationController {
     /// 业务作用：按有界次数播放语义动作，循环间让出主事件循环。
     /// 参数说明:
     /// - repetitions: 用户指定次数。
-    /// 返回：取消、文档切换或只读时停止，零进展不会无限运行。
+    /// 返回：输入、转换、排序或粘贴失败立即停止，取消、切换或只读时停止；正文和选择均无进展时结束重复。
     func playMacro(repetitions: Int) async {
-        guard !macroRecording, !macroPlaying, let active else {
+        guard (1...10_000).contains(repetitions), macroActions.count <= 10_000,
+            !macroRecording, !macroPlaying, !macroActions.isEmpty,
+            let active
+        else {
             return
         }
         let actions = macroActions
+        do {
+            for action in actions {
+                try action.validateSupport()
+            }
+        }
+        catch {
+            mainWindow?.status.stringValue = "宏已停止：" + error.localizedDescription
+            return
+        }
+        // 未知动作已经整份拒绝后才允许确认原候选，非法宏不能以输入法确认的副作用改变正文。
+        guard mainWindow?.editor.finishComposition() != false, self.active === active else {
+            return
+        }
         macroPlaying = true
         defer {
             macroPlaying = false
@@ -56,6 +90,7 @@ extension ApplicationController {
                 break
             }
             let revision = active.buffer.revision
+            let selectionGeneration = active.buffer.selectionGeneration
             for action in actions {
                 // 每个后台动作返回后重新取得原实例与实际焦点，宏不能沿后续同名标签继续编辑。
                 guard !Task.isCancelled, !closing, self.active === active, !active.buffer.isReadOnly,
@@ -64,7 +99,10 @@ extension ApplicationController {
                     return
                 }
                 switch action {
-                case .input(let text): insert(text)
+                case .input(let text):
+                    guard insert(text) else {
+                        return
+                    }
                 case .command(let name):
                     if let command = TextCommand(rawValue: name) {
                         if let options = command.lineSortOptions {
@@ -73,8 +111,14 @@ extension ApplicationController {
                             }
                         }
                         else {
-                            edit(command)
+                            guard edit(command) else {
+                                return
+                            }
                         }
+                    }
+                    else {
+                        mainWindow?.status.stringValue = "宏已停止：无法识别的编辑动作“" + name + "”。"
+                        return
                     }
                 case .lineSort(let options):
                     guard await playLineSort(options) else {
@@ -89,7 +133,8 @@ extension ApplicationController {
                 }
                 await Task.yield()
             }
-            if active.buffer.revision == revision {
+            if active.buffer.revision == revision && active.buffer.selectionGeneration == selectionGeneration
+            {
                 break
             }
         }
@@ -165,6 +210,9 @@ extension ApplicationController {
                     let actions = try JSONDecoder().decode([MacroAction].self, from: data)
                     guard actions.count <= 10_000 else {
                         throw NateError.message("宏动作超过 10000 项。")
+                    }
+                    for action in actions {
+                        try action.validateSupport()
                     }
                     return actions
                 }

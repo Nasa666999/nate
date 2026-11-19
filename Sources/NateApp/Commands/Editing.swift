@@ -6,18 +6,18 @@ extension ApplicationController {
     /// 业务作用：统一文本菜单的事务入口和修改通知。
     /// 参数说明:
     /// - command: 完整转换命令。
-    /// 返回：一次动作对应一个撤销单元，失败显示原因。
-    func edit(_ command: TextCommand) {
+    /// 返回：同步命令完整成功时为真；排序说明是否接受后台请求，失败保留正文并显示原因。
+    @discardableResult
+    func edit(_ command: TextCommand) -> Bool {
         if let options = command.lineSortOptions {
-            performLineSort(options)
-            return
+            return performLineSort(options) != nil
         }
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard mainWindow?.editor.finishComposition() != false else {
-            return
+            return false
         }
         guard let (active, _, _) = quickFindContext() else {
-            return
+            return false
         }
         do {
             try active.buffer.perform(command)
@@ -26,18 +26,26 @@ extension ApplicationController {
             }
             mainWindow?.editor.refresh(reveal: true)
             didEdit()
+            return true
         }
         catch {
-            SystemIntegration.alert("无法执行", error.localizedDescription)
+            if macroPlaying {
+                mainWindow?.status.stringValue = "宏已停止：" + error.localizedDescription
+            }
+            else {
+                SystemIntegration.alert("无法执行", error.localizedDescription)
+            }
+            return false
         }
     }
 
     /// 业务作用：将工具生成或用户指定文字作为普通输入事务。
     /// 参数说明:
     /// - text: 完整插入文字。
-    /// 返回：使用当前多选区，支持撤销。
-    func insert(_ text: String) {
-        mainWindow?.editor.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+    /// 返回：输入或相同字节选择收束完整成功时为真，无编辑视图、容量不足或候选失败时为假。
+    @discardableResult
+    func insert(_ text: String) -> Bool {
+        mainWindow?.editor.submitText(text) ?? false
     }
 
     /// 业务作用：按语言规则切换行注释或添加块注释，不使用错误语言的通用符号。

@@ -111,6 +111,15 @@ extension EditorView {
         _ = commitTextInput(value, replacementRange: replacementRange)
     }
 
+    /// 业务作用：工具与宏等待真实输入结果，容量或候选确认失败后不能继续执行下一步动作。
+    /// 参数说明:
+    /// - value: 当前选择上需要完整提交的语义文字，不含虚拟列填充。
+    /// 返回：真实提交或相同字节选择收束成功时为真；失败保留原正文、选择与仍有效候选。
+    @discardableResult
+    public func submitText(_ value: String) -> Bool {
+        commitTextInput(value, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
     /// 业务作用：系统解除标记时提交仍有效的候选，后续解除回调不会重复提交。
     /// 参数说明: 无。
     /// 返回：只在仍有组合时形成一次正式输入。
