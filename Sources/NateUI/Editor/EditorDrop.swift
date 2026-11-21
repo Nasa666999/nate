@@ -54,6 +54,7 @@ extension EditorView {
         for (title, command) in [
             ("撤销", "undo"), ("重做", "redo"), ("切换行注释", "comment"),
             ("打开选中路径", "openSelection"), ("在 Finder 定位选中路径", "revealSelection"), ("打开选中网址", "openURL"),
+            ("搜索选区或当前词", "searchOnInternet"),
         ] {
             let item = NSMenuItem(title: title, action: #selector(contextCommand(_:)), keyEquivalent: "")
             item.target = self

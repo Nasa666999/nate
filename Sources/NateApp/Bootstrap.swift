@@ -34,6 +34,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let delimiterPreferences = DelimiterSelectionRuntime()
     let dateTimePreferences = DateTimePreferencesRuntime()
     let fileOpeningPreferences = FileOpeningPreferencesRuntime()
+    let webSearch = WebSearchRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),

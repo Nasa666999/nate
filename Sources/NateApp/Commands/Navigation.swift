@@ -183,7 +183,9 @@ extension ApplicationController {
                 SystemIntegration.alert("网址无效", "只支持用户主动打开 http 或 https 网址。")
                 return
             }
-            NSWorkspace.shared.open(url)
+            if !webSearch.openURL(url) {
+                mainWindow?.status.stringValue = "系统未能打开默认浏览器。"
+            }
         }
         else {
             let expanded = (value as NSString).expandingTildeInPath

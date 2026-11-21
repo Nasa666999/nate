@@ -336,6 +336,8 @@ extension ApplicationController {
         case "delimiterSelectionPreferences": showDelimiterSelectionPreferences()
         case "dateTimePreferences": showDateTimePreferences()
         case "fileOpeningPreferences": showFileOpeningPreferences()
+        case "webSearchPreferences": showWebSearchPreferences()
+        case "searchOnInternet": searchOnInternet()
         case "selectConfiguredDelimiters":
             if let (_, _, editor) = quickFindContext(), let position = editor.primarySelection?.head {
                 editor.selectInsideConfiguredDelimiters(at: position)
