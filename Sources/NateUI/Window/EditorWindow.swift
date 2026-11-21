@@ -2,44 +2,6 @@ import AppKit
 import NateCore
 import NateSearch
 
-public struct TabPresentation: Equatable {
-    public var id: UUID
-    public var title: String
-    public var path: String?
-    public var selected: Bool
-    public var pinned: Bool
-    public var dirty: Bool
-    public var failed: Bool
-
-    /// 业务作用：将文档状态映射为标签呈现，不泄露磁盘访问职责。
-    /// 参数说明:
-    /// - id: 文档身份。
-    /// - title: 名称与状态。
-    /// - path: 悬停路径。
-    /// - selected: 当前活动状态。
-    /// - pinned: 固定状态。
-    /// - dirty: 是否待保存。
-    /// - failed: 是否存在保存失败。
-    /// 返回：只读标签模型。
-    public init(
-        id: UUID,
-        title: String,
-        path: String?,
-        selected: Bool,
-        pinned: Bool,
-        dirty: Bool,
-        failed: Bool
-    ) {
-        self.id = id
-        self.title = title
-        self.path = path
-        self.selected = selected
-        self.pinned = pinned
-        self.dirty = dirty
-        self.failed = failed
-    }
-}
-
 @MainActor
 public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onCommand: ((String) -> Void)?
@@ -134,6 +96,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             ("find", "magnifyingglass", "查找 ⌘F / Ctrl+F"), ("replace", "arrow.left.arrow.right", "替换 Ctrl+H"),
             ("wrap", "text.word.spacing", "自动换行"), ("symbols", "paragraphsign", "显示符号"),
             ("recordMacro", "record.circle", "录制宏"), ("playMacro", "play", "播放宏"),
+            ("documentList", "list.bullet", "文档列表"),
         ] {
             let button = NSButton(
                 image: NSImage(systemSymbolName: symbol, accessibilityDescription: name) ?? NSImage(),

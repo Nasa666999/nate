@@ -17,12 +17,13 @@ extension ApplicationController {
             documents.map {
                 TabPresentation(
                     id: $0.buffer.id,
-                    title: ($0.buffer.isReadOnly ? "🔒 " : "") + $0.name,
+                    title: $0.name,
                     path: $0.url?.path,
                     selected: $0.buffer.id == activeID,
                     pinned: $0.pinned,
                     dirty: $0.isDirty,
-                    failed: $0.failure != nil || $0.recoveryError != nil
+                    failed: $0.failure != nil || $0.recoveryError != nil,
+                    readOnly: $0.buffer.isReadOnly
                 )
             }
         )

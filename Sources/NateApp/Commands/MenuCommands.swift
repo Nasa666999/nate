@@ -309,9 +309,9 @@ extension ApplicationController: NSMenuItemValidation {
         let windows = NSMenu(title: "窗口")
         add(windows, "下一个标签", "nextTab")
         add(windows, "上一个标签", "previousTab")
-        for document in documents {
-            add(windows, document.name, "activate:" + document.buffer.id.uuidString)
-        }
+        add(windows, "文档列表…", "documentList")
+        windows.delegate = self
+        populateWindowDocuments(in: windows)
         attach(windows, to: bar)
         NSApp.windowsMenu = windows
         let help = NSMenu(title: "帮助")
@@ -359,6 +359,11 @@ extension ApplicationController: NSMenuItemValidation {
     /// 返回：执行同一范围与状态合同。
     @objc func menuAction(_ sender: NSMenuItem) {
         if let id = sender.representedObject as? String {
+            // 动态列表只拥有生成时的标签集合与布局，旧菜单不能先确认候选再发现目标已经改变。
+            if id.hasPrefix("activate:"), !validateMenuItem(sender) {
+                mainWindow?.status.stringValue = "文档列表已改变，请重新打开后选择。"
+                return
+            }
             route(id)
         }
     }
@@ -370,6 +375,25 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if id.hasPrefix("activate:") {
+            let fields =
+                menuItem.identifier?.rawValue.split(separator: ".", omittingEmptySubsequences: false) ?? []
+            guard let documentID = UUID(uuidString: String(id.dropFirst("activate:".count))),
+                fields.count == 2, let source = UUID(uuidString: String(fields[0])),
+                UUID(uuidString: String(fields[1])) == documentID,
+                source == mainWindow?.tabOrderIdentity,
+                documents.contains(where: {
+                    $0.buffer.id == documentID
+                })
+            else {
+                return false
+            }
+            menuItem.state = documentID == activeID ? .on : .off
+            return !closing
+        }
+        if id == "documentList" {
+            return !closing && mainWindow != nil && !documents.isEmpty
         }
         if id.hasPrefix("tabLayout:") {
             guard let mode = DocumentTabLayout(rawValue: String(id.dropFirst("tabLayout:".count))) else {

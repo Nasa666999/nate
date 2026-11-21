@@ -112,6 +112,8 @@ extension ApplicationController {
             return
         }
         switch id {
+        case "documentList":
+            mainWindow?.showDocumentList(target: self, action: #selector(menuAction(_:)))
         case "cancelQuickFind":
             cancelQuickFind()
             mainWindow?.status.stringValue = "快捷查找已取消。"

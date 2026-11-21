@@ -13,6 +13,7 @@ final class TabStrip: NSScrollView {
     var layingOutTabs = false
     var onRequiredHeight: ((CGFloat) -> Void)?
     var current: [TabPresentation] = []
+    var displayLabels: [UUID: String] = [:]
     let dragOwner = UUID()
     var orderIdentity = UUID()
     var activeDrag: TabDragGesture?
@@ -67,6 +68,7 @@ final class TabStrip: NSScrollView {
         guard current != tabs else {
             return
         }
+        displayLabels = TabPresentation.labels(for: tabs)
         let selectedChanged =
             current.first(where: {
                 $0.selected
@@ -115,9 +117,8 @@ final class TabStrip: NSScrollView {
                 bottom: 3,
                 right: 5
             )
-            let prefix = tab.failed ? "⚠ " : tab.pinned ? "◆ " : tab.dirty ? "● " : ""
             let button = TabButton(
-                title: prefix + tab.title,
+                title: displayLabels[tab.id] ?? tab.statusPrefix + tab.title,
                 target: self,
                 action: #selector(selectTab(_:))
             )
@@ -168,8 +169,7 @@ final class TabStrip: NSScrollView {
         }
         group.layer?.backgroundColor =
             (tab.selected ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
-        let prefix = tab.failed ? "⚠ " : tab.pinned ? "◆ " : tab.dirty ? "● " : ""
-        button.title = prefix + tab.title
+        button.title = displayLabels[tab.id] ?? tab.statusPrefix + tab.title
         button.font = NSFont.systemFont(ofSize: 12, weight: tab.selected ? .semibold : .regular)
         button.toolTip = tab.path ?? "未命名临时文档"
     }
