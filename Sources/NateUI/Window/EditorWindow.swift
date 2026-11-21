@@ -46,6 +46,13 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onSelect: ((UUID) -> Void)?
     public var onCloseTab: ((UUID) -> Void)?
     public var onTabAction: ((UUID, String) -> Void)?
+    public var onTabReorder: ((DocumentOrderMove) -> Bool)?
+    /// 业务作用：工作区发布重排时复验实际标签栏的原顺序代次，顺序往返不能恢复旧手势资格。
+    /// 参数说明: 无。
+    /// 返回：当前标签栏持有的顺序控制身份，不授予正文修改权。
+    public var tabOrderIdentity: UUID {
+        tabs.orderIdentity
+    }
     public var onEdit: (() -> Void)?
     public var onTextInput: ((String) -> Void)?
     public var onPairInput: ((PairInputCommand) -> Void)?
@@ -164,6 +171,9 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         }
         tabs.onAction = {
             [weak self] id, action in self?.onTabAction?(id, action)
+        }
+        tabs.onReorder = {
+            [weak self] move in self?.onTabReorder?(move) ?? false
         }
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true

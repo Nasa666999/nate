@@ -440,6 +440,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.onTabAction = {
             [weak self] id, action in self?.tabAction(id, action)
         }
+        window.onTabReorder = {
+            [weak self] move in self?.reorderTabs(move) ?? false
+        }
         window.onEdit = {
             [weak self] in self?.didEdit()
         }

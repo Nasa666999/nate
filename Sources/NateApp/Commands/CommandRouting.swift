@@ -543,6 +543,8 @@ extension ApplicationController {
             return
         }
         switch action {
+        case "moveTabLeft", "moveTabRight", "moveTabFirst", "moveTabLast":
+            moveTab(id, action: action)
         case "close":
             Task {
                 await closeDocument(id)

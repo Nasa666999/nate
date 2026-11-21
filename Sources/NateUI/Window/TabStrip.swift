@@ -1,12 +1,22 @@
 import AppKit
+import NateCore
 
 @MainActor
 final class TabStrip: NSScrollView {
     var onSelect: ((UUID) -> Void)?
     var onClose: ((UUID) -> Void)?
     var onAction: ((UUID, String) -> Void)?
+    var onReorder: ((DocumentOrderMove) -> Bool)?
     let stack = NSStackView()
     var current: [TabPresentation] = []
+    let dragOwner = UUID()
+    var orderIdentity = UUID()
+    var activeDrag: TabDragGesture?
+    weak var dragSource: TabButton?
+    var dragLocation = NSPoint.zero
+    var dragTimer: Timer?
+    var dragKeyMonitor: Any?
+    let dropIndicator = NSView()
 
     /// 业务作用：建立可横向滚动的文档标签栏。
     /// 参数说明:
@@ -20,8 +30,18 @@ final class TabStrip: NSScrollView {
         backgroundColor = .windowBackgroundColor
         stack.orientation = .horizontal
         stack.spacing = 1
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+        stack.edgeInsets = NSEdgeInsets(
+            top: 0,
+            left: 4,
+            bottom: 0,
+            right: 4
+        )
         documentView = stack
+        dropIndicator.wantsLayer = true
+        dropIndicator.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        dropIndicator.layer?.zPosition = 100
+        dropIndicator.isHidden = true
+        stack.addSubview(dropIndicator)
     }
 
     /// 业务作用：标签集合由工作区提供，不从系统归档另建身份。
@@ -32,6 +52,17 @@ final class TabStrip: NSScrollView {
         return nil
     }
 
+    /// 业务作用：标签栏离开原窗口时立即撤销手势及周期任务，旧鼠标事件不能继续操作迁移后的视图。
+    /// 参数说明:
+    /// - newWindow: 即将接入的窗口，移出时为空。
+    /// 返回：窗口身份改变前收回拖动资格并移除临时键盘监听。
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow !== window, let active = activeDrag {
+            endTitleDrag(active.gesture)
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     /// 业务作用：根据真实保存状态更新标签及其上下文动作。
     /// 参数说明:
     /// - tabs: 有序标签呈现。
@@ -39,6 +70,29 @@ final class TabStrip: NSScrollView {
     func update(_ tabs: [TabPresentation]) {
         guard current != tabs else {
             return
+        }
+        let groups = stack.arrangedSubviews.compactMap {
+            $0 as? NSStackView
+        }
+        if current.map(\.id) == tabs.map(\.id), groups.count == tabs.count {
+            // 周期保存只更新标签状态，保留原标题实例，正在进行的合法移动不能被后台重绘撤销。
+            current = tabs
+            for (group, tab) in zip(groups, tabs) {
+                updateGroup(group, tab: tab)
+            }
+            stack.frame.size = NSSize(
+                width: stack.fittingSize.width,
+                height: 32
+            )
+            return
+        }
+        if current.map(\.id) != tabs.map(\.id) {
+            // 文档集合或原顺序已经改变，旧手势不能再按后来布局取得移动资格。
+            if let active = activeDrag {
+                endTitleDrag(active.gesture)
+            }
+            orderIdentity = UUID()
+            dropIndicator.isHidden = true
         }
         current = tabs
         for view in stack.arrangedSubviews {
@@ -52,10 +106,25 @@ final class TabStrip: NSScrollView {
             group.layer?.backgroundColor =
                 (tab.selected ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
             group.layer?.cornerRadius = 4
-            group.edgeInsets = NSEdgeInsets(top: 3, left: 7, bottom: 3, right: 5)
+            group.edgeInsets = NSEdgeInsets(
+                top: 3,
+                left: 7,
+                bottom: 3,
+                right: 5
+            )
             let prefix = tab.failed ? "⚠ " : tab.pinned ? "◆ " : tab.dirty ? "● " : ""
-            let button = TabButton(title: prefix + tab.title, target: self, action: #selector(selectTab(_:)))
+            let button = TabButton(
+                title: prefix + tab.title,
+                target: self,
+                action: #selector(selectTab(_:))
+            )
             button.documentID = tab.id
+            button.owner = self
+            button.orderIdentity = orderIdentity
+            button.onBeginDrag = {
+                [weak self] source, event in
+                self?.beginTitleDrag(source, event: event) ?? false
+            }
             button.onAction = {
                 [weak self] action in self?.onAction?(tab.id, action)
             }
@@ -63,14 +132,43 @@ final class TabStrip: NSScrollView {
             button.font = NSFont.systemFont(ofSize: 12, weight: tab.selected ? .semibold : .regular)
             button.toolTip = tab.path ?? "未命名临时文档"
             group.addArrangedSubview(button)
-            let close = TabButton(title: "×", target: self, action: #selector(closeTab(_:)))
+            let close = TabButton(
+                title: "×",
+                target: self,
+                action: #selector(closeTab(_:))
+            )
             close.documentID = tab.id
+            close.onAction = {
+                [weak self] action in self?.onAction?(tab.id, action)
+            }
             close.isBordered = false
             close.toolTip = "关闭此文档"
             group.addArrangedSubview(close)
             stack.addArrangedSubview(group)
         }
-        stack.frame = NSRect(x: 0, y: 0, width: stack.fittingSize.width, height: 32)
+        stack.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: stack.fittingSize.width,
+            height: 32
+        )
+    }
+
+    /// 业务作用：正文和保存状态变化沿用原标签控件，真实手势仍按稳定文档身份持有来源。
+    /// 参数说明:
+    /// - group: 原顺序中现有的标签容器。
+    /// - tab: 相同文档身份的最新呈现。
+    /// 返回：只更新文字、颜色和路径提示，不改变标题实例、拖动代次或正文焦点。
+    private func updateGroup(_ group: NSStackView, tab: TabPresentation) {
+        guard let button = group.arrangedSubviews.first as? TabButton, button.documentID == tab.id else {
+            return
+        }
+        group.layer?.backgroundColor =
+            (tab.selected ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
+        let prefix = tab.failed ? "⚠ " : tab.pinned ? "◆ " : tab.dirty ? "● " : ""
+        button.title = prefix + tab.title
+        button.font = NSFont.systemFont(ofSize: 12, weight: tab.selected ? .semibold : .regular)
+        button.toolTip = tab.path ?? "未命名临时文档"
     }
 
     /// 业务作用：点击标签只激活该标签绑定的文档。
@@ -78,7 +176,11 @@ final class TabStrip: NSScrollView {
     /// - sender: 被点击标签。
     /// 返回：发送稳定身份，不依赖当前活动标签。
     @objc func selectTab(_ sender: TabButton) {
-        if let id = sender.documentID {
+        if let id = sender.documentID,
+            current.contains(where: {
+                $0.id == id
+            })
+        {
             onSelect?(id)
         }
     }
@@ -88,43 +190,12 @@ final class TabStrip: NSScrollView {
     /// - sender: 被点击关闭按钮。
     /// 返回：交给工作区进行内容保护。
     @objc func closeTab(_ sender: TabButton) {
-        if let id = sender.documentID {
+        if let id = sender.documentID,
+            current.contains(where: {
+                $0.id == id
+            })
+        {
             onClose?(id)
-        }
-    }
-}
-
-@MainActor
-final class TabButton: NSButton {
-    var documentID: UUID?
-    var onAction: ((String) -> Void)?
-
-    /// 业务作用：上下文菜单动作始终绑定右键实际指向的标签。
-    /// 参数说明:
-    /// - event: 当前右键事件。
-    /// 返回：适用于被点击文档的操作列表。
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let menu = NSMenu()
-        for (title, id) in [
-            ("关闭", "close"), ("关闭其他", "closeOthers"), ("关闭左侧", "closeLeft"),
-            ("关闭右侧", "closeRight"), ("固定 / 取消固定", "pin"), ("复制完整路径", "copyPath"),
-            ("在 Finder 显示", "reveal"), ("克隆到分屏", "clone"),
-        ] {
-            let item = NSMenuItem(title: title, action: #selector(contextAction(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = id
-            menu.addItem(item)
-        }
-        return menu
-    }
-
-    /// 业务作用：将上下文动作连同原标签身份交给工作区。
-    /// 参数说明:
-    /// - sender: 菜单项。
-    /// 返回：只发送对应动作，不改变当前活动标签。
-    @objc func contextAction(_ sender: NSMenuItem) {
-        if let id = sender.representedObject as? String {
-            onAction?(id)
         }
     }
 }
