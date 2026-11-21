@@ -13,8 +13,17 @@ extension CLexing {
     /// 参数说明: 无。
     /// 返回：推进完整原字节范围；普通换行结束行注释，块注释继续持有自己的边界。
     mutating func commentByte() throws {
-        if try documentationCommand() {
-            return
+        if state.xmlTerminator {
+            // 名称终止字节已经在原状态中判定，不能在同一斜线重新进入另一份 XML 名称。
+            state.xmlTerminator = false
+        }
+        else {
+            if try documentationCommand() {
+                return
+            }
+            if try documentationXML() {
+                return
+            }
         }
         let ending = newlineWidth(at: cursor)
         if ending > 0 {

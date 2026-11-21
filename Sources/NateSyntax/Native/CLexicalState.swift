@@ -25,6 +25,17 @@ struct CLexicalState: Sendable, Equatable {
     var continuedNumber = false
     var numberUserLiteral = false
     var directivePrefix = ""
+    var xmlContinuation: CXMLContinuation?
+    var xmlTerminator = false
+}
+
+struct CXMLContinuation: Sendable, Equatable {
+    let documentID: UUID
+    let revision: UInt64
+    var nextOffset: Int
+    let endOffset: Int
+    let style: String
+    let closesBlock: Bool
 }
 
 struct CLexingBudget {

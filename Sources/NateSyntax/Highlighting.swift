@@ -81,7 +81,7 @@ public struct SyntaxScanner: Sendable {
         self.snapshot =
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
-                "srec", "tehex", "tex", "latex", "lisp", "scheme",
+                "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp",
             ].contains(
                 language.id
             )
@@ -178,6 +178,7 @@ public struct SyntaxScanner: Sendable {
                 keywords: keywords,
                 secondaryKeywords: secondaryKeywords,
                 documentationKeywords: documentationKeywords,
+                snapshot: snapshot,
                 deadline: deadline,
                 state: &state
             )

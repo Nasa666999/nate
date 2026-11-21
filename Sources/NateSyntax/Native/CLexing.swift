@@ -7,6 +7,7 @@ struct CLexing {
     let keywords: Set<String>
     let secondaryKeywords: Set<String>
     let documentationKeywords: Set<String>
+    let snapshot: DocumentSnapshot?
     let unicodeLineEnding: Bool
     var state: CLexicalState
     var budget: CLexingBudget
@@ -22,6 +23,7 @@ struct CLexing {
     /// - keywords: 当前语言的主要关键字集合。
     /// - secondaryKeywords: 当前语言的次要关键字集合。
     /// - documentationKeywords: 当前语言明确定义的文档注释命令集合。
+    /// - snapshot: XML 名称跨物理行时固定向前证据的完整正文快照。
     /// - deadline: 本次固定快照分析的共同截止。
     /// - state: 前一完整行的独立状态，失败时只设置诊断。
     /// 返回：完整有界词元；范围、模式、容量、取消或截止失败均不发布部分状态。
@@ -32,6 +34,7 @@ struct CLexing {
         keywords: Set<String>,
         secondaryKeywords: Set<String>,
         documentationKeywords: Set<String>,
+        snapshot: DocumentSnapshot? = nil,
         deadline: ContinuousClock.Instant,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
@@ -54,6 +57,7 @@ struct CLexing {
                 keywords: keywords,
                 secondaryKeywords: secondaryKeywords,
                 documentationKeywords: documentationKeywords,
+                snapshot: snapshot,
                 unicodeLineEnding: text.hasSuffix("\u{0085}") || text.hasSuffix("\u{2028}")
                     || text.hasSuffix("\u{2029}"),
                 state: state.c,
@@ -76,6 +80,40 @@ struct CLexing {
     /// 参数说明: 无。
     /// 返回：完整推进当前行；资源失败向调用方抛错以舍弃全部中间结果。
     mutating func scan() throws {
+        if let pending = state.xmlContinuation {
+            // 跨行名称的样式依赖最初快照，另一修订不能承接已经读取的后续证据。
+            guard let snapshot, pending.documentID == snapshot.id,
+                pending.revision == snapshot.revision, pending.nextOffset == base,
+                pending.endOffset >= base, base <= snapshot.text.byteCount - bytes.count,
+                snapshot.text.isBoundary(base), snapshot.text.isBoundary(base + bytes.count),
+                snapshot.text.bytes(in: ByteRange(base, base + bytes.count)).elementsEqual(bytes)
+            else {
+                throw NateError.message("C/C++ 文档 XML 名称的连续范围或快照已改变。")
+            }
+            let end = min(bytes.count, pending.endOffset - base)
+            let previous = base > 0 ? snapshot.text.byte(at: base - 1) : nil
+            let endingWidth = previous == 10 && base >= 2 && snapshot.text.byte(at: base - 2) == 13 ? 2 : 1
+            let spliced = base > endingWidth && snapshot.text.byte(at: base - endingWidth - 1) == 92
+            if !spliced, previous == 10 || previous == 13 && snapshot.text.byte(at: base) != 10 {
+                // XML 名称仍持有行注释身份，但新物理行必须解除上一行的预处理与词元上下文。
+                let lineComment = state.lineComment
+                endLogicalLine()
+                state.lineComment = lineComment
+            }
+            try emit(0, end, kind: .comment, style: pending.style)
+            cursor = end
+            if end == pending.endOffset - base {
+                state.xmlContinuation = nil
+                if pending.closesBlock {
+                    state.blockComment = false
+                    state.documentation = false
+                }
+            }
+            else {
+                let nextOffset = base + bytes.count
+                state.xmlContinuation?.nextOffset = nextOffset
+            }
+        }
         while cursor < bytes.count {
             try budget.consume()
             if state.verbatim {
