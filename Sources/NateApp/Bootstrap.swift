@@ -33,6 +33,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let wordPreferences = WordBoundaryRuntime()
     let delimiterPreferences = DelimiterSelectionRuntime()
     let dateTimePreferences = DateTimePreferencesRuntime()
+    let fileOpeningPreferences = FileOpeningPreferencesRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -163,14 +164,6 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var markSearchGeneration: UUID?
     let styleMarks = StyleMarkRuntime()
     let bookmarkActions = BookmarkActionRuntime()
-    var recentFiles: [String] {
-        get {
-            UserDefaults.standard.stringArray(forKey: "recentFiles") ?? []
-        }
-        set {
-            UserDefaults.standard.set(Array(newValue.prefix(30)), forKey: "recentFiles")
-        }
-    }
 
     /// 业务作用：完成资源与恢复装配后显示可输入窗口，冷启动打开事件先排队。
     /// 参数说明:
@@ -508,24 +501,6 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             }
             self.setSearchResultPreferences(preferences)
         }
-    }
-
-    /// 业务作用：建立临时文档，不在用户尚未选择路径时擅自创建文件。
-    /// 参数说明: 无。
-    /// 返回：新文档进入工作区和恢复保护。
-    @discardableResult
-    func newDocument() -> WorkspaceDocument {
-        let document = WorkspaceDocument(name: "新文档 \(documents.count + 1)")
-        if closing {
-            // 已开始的关闭可能需要替代空标签，退出收束期间新标签同样不能重新开放正文输入。
-            document.setEditingSuspension(.applicationTermination, active: true)
-        }
-        if !recoveryReady {
-            document.recoveryError = "恢复索引尚未完成校验，现有记录保持原状。"
-        }
-        documents.append(document)
-        activate(document.buffer.id)
-        return document
     }
 
     /// 业务作用：激活既有文档并同步当前语言和保存状态。

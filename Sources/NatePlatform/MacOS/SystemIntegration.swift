@@ -29,23 +29,31 @@ public enum SystemIntegration {
     }
 
     /// 业务作用：选择任意扩展名的本地文本文件。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - directory: 用户偏好指定的本地起始目录，为空时沿用 macOS 对话框位置。
     /// 返回：用户确认的路径，取消为空。
-    public static func chooseFiles() -> [URL] {
+    public static func chooseFiles(directory: URL? = nil) -> [URL] {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
+        if let directory, directory.isFileURL {
+            panel.directoryURL = directory
+        }
         return panel.runModal() == .OK ? panel.urls : []
     }
 
     /// 业务作用：取得用户明确确认的保存位置，不自动重写扩展名。
     /// 参数说明:
     /// - name: 建议文件名。
+    /// - directory: 用户偏好指定的本地起始目录，为空时沿用 macOS 对话框位置。
     /// 返回：确认目标；取消为空。
-    public static func chooseSave(name: String) -> URL? {
+    public static func chooseSave(name: String, directory: URL? = nil) -> URL? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
         panel.canCreateDirectories = true
+        if let directory, directory.isFileURL {
+            panel.directoryURL = directory
+        }
         return panel.runModal() == .OK ? panel.url : nil
     }
 

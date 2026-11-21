@@ -128,7 +128,10 @@ extension ApplicationController {
             _ = newDocument()
             buildMenus()
         case "open":
-            let urls = SystemIntegration.chooseFiles()
+            let urls = SystemIntegration.chooseFiles(directory: fileDialogDirectory())
+            if let first = urls.first {
+                rememberSelectedFileDirectory(first)
+            }
             Task {
                 for url in urls {
                     await openFile(url)
@@ -332,6 +335,7 @@ extension ApplicationController {
         case "wordBoundaryPreferences": showWordBoundaryPreferences()
         case "delimiterSelectionPreferences": showDelimiterSelectionPreferences()
         case "dateTimePreferences": showDateTimePreferences()
+        case "fileOpeningPreferences": showFileOpeningPreferences()
         case "selectConfiguredDelimiters":
             if let (_, _, editor) = quickFindContext(), let position = editor.primarySelection?.head {
                 editor.selectInsideConfiguredDelimiters(at: position)

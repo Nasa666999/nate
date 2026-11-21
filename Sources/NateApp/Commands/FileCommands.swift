@@ -98,7 +98,7 @@ extension ApplicationController {
             recentFiles =
                 [url.path]
                 + recentFiles.filter {
-                    $0 != url.path
+                    !$0.utf8.elementsEqual(url.path.utf8)
                 }
             if activateOnOpen {
                 activate(document.buffer.id)
@@ -156,9 +156,15 @@ extension ApplicationController {
         guard await waitForOriginalSave(document) else {
             return
         }
-        guard let destination = SystemIntegration.chooseSave(name: document.name) else {
+        guard
+            let destination = SystemIntegration.chooseSave(
+                name: document.name,
+                directory: fileDialogDirectory()
+            )
+        else {
             return
         }
+        rememberSelectedFileDirectory(destination)
         let snapshot = document.buffer.snapshot
         let encoding = document.encoding
         let resolved = destination.resolvingSymlinksInPath().standardizedFileURL
@@ -258,7 +264,7 @@ extension ApplicationController {
                 recentFiles =
                     [destination.path]
                     + recentFiles.filter {
-                        $0 != destination.path
+                        !$0.utf8.elementsEqual(destination.path.utf8)
                     }
             }
             refreshUI()

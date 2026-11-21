@@ -20,6 +20,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "词字符与边界…", "wordBoundaryPreferences")
         add(application, "分隔符选择…", "delimiterSelectionPreferences")
         add(application, "日期时间格式…", "dateTimePreferences")
+        add(application, "文件与新建默认设置…", "fileOpeningPreferences")
         add(application, "保存时备份设置…", "saveBackupPreferences")
         add(application, "快捷键映射器…", "keyboardMap")
         application.addItem(.separator())
