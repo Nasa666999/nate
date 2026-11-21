@@ -76,8 +76,16 @@ public struct SyntaxScanner: Sendable {
     public init(language: LanguageDefinition, snapshot: DocumentSnapshot? = nil) {
         self.language = language
         self.snapshot =
-            ["python", "escseq", "errorlist", "ini", "props", "diff"].contains(language.id) ? snapshot : nil
+            ["python", "escseq", "errorlist", "ini", "props", "diff", "makefile"].contains(language.id)
+            ? snapshot : nil
         deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        if language.id == "makefile" {
+            // Makefile 在行扫描入口有界复验原始词表，提前建立 String 集合会合并名称并重复占用资源。
+            keywords = []
+            secondaryKeywords = []
+            documentationKeywords = []
+            return
+        }
         keywords = Set(
             ["python", "c", "cpp"].contains(language.id)
                 ? language.keywordGroups?["instre1"] ?? language.keywords : language.keywords
@@ -95,13 +103,14 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
-        if ["ini", "props", "diff"].contains(language.id) {
+        if ["ini", "props", "diff", "makefile"].contains(language.id) {
             return PropertyLexing.highlight(
                 text,
                 base: base,
                 snapshot: snapshot,
                 styles: language.lexicalStyles,
-                diff: language.id == "diff",
+                mode: language.id == "diff" ? .diff : (language.id == "makefile" ? .makefile : .properties),
+                directives: language.id == "makefile" ? language.keywords : [],
                 deadline: deadline,
                 state: &state
             )

@@ -22641,7 +22641,44 @@
     "lineComment": "#",
     "blockStart": "",
     "blockEnd": "",
-    "keywords": []
+    "keywords": [],
+    "lexicalStyles": {
+      "0": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      },
+      "1": {
+        "fontStyle": 0,
+        "foreground": "#008000",
+        "background": "#FFFFFF"
+      },
+      "2": {
+        "fontStyle": 1,
+        "foreground": "#000080",
+        "background": "#C0C0C0"
+      },
+      "3": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#FFFFFF"
+      },
+      "4": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      },
+      "5": {
+        "fontStyle": 0,
+        "foreground": "#FF0000",
+        "background": "#FFFFFF"
+      },
+      "9": {
+        "fontStyle": 2,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      }
+    }
   },
   {
     "id": "matlab",

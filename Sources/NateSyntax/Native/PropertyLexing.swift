@@ -5,17 +5,19 @@ struct PropertyLexing {
     let bytes: [UInt8]
     let base: Int
     let styles: [String: LanguageTokenStyle]
-    let diff: Bool
+    let mode: LineLexicalMode
+    let directives: [String]
     var budget: ANSILexingBudget
     var tokens: [SyntaxToken] = []
 
-    /// 业务作用：配置与差异模式按固定物理行分类，保留原字节而不解释配置或执行补丁。
+    /// 业务作用：内置逐行词法固定物理行与资源身份，保留原字节而不执行配置、补丁或命令。
     /// 参数说明:
     /// - text: 当前完整行或有固定快照证据的连续分段。
     /// - base: 当前片段在正文中的原始 UTF-8 起点。
     /// - snapshot: 用于确认来源及同一物理行边界的固定快照。
     /// - styles: 随当前语言定义固定的词法样式。
-    /// - diff: 是否采用 diff 文件的独立行类别。
+    /// - mode: 当前语言采用的独立逐行规则。
+    /// - directives: 按原始字节及顺序保留的 Makefile 指令名称，空词表不猜测额外关键字。
     /// - deadline: 本次完整语法任务的共同截止。
     /// - state: 当前任务状态，失败只设置诊断。
     /// 返回：完整确认后裁回当前片段的有限词元；来源、容量、取消或截止不满足时整体拒绝。
@@ -24,7 +26,8 @@ struct PropertyLexing {
         base: Int,
         snapshot: DocumentSnapshot?,
         styles: [String: LanguageTokenStyle]?,
-        diff: Bool = false,
+        mode: LineLexicalMode = .properties,
+        directives: [String] = [],
         deadline: ContinuousClock.Instant,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
@@ -32,11 +35,28 @@ struct PropertyLexing {
             return []
         }
         do {
-            var budget = ANSILexingBudget(deadline: deadline)
+            var budget = ANSILexingBudget(
+                deadline: deadline,
+                maximumSteps: mode == .makefile ? 8_388_608 : 4_194_304
+            )
             try budget.check()
+            if mode == .makefile {
+                // 词表必须先具有完整容量资格，超限不能截成另一套规则后继续着色。
+                guard directives.count <= 4096 else {
+                    throw NateError.message("Makefile 指令名称超过 4096 项。")
+                }
+                var directiveBytes = 0
+                for directive in directives {
+                    try budget.consume()
+                    guard directive.utf8.count <= 1_048_576 - directiveBytes else {
+                        throw NateError.message("Makefile 指令词表超过 1 MiB。")
+                    }
+                    directiveBytes += directive.utf8.count
+                }
+            }
             guard text.utf8.count <= 1_048_576, base >= 0, base <= Int.max - text.utf8.count,
                 let styles, styles.count <= 256,
-                (0...(diff ? 6 : 5)).allSatisfy({
+                mode.requiredStyles.allSatisfy({
                     styles[String($0)] != nil
                 })
             else {
@@ -68,7 +88,8 @@ struct PropertyLexing {
                 bytes: bytes,
                 base: origin,
                 styles: styles,
-                diff: diff,
+                mode: mode,
+                directives: directives,
                 budget: budget
             )
             var start = 0
@@ -88,8 +109,11 @@ struct PropertyLexing {
                         break
                     }
                 }
-                if diff {
+                if mode == .diff {
                     try scanner.diffLine(start, end)
+                }
+                else if mode == .makefile {
+                    try scanner.makeLine(start, end)
                 }
                 else {
                     try scanner.line(start, end)
@@ -181,22 +205,19 @@ struct PropertyLexing {
         guard end > start else {
             return
         }
-        guard tokens.count < 65_536, let attributes = styles[String(style)] ?? (diff ? styles["0"] : nil)
+        guard tokens.count < 65_536,
+            let attributes = styles[String(style)] ?? (mode == .diff ? styles["0"] : nil)
         else {
             throw NateError.message("当前语言高亮超过词元容量或缺少样式定义。")
         }
-        let kinds: [SyntaxKind] =
-            diff
-            ? [.text, .comment, .keyword, .heading, .number, .text, .text, .text, .text, .text, .text, .text]
-            : [.text, .comment, .heading, .punctuation, .keyword, .keyword]
         tokens.append(
             SyntaxToken(
                 range: ByteRange(base + start, base + end),
-                kind: kinds[style],
+                kind: mode.kinds[style],
                 foreground: attributes.foreground,
                 background: attributes.background,
                 fontStyle: attributes.fontStyle,
-                lexicalStyle: (diff ? "diff:" : "props:") + String(style)
+                lexicalStyle: mode.rawValue + ":" + String(style)
             )
         )
     }
