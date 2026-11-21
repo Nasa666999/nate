@@ -115,13 +115,21 @@ extension CLexing {
     /// - end: 行内结束边界。
     /// - kind: 普通代码中的基础分类。
     /// - style: 普通代码中的独立词法样式。
+    /// - updatesContext: 是否推进实际代码前文，物理续行保留此前身份。
     /// 返回：当前预处理体使用一致的独立身份，其它代码保持自身类别。
-    mutating func emitCode(_ start: Int, _ end: Int, kind: SyntaxKind, style: String) throws {
+    mutating func emitCode(
+        _ start: Int,
+        _ end: Int,
+        kind: SyntaxKind,
+        style: String,
+        updatesContext: Bool = true
+    ) throws {
         try emit(
             start,
             end,
             kind: state.preprocessor ? .keyword : kind,
-            style: state.preprocessor ? "preprocessor" : style
+            style: state.preprocessor ? "preprocessor" : style,
+            updatesContext: updatesContext
         )
     }
 
@@ -132,37 +140,79 @@ extension CLexing {
     /// 返回：在原字节坐标中呈现原上下文，不更改状态。
     mutating func emitContext(_ start: Int, _ end: Int) throws {
         if state.blockComment || state.lineComment {
-            try emit(start, end, kind: .comment, style: commentStyle)
+            try emit(start, end, kind: .comment, style: commentStyle, updatesContext: false)
+        }
+        else if state.regex {
+            try emit(start, end, kind: .string, style: "regex", updatesContext: false)
         }
         else if state.quote != nil || state.header {
             try emit(
                 start,
                 end,
                 kind: .string,
-                style: state.header ? "header" : (state.quote == 39 ? "character" : "string")
+                style: state.header ? "header" : (state.quote == 39 ? "character" : "string"),
+                updatesContext: false
             )
         }
         else if state.continuedNumber {
-            try emitCode(start, end, kind: .number, style: state.numberUserLiteral ? "userLiteral" : "number")
+            try emitCode(
+                start,
+                end,
+                kind: .number,
+                style: state.numberUserLiteral ? "userLiteral" : "number",
+                updatesContext: false
+            )
         }
         else if state.continuedWord || state.splicedWord {
-            try emitCode(start, end, kind: .text, style: "identifier")
+            try emitCode(start, end, kind: .text, style: "identifier", updatesContext: false)
         }
         else {
-            try emitCode(start, end, kind: .text, style: "continuation")
+            try emitCode(
+                start,
+                end,
+                kind: state.operatorPending ? .punctuation : .text,
+                style: state.operatorPending ? "punctuation" : "continuation",
+                updatesContext: false
+            )
         }
     }
 
-    /// 业务作用：连续同类范围合并，整行片段与原始字节坐标始终受固定容量保护。
+    /// 业务作用：记录后续正则起点证据并合并连续同类范围，整行片段与原字节坐标始终受固定容量保护。
     /// 参数说明:
     /// - start: 当前行内起点。
     /// - end: 当前行内结束边界。
     /// - kind: 基础呈现类别。
     /// - style: C 词法命名空间中的独立身份。
+    /// - updatesContext: 是否从已消费字节推进正则起点和原始前后缀判断。
     /// 返回：完整范围加入有限列表；超量抛错，调用方不得发布半行结果。
-    mutating func emit(_ start: Int, _ end: Int, kind: SyntaxKind, style: String) throws {
+    mutating func emit(_ start: Int, _ end: Int, kind: SyntaxKind, style: String, updatesContext: Bool = true)
+        throws
+    {
         guard end > start else {
             return
+        }
+        if updatesContext {
+            // 默认与注释样式不贡献前置字符，原文中的未分类反斜线不能遮掉此前有效标点。
+            var needsVisible = kind != .comment && style != "text" && style != "continuation"
+            var needsAdd = true
+            for offset in (start..<end).reversed() {
+                try budget.consume()
+                let byte = bytes[offset]
+                if needsVisible, ![9, 10, 11, 12, 13, 32].contains(byte) {
+                    state.previousNonWhite = byte
+                    needsVisible = false
+                }
+                if needsAdd, byte == 43 || byte == 45 {
+                    let previous =
+                        offset > 0
+                        ? bytes[offset - 1] : snapshot?.text.byte(at: base - 1) ?? state.lastRawByte
+                    state.lastAddWasDoubled = previous == byte
+                    needsAdd = false
+                }
+                if !needsVisible, !needsAdd {
+                    break
+                }
+            }
         }
         let identity = "c:" + style
         if let last = tokens.last, last.range.upper == base + start, last.kind == kind,

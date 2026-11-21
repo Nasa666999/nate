@@ -56,12 +56,18 @@ enum CFolding {
                 // 词法未完成时不能把字符串、注释或宏体中的标点用于隐藏正文。
                 throw NateError.message(state.diagnostic ?? "C/C++ 折叠缺少完整词法状态。")
             }
+            let bytes = Array(source.utf8)
+            let startsContinuation = bytes.count >= 2 && bytes[0] == 92 && [10, 13].contains(bytes[1])
+            // 词法在首个普通字节才解除旧行注释，折叠不能把待交接标志误当成本行已生效的注释。
+            let lineComment =
+                before.lineComment
+                && (!before.lineStartPending || before.continuationLine || startsContinuation)
             var analysis = CFoldingLine(
-                bytes: Array(source.utf8),
+                bytes: bytes,
                 base: range.lower,
                 tokens: tokens,
                 blockComment: before.blockComment,
-                lineComment: before.lineComment,
+                lineComment: lineComment,
                 preprocessor: before.preprocessor,
                 streamComment: streamComment,
                 blockStar: before.blockStar,

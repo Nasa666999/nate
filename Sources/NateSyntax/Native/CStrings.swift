@@ -43,6 +43,7 @@ extension CLexing {
             }
             state.rawEnding = [41] + delimiter + [34]
             state.rawMatched = 0
+            state.rawVisibleBeforeMatch = nil
             state.expectsHeader = false
             literalStart = cursor
             try emit(cursor, end + 1, kind: .string, style: "raw")
@@ -78,7 +79,14 @@ extension CLexing {
         let byte = bytes[cursor]
         let paired = byte == 34 && cursor + 1 < bytes.count && bytes[cursor + 1] == 34
         let width = paired ? 2 : max(1, newlineWidth(at: cursor))
-        try emit(cursor, cursor + width, kind: .string, style: "verbatim")
+        // 独立闭合引号只交接词法状态，不遮掉字面正文给后续正则留下的前置字符。
+        try emit(
+            cursor,
+            cursor + width,
+            kind: .string,
+            style: "verbatim",
+            updatesContext: byte != 34 || paired
+        )
         cursor += width
         if byte == 34 && !paired {
             state.verbatim = false
@@ -97,17 +105,27 @@ extension CLexing {
     mutating func rawByte() throws {
         let byte = bytes[cursor]
         state.logicalStart = false
+        let previous = state.previousNonWhite
+        if state.rawMatched == 0, byte == 41 {
+            state.rawVisibleBeforeMatch = previous
+        }
         try emit(cursor, cursor + 1, kind: .string, style: "raw")
         if byte == state.rawEnding[state.rawMatched] {
             state.rawMatched += 1
         }
         else {
             state.rawMatched = byte == 41 ? 1 : 0
+            state.rawVisibleBeforeMatch = byte == 41 ? previous : nil
         }
         cursor += 1
         if state.rawMatched == state.rawEnding.count {
+            // 整个原始定界符在一次状态交接中消费，后续正则资格沿用字面正文最后的可见字符。
+            if let previous = state.rawVisibleBeforeMatch {
+                state.previousNonWhite = previous
+            }
             state.rawEnding = []
             state.rawMatched = 0
+            state.rawVisibleBeforeMatch = nil
         }
         if byte == 10 || byte == 13 {
             endLogicalLine()
@@ -178,7 +196,8 @@ extension CLexing {
             state.escape = true
         }
         else {
-            try emit(cursor, cursor + 1, kind: .string, style: style)
+            // 闭合引号与下个状态在同一步交接，普通正文与转义引号仍正常推进前文。
+            try emit(cursor, cursor + 1, kind: .string, style: style, updatesContext: byte != state.quote)
             if byte == state.quote {
                 state.quote = nil
             }

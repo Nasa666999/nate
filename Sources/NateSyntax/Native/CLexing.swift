@@ -23,7 +23,7 @@ struct CLexing {
     /// - keywords: 当前语言的主要关键字集合。
     /// - secondaryKeywords: 当前语言的次要关键字集合。
     /// - documentationKeywords: 当前语言明确定义的文档注释命令集合。
-    /// - snapshot: XML 名称跨物理行时固定向前证据的完整正文快照。
+    /// - snapshot: 固定当前范围、跨行及前后文证据的完整正文快照。
     /// - deadline: 本次固定快照分析的共同截止。
     /// - state: 前一完整行的独立状态，失败时只设置诊断。
     /// 返回：完整有界词元；范围、模式、容量、取消或截止失败均不发布部分状态。
@@ -43,7 +43,8 @@ struct CLexing {
         }
         // 旧模式或不完整范围没有传播资格，结构分析不能继续使用来源不明的检查点。
         guard text.utf8.count <= 1_048_576, base >= 0, base <= Int.max - text.utf8.count,
-            state.c.language == nil || state.c.language == language
+            state.c.language == nil || state.c.language == language,
+            state.c.nextOffset == nil || state.c.nextOffset == base
         else {
             state.diagnostic = "C/C++ 高亮暂停：行范围、容量或语言检查点不一致。"
             return []
@@ -51,6 +52,22 @@ struct CLexing {
         do {
             let budget = CLexingBudget(deadline: deadline)
             try budget.check()
+            if let documentID = state.c.documentID {
+                // 文本身份已经绑定时不能用其它文档或修订的前置标点继续判断正则起点。
+                guard let snapshot, snapshot.id == documentID, snapshot.revision == state.c.revision else {
+                    throw NateError.message("C/C++ 检查点不属于当前完整正文修订。")
+                }
+            }
+            if let snapshot {
+                let range = ByteRange(base, base + text.utf8.count)
+                // 前后文只属于实际传入的正文片段，声明了快照也不能把另一段文字套入相同偏移。
+                guard range.upper <= snapshot.text.byteCount, snapshot.text.isBoundary(range.lower),
+                    snapshot.text.isBoundary(range.upper),
+                    snapshot.text.bytes(in: range).elementsEqual(text.utf8)
+                else {
+                    throw NateError.message("C/C++ 当前范围与完整正文原字节不一致。")
+                }
+            }
             var scanner = CLexing(
                 bytes: Array(text.utf8),
                 base: base,
@@ -64,7 +81,11 @@ struct CLexing {
                 budget: budget
             )
             scanner.state.language = language
+            scanner.state.documentID = snapshot?.id
+            scanner.state.revision = snapshot?.revision
             try scanner.scan()
+            scanner.state.lastRawByte = scanner.bytes.last ?? scanner.state.lastRawByte
+            scanner.state.nextOffset = base + scanner.bytes.count
             try scanner.budget.check()
             // 完整遍历和末次取消复验先于状态发布，失败不能留下半行注释、原始字面或预处理上下文。
             state.c = scanner.state
@@ -99,6 +120,8 @@ struct CLexing {
                 let lineComment = state.lineComment
                 endLogicalLine()
                 state.lineComment = lineComment
+                state.lineStartPending = false
+                state.continuationLine = false
             }
             try emit(0, end, kind: .comment, style: pending.style)
             cursor = end
@@ -113,6 +136,9 @@ struct CLexing {
                 let nextOffset = base + bytes.count
                 state.xmlContinuation?.nextOffset = nextOffset
             }
+        }
+        if bytes.isEmpty {
+            resolvePhysicalLineStart()
         }
         while cursor < bytes.count {
             try budget.consume()
@@ -132,14 +158,24 @@ struct CLexing {
                     continue
                 }
             }
-            let splice = spliceWidth(at: cursor)
+            let splice = state.regexEscape ? 0 : spliceWidth(at: cursor)
             if splice > 0 {
                 try emitContext(cursor, cursor + splice)
                 // 块注释只接受原文中相邻的结束符；物理续行不能把分隔两行的星号与斜线拼成结束符。
                 state.blockStar = false
                 state.splicedWord = false
                 state.skipSplicedLineFeed = bytes[cursor + 1] == 13 && splice == 2
+                state.regexClass = false
+                state.regexEscape = false
+                state.regexFlags = false
+                state.lineStartPending = true
+                state.continuationLine = true
                 cursor += splice
+                continue
+            }
+            resolvePhysicalLineStart()
+            state.operatorPending = false
+            if state.regex || state.regexFlags, try regexByte() {
                 continue
             }
             if state.quote != nil || state.header {
@@ -178,6 +214,10 @@ struct CLexing {
             else if try beginLiteral() {
                 state.logicalStart = false
             }
+            else if try beginRegex() {
+                state.logicalStart = false
+                state.expectsHeader = false
+            }
             else if state.expectsHeader, byte == 60 {
                 state.header = true
                 state.escape = false
@@ -211,6 +251,7 @@ struct CLexing {
                 state.logicalStart = false
                 state.expectsHeader = false
                 let isOperator = "%^&*()-+=|{}[]:;<>,/?!.~".utf8.contains(byte)
+                state.operatorPending = isOperator
                 try emitCode(
                     cursor,
                     cursor + 1,
@@ -222,21 +263,41 @@ struct CLexing {
         }
     }
 
-    /// 业务作用：普通物理换行结束当前预处理与行注释，跨行块注释和原始字面分别持有自身边界。
+    /// 业务作用：物理换行解除预处理与行内词元，并登记行注释和正则的行首交接。
     /// 参数说明: 无。
-    /// 返回：只重置当前逻辑行身份，不把候选文本或下一行当成同一宏体。
+    /// 返回：预处理身份立即结束，行注释和正则等待下一行先完成纯续行消费；块注释与原始字面保留独立边界。
     mutating func endLogicalLine() {
         state.logicalStart = true
         state.preprocessor = false
         state.directiveWord = false
         state.expectsHeader = false
-        state.lineComment = false
+        state.lineStartPending = true
+        state.continuationLine = false
         state.blockStar = false
         state.continuedWord = false
         state.splicedWord = false
         state.continuedNumber = false
         state.numberUserLiteral = false
         state.directivePrefix = ""
+        state.operatorPending = false
+    }
+
+    /// 业务作用：新物理行先处理整行续接，首个普通字节才结束上一行的注释或正则身份。
+    /// 参数说明: 无。
+    /// 返回：行注释按续接资格保留，正则结束并清除字符类与转义；没有待处理行首时不改变状态。
+    mutating func resolvePhysicalLineStart() {
+        guard state.lineStartPending else {
+            return
+        }
+        if !state.continuationLine {
+            state.lineComment = false
+        }
+        state.regex = false
+        state.regexClass = false
+        state.regexEscape = false
+        state.regexFlags = false
+        state.lineStartPending = false
+        state.continuationLine = false
     }
 
     /// 业务作用：识别原始 CR、LF 与 CRLF，Unicode 段分隔字节不被冒充 C 源码换行。

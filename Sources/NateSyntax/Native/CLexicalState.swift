@@ -3,6 +3,19 @@ import NateCore
 
 struct CLexicalState: Sendable, Equatable {
     var language: String?
+    var documentID: UUID?
+    var revision: UInt64?
+    var nextOffset: Int?
+    var previousNonWhite: UInt8 = 32
+    var lastAddWasDoubled = false
+    var lastRawByte: UInt8?
+    var operatorPending = false
+    var regex = false
+    var regexClass = false
+    var regexEscape = false
+    var regexFlags = false
+    var lineStartPending = false
+    var continuationLine = false
     var blockComment = false
     var lineComment = false
     var documentation = false
@@ -13,6 +26,7 @@ struct CLexicalState: Sendable, Equatable {
     var escapeRadix: UInt8?
     var rawEnding: [UInt8] = []
     var rawMatched = 0
+    var rawVisibleBeforeMatch: UInt8?
     var verbatim = false
     var header = false
     var preprocessor = false
