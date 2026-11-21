@@ -40,6 +40,7 @@ public struct SyntaxState: Sendable, Equatable {
     public var quote: UInt8?
     public var diagnostic: String?
     var python = PythonLexicalState()
+    var json = JSONLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -77,6 +78,16 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "json" || language.id == "json5" {
+            return JSONLexing.highlight(
+                text,
+                base: base,
+                extended: language.id == "json5",
+                rules: language.identifierRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if language.id == "python" {
             return PythonLexing.highlight(
                 text,

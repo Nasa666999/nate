@@ -22,7 +22,7 @@ public enum SyntaxPresentation {
         var result: [NSAttributedString.Key: Any] = [
             .font: styled,
             .foregroundColor: ThemePalette.resolved(
-                token.foreground.flatMap(ThemePalette.hexColor) ?? ThemePalette.color(token.kind),
+                token.foreground.flatMap(ThemePalette.hexColor) ?? lexicalColor(token),
                 appearance: appearance
             ),
         ]
@@ -30,6 +30,23 @@ public enum SyntaxPresentation {
             result[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
         return result
+    }
+
+    /// 业务作用：字符串内的属性、转义和非法片段使用可辨颜色，基础字符串身份仍供折叠与配对排除。
+    /// 参数说明:
+    /// - token: 已完成词法分析的原始片段。
+    /// 返回：动态系统颜色，由调用方在来源外观中解析。
+    private static func lexicalColor(_ token: SyntaxToken) -> NSColor {
+        switch token.lexicalStyle {
+        case "json:property":
+            return .systemTeal
+        case "json:escape":
+            return .systemOrange
+        case "json:invalid":
+            return .systemRed
+        default:
+            return ThemePalette.color(token.kind)
+        }
     }
 
     /// 业务作用：输出固定来源视图的动态系统颜色，不随打印面板的深浅外观变化重新解释。

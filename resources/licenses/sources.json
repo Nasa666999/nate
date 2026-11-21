@@ -30,6 +30,13 @@
     "copyright": "Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>",
     "implementation": "Python 折叠级别的 Swift 适配"
   },
+  "jsonIdentifiers": {
+    "project": "Unicode Character Database",
+    "source": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",
+    "license": "Unicode License V3",
+    "licenseFile": "Unicode-LICENSE.txt",
+    "implementation": "JSON5 IdentifierName 的固定 Unicode 17.0.0 字符类别范围"
+  },
   "pythonLexing": {
     "project": "Lexilla",
     "sources": [
