@@ -29,6 +29,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let columnEditing = ColumnEditingRuntime()
     let historyAction = HistoryActionRuntime()
     let lineSorting = LineSortingRuntime()
+    let displayPreferences = EditorDisplayPreferencesRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -346,15 +347,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return
         }
         let window = EditorWindow(document: active.buffer)
-        let defaults = UserDefaults.standard
-        autosaveEnabled =
-            defaults.object(forKey: "autosaveEnabled") == nil || defaults.bool(forKey: "autosaveEnabled")
-        let size = defaults.double(forKey: "fontSize")
-        if (7...72).contains(size) {
-            window.editor.font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
-        }
-        window.editor.wrapLines = defaults.bool(forKey: "wrapLines")
-        window.editor.showSymbols = defaults.bool(forKey: "showSymbols")
+        loadEditorPreferences(into: window)
         mainWindow = window
         connect(window)
         await loadSidebarRecovery()

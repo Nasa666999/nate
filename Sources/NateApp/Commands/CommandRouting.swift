@@ -340,18 +340,15 @@ extension ApplicationController {
                 let size =
                     id == "zoomReset"
                     ? 13 : max(7, min(72, editor.font.pointSize + (id == "zoomIn" ? 1 : -1)))
-                editor.font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+                editor.font = NSFontManager.shared.convert(editor.font, toSize: size)
                 editor.refresh()
             }
         case "themeLight":
-            NSApp.appearance = NSAppearance(named: .aqua)
-            mainWindow?.editor.refresh()
+            chooseEditorAppearance(.light)
         case "themeDark":
-            NSApp.appearance = NSAppearance(named: .darkAqua)
-            mainWindow?.editor.refresh()
+            chooseEditorAppearance(.dark)
         case "themeSystem":
-            NSApp.appearance = nil
-            mainWindow?.editor.refresh()
+            chooseEditorAppearance(.system)
         case "fullscreen": mainWindow?.window?.toggleFullScreen(nil)
         case "overwrite":
             mainWindow?.editor.overwrite.toggle()

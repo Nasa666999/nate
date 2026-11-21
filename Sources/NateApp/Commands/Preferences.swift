@@ -1,44 +1,74 @@
 import AppKit
-import NatePlatform
+import NateCore
+import NateUI
 
 extension ApplicationController {
-    /// 业务作用：通过原生界面调整自动保存、字体与主题，不要求编辑配置文件。
+    /// 业务作用：原生设置编辑完整显示与自动保存草稿，只有原偏好来源仍有效时才允许应用。
     /// 参数说明: 无。
-    /// 返回：用户确认后发布配置，取消保持原设置。
+    /// 返回：明确应用后同步现有克隆并保存配置；取消、非法草稿或来源变化保留原设置。
     func showPreferences() {
-        let alert = NSAlert()
-        alert.messageText = "Nate 设置"
-        alert.informativeText = "原文件自动保存周期固定为 1000 ms。恢复内容与原路径分别记录状态。"
+        // 模态窗口不能借焦点转移消费尚未提交的候选，原输入状态先保留在正文视图。
+        guard !closing, mainWindow?.hasMarkedEditorInput != true else {
+            return
+        }
+        let saved = currentDisplaySettings()
+        let runtime = displayPreferences
+        let domain = runtime.defaults ?? .standard
+        let generation = runtime.generation
+        let source = displayPreferenceSource(domain)
+        let editor = mainWindow?.editor
+        let initial =
+            (try? EditorDisplaySettings(
+                fontName: saved.fontName,
+                fontSize: Double(editor?.font.pointSize ?? CGFloat(saved.fontSize)),
+                appearance: saved.appearance,
+                wrapLines: editor?.wrapLines ?? saved.wrapLines,
+                showSymbols: editor?.showSymbols ?? saved.showSymbols
+            )) ?? saved
+        let form = EditorDisplayForm(settings: initial)
         let automatic = NSButton(checkboxWithTitle: "每秒自动保存与恢复保护", target: nil, action: nil)
         automatic.state = autosaveEnabled ? .on : .off
-        let fontSize = NSTextField(string: String(Int(mainWindow?.editor.font.pointSize ?? 13)))
-        let defaultWrap = NSButton(checkboxWithTitle: "自动换行", target: nil, action: nil)
-        defaultWrap.state = mainWindow?.editor.wrapLines == true ? .on : .off
-        let symbols = NSButton(checkboxWithTitle: "显示空白符号", target: nil, action: nil)
-        symbols.state = mainWindow?.editor.showSymbols == true ? .on : .off
-        let view = NSStackView(views: [
-            automatic, NSTextField(labelWithString: "正文等宽字号（7–72）"), fontSize, defaultWrap, symbols,
-        ])
-        view.orientation = .vertical
-        view.alignment = .leading
-        view.spacing = 10
-        view.frame = NSRect(x: 0, y: 0, width: 380, height: 160)
-        alert.accessoryView = view
+        let status = NSTextField(wrappingLabelWithString: runtime.warning ?? "")
+        status.textColor = .systemOrange
+        status.preferredMaxLayoutWidth = 420
+        let content = NSStackView(views: [automatic, form, status])
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 12
+        content.widthAnchor.constraint(equalToConstant: 420).isActive = true
+        let alert = NSAlert()
+        alert.messageText = "Nate 设置"
+        alert.informativeText = "原文件自动保存周期固定为 1000 ms。字体、显示和主题变化不修改正文。"
+        alert.accessoryView = content
         alert.addButton(withTitle: "应用")
         alert.addButton(withTitle: "取消")
-        if alert.runModal() == .alertFirstButtonReturn {
-            autosaveEnabled = automatic.state == .on
-            mainWindow?.editor.font = NSFont.monospacedSystemFont(
-                ofSize: max(7, min(72, fontSize.doubleValue)),
-                weight: .regular
-            )
-            mainWindow?.editor.wrapLines = defaultWrap.state == .on
-            mainWindow?.editor.showSymbols = symbols.state == .on
-            UserDefaults.standard.set(autosaveEnabled, forKey: "autosaveEnabled")
-            UserDefaults.standard.set(fontSize.doubleValue, forKey: "fontSize")
-            UserDefaults.standard.set(defaultWrap.state == .on, forKey: "wrapLines")
-            UserDefaults.standard.set(symbols.state == .on, forKey: "showSymbols")
-            mainWindow?.editor.refresh()
+        while !closing {
+            content.setFrameSize(NSSize(width: 420, height: max(320, content.fittingSize.height)))
+            guard alert.runModal() == .alertFirstButtonReturn else {
+                return
+            }
+            alert.window.makeFirstResponder(nil)
+            // 表单只持有打开时的偏好来源，外部更改或其它明确应用后必须重新打开草稿。
+            guard !closing, runtime.generation == generation,
+                (runtime.defaults ?? .standard) === domain,
+                source.isEqual(displayPreferenceSource(domain))
+            else {
+                runtime.loaded = false
+                mainWindow?.status.stringValue = "设置来源已改变，旧表单未保存，请重新打开。"
+                return
+            }
+            do {
+                let selected = try form.settings()
+                try saveDisplaySettings(selected)
+                autosaveEnabled = automatic.state == .on
+                domain.set(autosaveEnabled, forKey: "autosaveEnabled")
+                refreshUI()
+                mainWindow?.status.stringValue = runtime.warning ?? "显示与自动保存设置已应用。"
+                return
+            }
+            catch {
+                status.stringValue = error.localizedDescription
+            }
         }
     }
 }
