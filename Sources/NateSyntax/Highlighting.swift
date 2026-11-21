@@ -79,7 +79,7 @@ public struct SyntaxScanner: Sendable {
         self.snapshot =
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
-                "srec", "tehex",
+                "srec", "tehex", "tex",
             ].contains(
                 language.id
             )
@@ -119,7 +119,7 @@ public struct SyntaxScanner: Sendable {
                 state: &state
             )
         }
-        if ["ini", "props", "diff", "makefile", "ihex", "srec", "tehex"].contains(language.id) {
+        if ["ini", "props", "diff", "makefile", "ihex", "srec", "tehex", "tex"].contains(language.id) {
             let mode: LineLexicalMode =
                 language.id == "makefile"
                 ? .makefile : (LineLexicalMode(rawValue: language.id) ?? .properties)

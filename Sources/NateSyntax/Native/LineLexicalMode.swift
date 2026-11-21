@@ -7,6 +7,7 @@ enum LineLexicalMode: String, Sendable {
     case ihex
     case srec
     case tehex
+    case tex
 
     /// 业务作用：每个逐行模式只在完整的自身样式资源存在时参与呈现。
     /// 参数说明: 无。
@@ -25,6 +26,7 @@ enum LineLexicalMode: String, Sendable {
                 $0 != 11
             }
         case .tehex: return [0, 1, 2, 3, 4, 5, 7, 9, 10, 12, 13, 16, 17, 18]
+        case .tex: return Array(0...5)
         }
     }
 
@@ -41,6 +43,8 @@ enum LineLexicalMode: String, Sendable {
             ]
         case .makefile:
             return [.text, .comment, .keyword, .keyword, .punctuation, .heading, .text, .text, .text, .text]
+        case .tex:
+            return [.comment, .punctuation, .punctuation, .punctuation, .keyword, .text]
         case .ihex, .srec, .tehex:
             return [
                 .text, .punctuation, .keyword, .keyword, .number, .number, .number, .number,

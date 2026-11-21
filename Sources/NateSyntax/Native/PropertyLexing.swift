@@ -118,6 +118,9 @@ struct PropertyLexing {
                 else if [.ihex, .srec, .tehex].contains(mode) {
                     try scanner.hexLine(start, end)
                 }
+                else if mode == .tex {
+                    try scanner.texLine(start, end)
+                }
                 else {
                     try scanner.line(start, end)
                 }

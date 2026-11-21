@@ -57059,7 +57059,39 @@
     "lineComment": "%",
     "blockStart": "",
     "blockEnd": "",
-    "keywords": []
+    "keywords": [],
+    "lexicalStyles": {
+      "0": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      },
+      "1": {
+        "fontStyle": 1,
+        "foreground": "#FF8000",
+        "background": "#FFFFFF"
+      },
+      "2": {
+        "fontStyle": 1,
+        "foreground": "#8000FF",
+        "background": "#FFFFFF"
+      },
+      "3": {
+        "fontStyle": 0,
+        "foreground": "#800000",
+        "background": "#FFFFFF"
+      },
+      "4": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#FFFFFF"
+      },
+      "5": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      }
+    }
   },
   {
     "id": "toml",
