@@ -41,13 +41,19 @@ public struct PreparedNewlineInsertion: Sendable {
     ) throws {
         let budget = SelectionPreparationBudget(permit: permit)
         try budget.check()
+        // 验证、归并与正文构建沿同一截止继续，进入下一阶段不能重新取得完整准备时间。
+        let sharedPermit: @Sendable () -> Bool = {
+            permit() && ContinuousClock.now < budget.deadline
+        }
+        // 没有源选择和控制代次就无法复验提交目标或撤销来源，不能按旧几何继续准备。
         guard let original = snapshot.selectionState, snapshot.selectionGeneration != nil else {
             throw NateError.message("换行需要原文档的完整选择身份。")
         }
-        _ = try original.validated(in: snapshot.text, permit: permit)
+        _ = try original.validated(in: snapshot.text, permit: sharedPermit)
         let resolved: [NewlineInsertionTarget]
         let primary: UUID
         if let targets {
+            // 明确目标必须覆盖同一原矩形的全部身份，正文改变后旧像素不能重新授予修改资格。
             guard case .rectangle(let shape) = original.shape, !shape.needsRevalidation,
                 targets.count == original.entries.count,
                 Set(targets.map(\.id)) == Set(original.entries.map(\.id))
@@ -58,10 +64,11 @@ public struct PreparedNewlineInsertion: Sendable {
             primary = original.primaryID
         }
         else {
+            // 核心没有原生字形证据，不能把矩形边缘静默当成普通连续选择。
             guard case .stream = original.shape else {
                 throw NateError.message("矩形换行必须先由实际视图证明 Tab 和虚拟边缘。")
             }
-            let normalized = try original.normalized(in: snapshot.text, permit: permit)
+            let normalized = try original.normalized(in: snapshot.text, permit: sharedPermit)
             resolved = normalized.entries.map {
                 NewlineInsertionTarget(
                     id: $0.id,
@@ -76,6 +83,7 @@ public struct PreparedNewlineInsertion: Sendable {
         }
         let ending = snapshot.format.lineEnding.text
         var minimumOutput = 0, removed = 0
+        // 所有原边界与空白容量先完整确认，再读取缩进或分配目标文字，后项失败不能留下前项输入。
         for target in resolved {
             try budget.check()
             guard target.range.lower >= 0, target.range.upper >= target.range.lower,
@@ -129,9 +137,7 @@ public struct PreparedNewlineInsertion: Sendable {
             targets: converted,
             primaryID: primary,
             name: "换行",
-            permit: {
-                permit() && ContinuousClock.now < budget.deadline
-            }
+            permit: sharedPermit
         ).transaction
     }
 
@@ -155,6 +161,7 @@ public struct PreparedNewlineInsertion: Sendable {
         }
         let start = text.lineStart(text.lineNumber(at: offset))
         var end = start
+        // 每个目标共同消耗原额度，超限须拒绝完整缩进，不能以截断前缀改变其它行的输入位置。
         while end < offset {
             if end & 255 == 0 {
                 try budget.check()
