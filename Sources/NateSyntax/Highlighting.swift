@@ -76,7 +76,7 @@ public struct SyntaxScanner: Sendable {
     public init(language: LanguageDefinition, snapshot: DocumentSnapshot? = nil) {
         self.language = language
         self.snapshot =
-            ["python", "escseq", "errorlist", "ini", "props"].contains(language.id) ? snapshot : nil
+            ["python", "escseq", "errorlist", "ini", "props", "diff"].contains(language.id) ? snapshot : nil
         deadline = ContinuousClock.now.advanced(by: .seconds(5))
         keywords = Set(
             ["python", "c", "cpp"].contains(language.id)
@@ -95,12 +95,13 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
-        if ["ini", "props"].contains(language.id) {
+        if ["ini", "props", "diff"].contains(language.id) {
             return PropertyLexing.highlight(
                 text,
                 base: base,
                 snapshot: snapshot,
                 styles: language.lexicalStyles,
+                diff: language.id == "diff",
                 deadline: deadline,
                 state: &state
             )

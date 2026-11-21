@@ -5,15 +5,17 @@ struct PropertyLexing {
     let bytes: [UInt8]
     let base: Int
     let styles: [String: LanguageTokenStyle]
+    let diff: Bool
     var budget: ANSILexingBudget
     var tokens: [SyntaxToken] = []
 
-    /// 业务作用：INI 与 Properties 按固定物理行识别键、节与注释，值保持原字节而不执行配置解释。
+    /// 业务作用：配置与差异模式按固定物理行分类，保留原字节而不解释配置或执行补丁。
     /// 参数说明:
     /// - text: 当前完整行或有固定快照证据的连续分段。
     /// - base: 当前片段在正文中的原始 UTF-8 起点。
     /// - snapshot: 用于确认来源及同一物理行边界的固定快照。
-    /// - styles: 随当前语言定义固定的六种词法样式。
+    /// - styles: 随当前语言定义固定的词法样式。
+    /// - diff: 是否采用 diff 文件的独立行类别。
     /// - deadline: 本次完整语法任务的共同截止。
     /// - state: 当前任务状态，失败只设置诊断。
     /// 返回：完整确认后裁回当前片段的有限词元；来源、容量、取消或截止不满足时整体拒绝。
@@ -22,6 +24,7 @@ struct PropertyLexing {
         base: Int,
         snapshot: DocumentSnapshot?,
         styles: [String: LanguageTokenStyle]?,
+        diff: Bool = false,
         deadline: ContinuousClock.Instant,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
@@ -33,25 +36,25 @@ struct PropertyLexing {
             try budget.check()
             guard text.utf8.count <= 1_048_576, base >= 0, base <= Int.max - text.utf8.count,
                 let styles, styles.count <= 256,
-                (0...5).allSatisfy({
+                (0...(diff ? 6 : 5)).allSatisfy({
                     styles[String($0)] != nil
                 })
             else {
-                throw NateError.message("配置语言高亮缺少完整样式或超出行范围。")
+                throw NateError.message("当前语言高亮缺少完整样式或超出行范围。")
             }
             let requested = ByteRange(base, base + text.utf8.count)
             let bytes: [UInt8]
             let origin: Int
             if let snapshot {
                 let tree = snapshot.text
-                // 分段必须与同一来源的完整标量及 CRLF 一致，不能从邻近值猜测键或节标题。
+                // 分段必须与同一来源的完整标量及 CRLF 一致，不能从邻近文本猜测键、节标题或补丁标记。
                 guard requested.upper <= tree.byteCount,
                     tree.isBoundary(requested.lower), tree.isBoundary(requested.upper),
                     !(tree.byte(at: requested.lower - 1) == 13 && tree.byte(at: requested.lower) == 10),
                     !(tree.byte(at: requested.upper - 1) == 13 && tree.byte(at: requested.upper) == 10),
                     tree.bytes(in: requested).elementsEqual(text.utf8)
                 else {
-                    throw NateError.message("配置语言高亮来源与固定快照不一致。")
+                    throw NateError.message("当前语言高亮来源与固定快照不一致。")
                 }
                 let range = try ANSILexing.physicalRange(requested, tree: tree, budget: &budget)
                 bytes = tree.bytes(in: range)
@@ -65,6 +68,7 @@ struct PropertyLexing {
                 bytes: bytes,
                 base: origin,
                 styles: styles,
+                diff: diff,
                 budget: budget
             )
             var start = 0
@@ -84,7 +88,12 @@ struct PropertyLexing {
                         break
                     }
                 }
-                try scanner.line(start, end)
+                if diff {
+                    try scanner.diffLine(start, end)
+                }
+                else {
+                    try scanner.line(start, end)
+                }
                 start = end
             }
             var result: [SyntaxToken] = []
@@ -105,7 +114,7 @@ struct PropertyLexing {
                     )
                 }
             }
-            // 全部范围与末次取消复验先于返回，不发布只有半个键、节或注释的呈现。
+            // 全部范围与末次取消复验先于返回，不发布半个配置词元或差异行的呈现。
             try scanner.budget.check()
             return result
         }
@@ -166,16 +175,20 @@ struct PropertyLexing {
     /// 参数说明:
     /// - start: 当前上下文内的起点。
     /// - end: 当前上下文内的末边界。
-    /// - style: 配置词法的固定样式编号。
+    /// - style: 当前语言的固定样式编号。
     /// 返回：完整非空范围加入结果；超出容量时整体失败。
     mutating func emit(_ start: Int, _ end: Int, style: Int) throws {
         guard end > start else {
             return
         }
-        guard tokens.count < 65_536, let attributes = styles[String(style)] else {
-            throw NateError.message("配置语言高亮超过词元容量或缺少样式定义。")
+        guard tokens.count < 65_536, let attributes = styles[String(style)] ?? (diff ? styles["0"] : nil)
+        else {
+            throw NateError.message("当前语言高亮超过词元容量或缺少样式定义。")
         }
-        let kinds: [SyntaxKind] = [.text, .comment, .heading, .punctuation, .keyword, .keyword]
+        let kinds: [SyntaxKind] =
+            diff
+            ? [.text, .comment, .keyword, .heading, .number, .text, .text, .text, .text, .text, .text, .text]
+            : [.text, .comment, .heading, .punctuation, .keyword, .keyword]
         tokens.append(
             SyntaxToken(
                 range: ByteRange(base + start, base + end),
@@ -183,7 +196,7 @@ struct PropertyLexing {
                 foreground: attributes.foreground,
                 background: attributes.background,
                 fontStyle: attributes.fontStyle,
-                lexicalStyle: "props:" + String(style)
+                lexicalStyle: (diff ? "diff:" : "props:") + String(style)
             )
         )
     }
