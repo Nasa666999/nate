@@ -64,8 +64,16 @@ extension LineLayout {
                         return false
                     }
                     budget -= 1
-                    if rectangle.intersects(clip) {
-                        context.fill(rectangle.offsetBy(dx: origin.x, dy: origin.y))
+                    if rectangle.intersects(clip)
+                        || background.fillsLineEnd && rectangle.maxY > clip.minY && rectangle.minY < clip.maxY
+                    {
+                        var painted = rectangle
+                        if background.fillsLineEnd {
+                            // 整行节底色不依赖文字方向或当前水平滚动，正文区两端都保持同一背景。
+                            painted.origin.x = max(0, clip.minX)
+                            painted.size.width = max(0, clip.maxX - painted.minX)
+                        }
+                        context.fill(painted.offsetBy(dx: origin.x, dy: origin.y))
                     }
                     return true
                 }

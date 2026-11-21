@@ -4,7 +4,7 @@ import NateCore
 struct ANSILexing {
     var bytes: [UInt8]
     var base: Int
-    let styles: [String: TerminalStyle]
+    let styles: [String: LanguageTokenStyle]
     let errorList: Bool
     var budget: ANSILexingBudget
     var tokens: [SyntaxToken] = []
@@ -23,7 +23,7 @@ struct ANSILexing {
         _ text: String,
         base: Int,
         snapshot: DocumentSnapshot?,
-        styles: [String: TerminalStyle]?,
+        styles: [String: LanguageTokenStyle]?,
         errorList: Bool = false,
         deadline: ContinuousClock.Instant,
         state: inout SyntaxState
@@ -108,7 +108,7 @@ struct ANSILexing {
     /// - tree: 当前不可变正文树。
     /// - budget: 与后续解析共用的取消、时间及扫描预算。
     /// 返回：至多 1 MiB 的完整物理行上下文；过长时在复制正文前拒绝。
-    private static func physicalRange(
+    static func physicalRange(
         _ requested: ByteRange,
         tree: PieceTree,
         budget: inout ANSILexingBudget
@@ -118,20 +118,20 @@ struct ANSILexing {
         while lower > 0, let byte = tree.byte(at: lower - 1), byte != 10 && byte != 13 {
             try budget.consume()
             guard upper - lower < 1_048_576 else {
-                throw NateError.message("终端日志高亮物理行超过 1 MiB，正文保留。")
+                throw NateError.message("词法高亮物理行超过 1 MiB，正文保留。")
             }
             lower -= 1
         }
         while upper < tree.byteCount, tree.byte(at: upper - 1) != 10 && tree.byte(at: upper - 1) != 13 {
             try budget.consume()
             guard upper - lower < 1_048_576 else {
-                throw NateError.message("终端日志高亮物理行超过 1 MiB，正文保留。")
+                throw NateError.message("词法高亮物理行超过 1 MiB，正文保留。")
             }
             let byte = tree.byte(at: upper)
             upper += 1
             if byte == 13, tree.byte(at: upper) == 10 {
                 guard upper - lower < 1_048_576 else {
-                    throw NateError.message("终端日志高亮物理行超过 1 MiB，正文保留。")
+                    throw NateError.message("词法高亮物理行超过 1 MiB，正文保留。")
                 }
                 upper += 1
             }
@@ -329,7 +329,7 @@ struct ANSILexingBudget {
     /// 返回：剩余额度有效时继续，否则整体拒绝。
     mutating func consume() throws {
         guard remaining > 0 else {
-            throw NateError.message("终端日志高亮超过共同扫描预算。")
+            throw NateError.message("词法高亮超过共同扫描预算。")
         }
         remaining -= 1
         if remaining & 255 == 0 {
@@ -343,7 +343,7 @@ struct ANSILexingBudget {
     func check() throws {
         try Task.checkCancellation()
         guard ContinuousClock.now < deadline else {
-            throw NateError.message("终端日志高亮超过共同截止。")
+            throw NateError.message("词法高亮超过共同截止。")
         }
     }
 }

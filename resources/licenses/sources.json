@@ -55,6 +55,14 @@
     "copyright": "Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>",
     "implementation": "诊断日志类别与终端序列样式的 Swift 适配"
   },
+  "propertyLexing": {
+    "project": "Lexilla",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexProps.cxx",
+    "license": "License for Lexilla, Scintilla, and SciTE",
+    "licenseFile": "Lexilla-LICENSE.txt",
+    "copyright": "Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>",
+    "implementation": "INI 与 Properties 词法及节折叠的 Swift 适配"
+  },
   "jsonIdentifiers": {
     "project": "Unicode Character Database",
     "source": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",

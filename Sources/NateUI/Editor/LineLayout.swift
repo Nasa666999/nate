@@ -17,7 +17,7 @@ final class LineLayout {
     private var nativeLines: [NativeLineGeometry] = []
     private var orderedPositions = true
     private var orderedHeights = true
-    var syntaxBackgrounds: [(range: ByteRange, color: NSColor)] = []
+    var syntaxBackgrounds: [(range: ByteRange, color: NSColor, fillsLineEnd: Bool)] = []
 
     var renderedRange: ByteRange {
         ascii?.renderedRange ?? content.projection
@@ -134,7 +134,13 @@ final class LineLayout {
                     appearance: appearance
                 )
                 if let color = attributes.removeValue(forKey: .backgroundColor) as? NSColor {
-                    syntaxBackgrounds.append((range: clipped, color: color))
+                    syntaxBackgrounds.append(
+                        (
+                            range: clipped,
+                            color: color,
+                            fillsLineEnd: token.lexicalStyle == "props:2"
+                        )
+                    )
                 }
                 // 背景使用同一原生字形矩形先行绘制，不能让段落背景覆盖相邻行或稍后绘制的选择。
                 value.addAttributes(

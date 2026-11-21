@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "8f50b8b8d24190d00a86ed902689000c3f93361657dd30343ec30f477e74bc7f"
+      "sha256" : "21d608e418c958cadb8794bb424f192d94c2b2f90993f872f9ab8bedb9344325"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
@@ -558,7 +558,7 @@
     },
     {
       "path" : "licenses\/sources.json",
-      "sha256" : "9acd6abb06375ebfd0b710b6919fcfa32b37936820ed59298a3866b6b6edd9bf"
+      "sha256" : "36ff4b69089d6ee8ec4460e055d944c805a021cdaa6db8c76af351f2b1f4525a"
     },
     {
       "path" : "themes\/dark.json",
