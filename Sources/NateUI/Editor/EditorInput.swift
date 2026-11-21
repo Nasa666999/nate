@@ -52,17 +52,6 @@ extension EditorView {
         }
         switch command {
         case "complete:": onCommand?("complete")
-        case "insertNewline:":
-            var indent = ""
-            if let head = primarySelection?.head {
-                let row = document.text.lineNumber(at: head)
-                indent = String(
-                    document.text.text(in: document.text.lineRange(row, includeEnding: false)).prefix {
-                        $0 == " " || $0 == "\t"
-                    }
-                )
-            }
-            insertText(newline + indent, replacementRange: NSRange(location: NSNotFound, length: 0))
         case "cancelOperation:":
             if composition != nil {
                 composition = nil

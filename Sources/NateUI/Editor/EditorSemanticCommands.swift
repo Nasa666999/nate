@@ -4,7 +4,7 @@ import NateCore
 extension EditorView {
     /// 业务作用：原生键盘和宏使用相同编辑意图，只有完整成功后才记录，失败不能继续后续动作。
     /// 参数说明:
-    /// - command: 已明确识别的方向、选择、逐字删除或配置化 Tab 输入意图。
+    /// - command: 已明确识别的方向、选择、逐字删除、换行或配置化 Tab 输入意图。
     /// 返回：正文或选择成功完成时为真，合法边界上的无变化也为真；保护、候选或准备失败为假。
     @discardableResult
     public func performEditorCommand(_ command: EditorCommand) -> Bool {
@@ -21,6 +21,7 @@ extension EditorView {
         case .deleteBackward: succeeded = delete(forward: false)
         case .deleteForward: succeeded = delete(forward: true)
         case .insertTab: succeeded = insertConfiguredTab()
+        case .insertNewline: succeeded = insertConfiguredNewline()
         case .moveLeft: succeeded = move(horizontal: -1)
         case .moveRight: succeeded = move(horizontal: 1)
         case .moveUp: succeeded = move(vertical: -1)
@@ -58,7 +59,7 @@ extension EditorView {
         guard succeeded else {
             return false
         }
-        if command != .deleteBackward && command != .deleteForward && command != .insertTab {
+        if ![EditorCommand.deleteBackward, .deleteForward, .insertTab, .insertNewline].contains(command) {
             clearRectangularSelection()
             needsDisplay = true
             revealSelection()
@@ -71,12 +72,13 @@ extension EditorView {
     /// 业务作用：系统文字选择器只映射明确支持的语义，不将未知选择器存入可执行宏。
     /// 参数说明:
     /// - name: AppKit 输入上下文解析出的选择器名称。
-    /// 返回：对应的方向、删除、选择或 Tab 输入意图，非本组命令为空。
+    /// 返回：对应的方向、删除、选择、换行或 Tab 输入意图，非本组命令为空。
     static func semanticCommand(_ name: String) -> EditorCommand? {
         switch name {
         case "deleteBackward:": return .deleteBackward
         case "deleteForward:": return .deleteForward
         case "insertTab:": return .insertTab
+        case "insertNewline:": return .insertNewline
         case "moveLeft:", "moveBackward:": return .moveLeft
         case "moveRight:", "moveForward:": return .moveRight
         case "moveUp:": return .moveUp

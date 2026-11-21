@@ -38,15 +38,7 @@ extension EditorView {
                     overwrite: overwrite
                 ).transaction
             }
-            let changed = try document.commit(transaction)
-            refresh(reveal: true)
-            if changed {
-                onChange?()
-            }
-            else {
-                onSelection?()
-            }
-            onCommand?("typingAssistance")
+            try commitPreparedEditorInput(transaction)
             return true
         }
         catch {
