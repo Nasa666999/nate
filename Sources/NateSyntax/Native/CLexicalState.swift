@@ -13,6 +13,7 @@ struct CLexicalState: Sendable, Equatable {
     var escapeRadix: UInt8?
     var rawEnding: [UInt8] = []
     var rawMatched = 0
+    var verbatim = false
     var header = false
     var preprocessor = false
     var directiveWord = false

@@ -78,6 +78,10 @@ struct CLexing {
     mutating func scan() throws {
         while cursor < bytes.count {
             try budget.consume()
+            if state.verbatim {
+                try verbatimByte()
+                continue
+            }
             if !state.rawEnding.isEmpty {
                 try rawByte()
                 continue
@@ -161,14 +165,20 @@ struct CLexing {
                 state.expectsHeader = false
                 try number()
             }
-            else if Self.wordStart(byte) {
+            else if Self.wordStart(byte) || byte == 64 {
                 state.logicalStart = false
                 try word()
             }
             else {
                 state.logicalStart = false
                 state.expectsHeader = false
-                try emitCode(cursor, cursor + 1, kind: .punctuation, style: "punctuation")
+                let isOperator = "%^&*()-+=|{}[]:;<>,/?!.~".utf8.contains(byte)
+                try emitCode(
+                    cursor,
+                    cursor + 1,
+                    kind: isOperator ? .punctuation : .text,
+                    style: isOperator ? "punctuation" : "text"
+                )
                 cursor += 1
             }
         }

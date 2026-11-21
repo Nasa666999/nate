@@ -2,12 +2,15 @@ import Foundation
 import NateCore
 
 extension CLexing {
-    /// 业务作用：主要与次要关键字共享稳定词元边界，预处理指令名称只在明确的井号后解释。
+    /// 业务作用：主要与次要关键字共享稳定词元边界，前缀 @ 名称保持独立身份，预处理名称只在井号后解释。
     /// 参数说明: 无。
     /// 返回：推进一个完整原始标识符，并保留其代码或预处理身份。
     mutating func word() throws {
         let wasContinued = state.continuedWord
         let start = cursor
+        if bytes[cursor] == 64 {
+            cursor += 1
+        }
         while cursor < bytes.count, Self.wordPart(bytes[cursor]) {
             try budget.consume()
             cursor += 1

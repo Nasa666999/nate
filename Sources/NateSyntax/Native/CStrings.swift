@@ -9,10 +9,17 @@ extension CLexing {
         Array($0.utf8)
     }
 
-    /// 业务作用：原始字面和编码前缀只在完整词元起点识别，普通名称中的 R 不授予字符串身份。
+    /// 业务作用：原始字面、逐字字面和编码前缀只在完整词元起点识别，普通名称中的 R 不授予字符串身份。
     /// 参数说明: 无。
     /// 返回：合法字面起始完整消费时为真，否则原位置保留给普通词元处理。
     mutating func beginLiteral() throws -> Bool {
+        if !state.preprocessor, bytes[cursor] == 64, cursor + 1 < bytes.count, bytes[cursor + 1] == 34 {
+            state.verbatim = true
+            state.expectsHeader = false
+            try emit(cursor, cursor + 2, kind: .string, style: "verbatim")
+            cursor += 2
+            return true
+        }
         guard [34, 39, 117, 85, 76, 82].contains(bytes[cursor]) else {
             return false
         }
@@ -62,6 +69,26 @@ extension CLexing {
             return true
         }
         return false
+    }
+
+    /// 业务作用：逐字字符串按成对双引号保留字面引号，反斜杠和物理换行均不结束正文身份。
+    /// 参数说明: 无。
+    /// 返回：推进当前原字节或完整双引号对；仅独立双引号解除跨行字符串状态。
+    mutating func verbatimByte() throws {
+        let byte = bytes[cursor]
+        let paired = byte == 34 && cursor + 1 < bytes.count && bytes[cursor + 1] == 34
+        let width = paired ? 2 : max(1, newlineWidth(at: cursor))
+        try emit(cursor, cursor + width, kind: .string, style: "verbatim")
+        cursor += width
+        if byte == 34 && !paired {
+            state.verbatim = false
+        }
+        if byte == 10 || byte == 13 {
+            endLogicalLine()
+        }
+        else {
+            state.logicalStart = false
+        }
     }
 
     /// 业务作用：原始字面只按精确结束定界符关闭，反斜线和源码换行均保留字面含义。
