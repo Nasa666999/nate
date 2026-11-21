@@ -477,9 +477,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let viewport = enclosingScrollView?.contentSize ?? bounds.size
         let height = max(viewport.height, projection.y(of: tree.lineCount) + 60)
         let contentWidth = layouts.values.reduce(viewport.width) {
-            max($0, $1.width + gutterWidth + 20)
+            max($0, $1.width + gutterWidth + (wrapLines ? 16 : 20))
         }
-        let width = wrapLines ? viewport.width : contentWidth
+        // 换行容器不会拆开所有尾随空格，画布仍需容纳原生证据给出的容器外插入点。
+        let width = contentWidth
         if abs(frame.height - height) > 0.5 || abs(frame.width - width) > 0.5 {
             setFrameSize(NSSize(width: width, height: height))
             needsDisplay = true

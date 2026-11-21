@@ -122,6 +122,21 @@ final class ASCIILineWindow {
         }
     }
 
+    /// 业务作用：空白标记只访问实际视口附近的已验证 ASCII，避免在整个窗口逐字符绘制不可见标记。
+    /// 参数说明:
+    /// - viewport: 相对完整逻辑行的可见矩形。
+    /// 返回：当前窗口内覆盖视口的完整原字节范围，行外与非法矩形为空。
+    func visibleByteRanges(in viewport: NSRect) -> [ByteRange] {
+        guard viewport.minX.isFinite, viewport.maxX.isFinite,
+            viewport.maxY > 0, viewport.minY < height
+        else {
+            return []
+        }
+        let lower = max(renderedRange.lower, range.lower + max(0, column(at: viewport.minX) - 1))
+        let upper = min(renderedRange.upper, range.lower + min(range.count, column(at: viewport.maxX) + 2))
+        return lower < upper ? [ByteRange(lower, upper)] : []
+    }
+
     /// 业务作用：由 TextKit 2 完成原生字形绘制，只平移已有等宽证据的完整 ASCII 前缀距离。
     /// 参数说明:
     /// - origin: 完整逻辑行在编辑视图中的起点。

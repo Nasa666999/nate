@@ -8,35 +8,38 @@ extension EditorView {
     /// - y: 当前真实行的视图纵坐标。
     /// 返回：可见空格、Tab 与真实行尾标记；窗口边界不伪造成逻辑行终止。
     func drawSymbols(layout: LineLayout, y: CGFloat) {
-        let displayed = layout.renderedRange
-        let text = displayTree.text(in: displayed)
-        var offset =
-            (displayTree.utf16Offset(byte: displayed.lower) ?? layout.originUTF16) - layout.originUTF16
-        for ch in text {
-            if ch == " " || ch == "\t" {
-                let position = layout.caret(at: offset)
-                let marker = NSRect(
-                    x: gutterWidth + position.minX,
-                    y: y + position.minY,
-                    width: max(1, font.maximumAdvancement.width),
-                    height: max(lineHeight, position.height)
-                )
-                if visibleRect.intersects(marker) {
-                    NSAttributedString(
-                        string: ch == " " ? "·" : "→",
-                        attributes: [
-                            .font: font,
-                            .foregroundColor: NSColor.tertiaryLabelColor,
-                        ]
-                    ).draw(at: marker.origin)
+        let viewport = visibleRect.offsetBy(dx: -gutterWidth, dy: -y)
+            .insetBy(dx: -max(1, font.maximumAdvancement.width), dy: 0)
+        for displayed in layout.visibleByteRanges(in: viewport) {
+            let text = displayTree.text(in: displayed)
+            var offset =
+                (displayTree.utf16Offset(byte: displayed.lower) ?? layout.originUTF16) - layout.originUTF16
+            for ch in text {
+                if ch == " " || ch == "\t" {
+                    let position = layout.caret(at: offset, downstream: true)
+                    let marker = NSRect(
+                        x: gutterWidth + position.minX,
+                        y: y + position.minY,
+                        width: max(1, font.maximumAdvancement.width),
+                        height: max(lineHeight, position.height)
+                    )
+                    if visibleRect.intersects(marker) {
+                        NSAttributedString(
+                            string: ch == " " ? "·" : "→",
+                            attributes: [
+                                .font: font,
+                                .foregroundColor: NSColor.tertiaryLabelColor,
+                            ]
+                        ).draw(at: marker.origin)
+                    }
                 }
+                offset += ch.utf16.count
             }
-            offset += ch.utf16.count
         }
-        guard displayed.upper == layout.range.upper else {
+        guard layout.renderedRange.upper == layout.range.upper else {
             return
         }
-        let end = layout.caret(at: offset)
+        let end = layout.caret(at: layout.characterCount)
         NSAttributedString(
             string: "¬",
             attributes: [

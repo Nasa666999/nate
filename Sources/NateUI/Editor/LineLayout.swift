@@ -12,7 +12,11 @@ final class LineLayout {
     var height: CGFloat = 20
     var width: CGFloat = 0
     private let ascii: ASCIILineWindow?
+    private let horizontallyOrderedASCII: Bool
     private(set) var unavailableReason: String?
+    private var nativeLines: [NativeLineGeometry] = []
+    private var orderedPositions = true
+    private var orderedHeights = true
 
     var renderedRange: ByteRange {
         ascii?.renderedRange ?? content.projection
@@ -45,6 +49,7 @@ final class LineLayout {
         nativeASCII: Bool = false
     ) {
         self.range = range
+        horizontallyOrderedASCII = !rtl && snapshot.text.isPrintableASCII(in: range)
         originUTF16 = snapshot.text.utf16Offset(byte: range.lower) ?? 0
         if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {
             ascii = ASCIILineWindow(
@@ -122,6 +127,7 @@ final class LineLayout {
             ) {
                 fragment in
                 self.fragments.append(fragment)
+                self.indexLines(in: fragment)
                 self.height = max(self.height, fragment.layoutFragmentFrame.maxY)
                 self.width = max(self.width, fragment.layoutFragmentFrame.maxX)
                 return false
@@ -139,56 +145,127 @@ final class LineLayout {
             synchronizeASCIIProjection()
             return result
         }
-        for fragment in fragments {
-            for line in fragment.textLineFragments {
-                let box = line.typographicBounds.offsetBy(
-                    dx: fragment.layoutFragmentFrame.minX,
-                    dy: fragment.layoutFragmentFrame.minY
-                )
-                if point.y < box.maxY {
-                    let local = NSPoint(x: point.x - box.minX, y: point.y - box.minY)
-                    let index = line.characterIndex(for: local)
-                    if index != NSNotFound, index >= 0, index <= content.rendered.length {
-                        return index
-                    }
-                    // 行外命中可返回 NSNotFound，先选择原生字形端点，避免哨兵加上段落起点造成溢出。
-                    let start = min(content.rendered.length, max(0, line.characterRange.location))
-                    let count = min(content.rendered.length - start, max(0, line.characterRange.length))
-                    let end = start + count
-                    let first = line.locationForCharacter(at: start)
-                    let last = line.locationForCharacter(at: end)
-                    return abs(local.x - first.x) <= abs(local.x - last.x) ? start : end
-                }
-            }
-        }
-        return content.rendered.length
+        return visualLine(at: point.y)?.character(at: point) ?? content.rendered.length
     }
 
     /// 业务作用：通过 TextKit 选区片段查询光标与候选框位置。
     /// 参数说明:
     /// - local: 段落内 UTF-16 位置。
+    /// - downstream: 字符标记取软换行后的实际所属行，光标默认保留上游亲和性。
     /// 返回：段落内光标矩形。
-    func caret(at local: Int) -> NSRect {
+    func caret(at local: Int, downstream: Bool = false) -> NSRect {
         if let ascii {
             let result = ascii.caret(at: local)
             synchronizeASCIIProjection()
             return result
         }
-        for fragment in fragments {
-            for line in fragment.textLineFragments {
-                let range = line.characterRange
-                if local >= range.location && local <= range.location + range.length {
-                    let p = line.locationForCharacter(at: local)
-                    return NSRect(
-                        x: p.x + line.typographicBounds.minX + fragment.layoutFragmentFrame.minX,
-                        y: line.typographicBounds.minY + fragment.layoutFragmentFrame.minY,
-                        width: 1.5,
-                        height: line.typographicBounds.height
-                    )
-                }
+        let result =
+            visualLine(containing: local, downstream: downstream)?.caret(at: local)
+            ?? NSRect(x: 0, y: 0, width: 1.5, height: height)
+        // 尾随空格的真实插入点可能超过原生容器，保留已证明的边缘以免重绘收回可见光标。
+        width = max(width, result.maxX)
+        return result
+    }
+
+    /// 业务作用：原生视觉行一次建立索引，只有实际范围与高度均有序时才允许二分查询。
+    /// 参数说明:
+    /// - fragment: 已完成排版的当前逻辑段落片段。
+    /// 返回：保留原生顺序及坐标；异常范围整体暂停呈现，不发布部分索引。
+    private func indexLines(in fragment: NSTextLayoutFragment) {
+        for line in fragment.textLineFragments {
+            guard
+                let item = NativeLineGeometry(
+                    line: line,
+                    origin: fragment.layoutFragmentFrame.origin,
+                    sourceLength: content.rendered.length
+                )
+            else {
+                unavailableReason = "原生视觉行缺少完整范围或像素证据，当前呈现已暂停；原正文保持不变。"
+                nativeLines.removeAll()
+                return
+            }
+            if let prior = nativeLines.last {
+                orderedPositions = orderedPositions && prior.lower <= item.lower && prior.upper <= item.upper
+                orderedHeights = orderedHeights && prior.bounds.maxY <= item.bounds.maxY
+            }
+            nativeLines.append(item)
+        }
+    }
+
+    /// 业务作用：按真实 UTF-16 位置取得首个包含端点的视觉行，软换行边界保持原有上游位置。
+    /// 参数说明:
+    /// - local: 当前段落内的真实 UTF-16 位置。
+    /// - downstream: 是否选择字符实际所属的后续视觉行。
+    /// 返回：原生行证据或空；原生顺序不具备二分条件时按既有顺序查询。
+    private func visualLine(containing local: Int, downstream: Bool) -> NativeLineGeometry? {
+        guard orderedPositions else {
+            return nativeLines.first {
+                local >= $0.lower && (downstream ? local < $0.upper : local <= $0.upper)
             }
         }
-        return NSRect(x: 0, y: 0, width: 1.5, height: height)
+        var lower = 0, upper = nativeLines.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if downstream ? nativeLines[middle].upper <= local : nativeLines[middle].upper < local {
+                lower = middle + 1
+            }
+            else {
+                upper = middle
+            }
+        }
+        guard nativeLines.indices.contains(lower), local >= nativeLines[lower].lower else {
+            return nil
+        }
+        return nativeLines[lower]
+    }
+
+    /// 业务作用：按原生视觉行的真实下边缘定位命中行，不逐次扫描长段落的全部软换行。
+    /// 参数说明:
+    /// - y: 相对当前逻辑段落的纵坐标。
+    /// 返回：首个实际覆盖该高度的原生行，段落尾部之外为空。
+    private func visualLine(at y: CGFloat) -> NativeLineGeometry? {
+        guard orderedHeights else {
+            return nativeLines.first {
+                y < $0.bounds.maxY
+            }
+        }
+        var lower = 0, upper = nativeLines.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if y < nativeLines[middle].bounds.maxY {
+                upper = middle
+            }
+            else {
+                lower = middle + 1
+            }
+        }
+        return nativeLines.indices.contains(lower) ? nativeLines[lower] : nil
+    }
+
+    /// 业务作用：空白标记只读取当前视口覆盖的真实视觉行，不因一个逻辑行很长就展开全部正文。
+    /// 参数说明:
+    /// - viewport: 相对逻辑段落起点的实际视口。
+    /// 返回：完整 UTF-8 可见范围列表，不改变逻辑行或原选择。
+    func visibleByteRanges(in viewport: NSRect) -> [ByteRange] {
+        guard unavailableReason == nil else {
+            return []
+        }
+        if let ascii {
+            return ascii.visibleByteRanges(in: viewport)
+        }
+        var ranges: [ByteRange] = []
+        for row in nativeLines where row.bounds.maxY > viewport.minY && row.bounds.minY < viewport.maxY {
+            let visible =
+                horizontallyOrderedASCII
+                ? row.visibleASCIICharacters(in: viewport)
+                : NSRange(location: row.lower, length: row.upper - row.lower)
+            if let range = content.snapshot.text.byteRange(
+                NSRange(location: originUTF16 + visible.location, length: visible.length)
+            ), !range.isEmpty {
+                ranges.append(range)
+            }
+        }
+        return ranges
     }
 
     /// 业务作用：让软换行与双向文字选区按原生字形片段绘制。
