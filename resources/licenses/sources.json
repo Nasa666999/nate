@@ -30,6 +30,22 @@
     "copyright": "Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>",
     "implementation": "Python 折叠级别的 Swift 适配"
   },
+  "cLexing": {
+    "project": "Lexilla",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexCPP.cxx",
+    "license": "License for Lexilla, Scintilla, and SciTE",
+    "licenseFile": "Lexilla-LICENSE.txt",
+    "copyright": "Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>",
+    "implementation": "C/C++ 词法类别与字面边界的 Swift 适配"
+  },
+  "ansiLexing": {
+    "project": "Lexilla",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexEscSeq.cxx",
+    "license": "License for Lexilla, Scintilla, and SciTE",
+    "licenseFile": "Lexilla-LICENSE.txt",
+    "copyright": "Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>",
+    "implementation": "ANSI 序列词法样式的 Swift 适配"
+  },
   "jsonIdentifiers": {
     "project": "Unicode Character Database",
     "source": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",

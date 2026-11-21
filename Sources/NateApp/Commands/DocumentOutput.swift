@@ -56,10 +56,11 @@ extension ApplicationController {
     /// 业务作用：为打印和富文本导出独立建立固定样式，不保存为原文件。
     /// 参数说明:
     /// - document: 要读取的文档。
-    /// 返回：完整样式成功时提供只读快照；词法预算失效时拒绝生成部分样式输出。
+    /// 返回：按来源外观固定语法前景、背景和字体的只读快照；词法预算失效时拒绝部分输出。
     func styledSnapshot(_ document: WorkspaceDocument) throws -> NSAttributedString {
         let tree = document.buffer.text
         let font = mainWindow?.editor.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let appearance = mainWindow?.editor.effectiveAppearance ?? NSApp.effectiveAppearance
         let paragraph = NSMutableParagraphStyle()
         paragraph.tabStops = []
         paragraph.defaultTabInterval =
@@ -86,18 +87,10 @@ extension ApplicationController {
                     guard let ns = tree.nsRange(token.range) else {
                         continue
                     }
-                    let color: NSColor
-                    switch token.kind {
-                    case .keyword: color = .systemPurple
-                    case .comment: color = .secondaryLabelColor
-                    case .string: color = .systemGreen
-                    case .number: color = .systemBlue
-                    case .text: color = .textColor
-                    case .punctuation: color = .secondaryLabelColor
-                    case .heading: color = .systemBlue
-                    case .tag: color = .systemTeal
-                    }
-                    value.addAttribute(.foregroundColor, value: color, range: ns)
+                    value.addAttributes(
+                        SyntaxPresentation.attributes(token: token, font: font, appearance: appearance),
+                        range: ns
+                    )
                 }
                 if let diagnostic = state.diagnostic {
                     // 不完整词法状态不能冒充可交付样式，打印和导出在任何外部写入前停止。

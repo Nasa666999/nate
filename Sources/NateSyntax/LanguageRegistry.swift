@@ -11,6 +11,13 @@ public struct LanguageDefinition: Codable, Sendable, Identifiable {
     public var keywords: [String]
     public var keywordGroups: [String: [String]]?
     var identifierRules: UnicodeIdentifierRules?
+    var terminalStyles: [String: TerminalStyle]?
+}
+
+struct TerminalStyle: Codable, Sendable {
+    var foreground: String?
+    var background: String?
+    var fontStyle: Int
 }
 
 public struct LanguageRegistry: Sendable {

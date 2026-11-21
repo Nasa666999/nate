@@ -37,6 +37,7 @@ final class LineLayout {
     /// - viewport: 不换行时的真实可见正文矩形，省略时保留完整原生段落流程。
     /// - nativeASCII: 已证明独立 ASCII 的有界内部段落，关闭上下文连字与字距调整。
     /// - tabWidth: 当前语言的合法 Tab 停靠间距。
+    /// - showSequences: 是否显示 ANSI 控制范围的原始占位与参数文字。
     /// 返回：只读 TextKit 2 布局缓存，控制字符只在呈现副本中使用等长占位，原文与坐标保持一致。
     init(
         snapshot: DocumentSnapshot,
@@ -48,11 +49,13 @@ final class LineLayout {
         appearance: NSAppearance,
         viewport: NSRect? = nil,
         nativeASCII: Bool = false,
-        tabWidth: Int = 4
+        tabWidth: Int = 4,
+        showSequences: Bool = false
     ) {
         self.range = range
         horizontallyOrderedASCII = !rtl && snapshot.text.isPrintableASCII(in: range)
-        originUTF16 = snapshot.text.utf16Offset(byte: range.lower) ?? 0
+        let origin = snapshot.text.utf16Offset(byte: range.lower) ?? 0
+        originUTF16 = origin
         if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {
             ascii = ASCIILineWindow(
                 snapshot: snapshot,
@@ -99,8 +102,26 @@ final class LineLayout {
             attributes[.ligature] = 0
             attributes[.kern] = 0
         }
+        let hidden: [NSRange] =
+            showSequences
+            ? []
+            : tokens.compactMap {
+                token in
+                guard ["ansi:171", "ansi:172"].contains(token.lexicalStyle),
+                    token.range.lower < range.upper, token.range.upper > range.lower,
+                    let native = snapshot.text.nsRange(
+                        ByteRange(max(range.lower, token.range.lower), min(range.upper, token.range.upper))
+                    )
+                else {
+                    return nil
+                }
+                return NSRange(location: native.location - origin, length: native.length)
+            }
         let value = NSMutableAttributedString(
-            string: LineControlPresentation.render(snapshot.text.text(in: range)),
+            string: LineControlPresentation.hidingSequences(
+                LineControlPresentation.render(snapshot.text.text(in: range)),
+                ranges: hidden
+            ),
             attributes: attributes
         )
         for token in tokens where token.range.lower < range.upper && token.range.upper > range.lower {

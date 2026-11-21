@@ -1,6 +1,36 @@
 import Foundation
 
 enum LineControlPresentation {
+    /// 业务作用：隐藏 ANSI 控制范围时保留全部原始 UTF-16 坐标，使命中、选区与候选仍对应正文。
+    /// 参数说明:
+    /// - text: 已完成控制字符占位的显示副本。
+    /// - ranges: 当前显示副本中需要隐藏的完整原始控制范围。
+    /// 返回：每个被隐藏单元改用零宽占位；无效范围保留完整原显示，不修改正文。
+    static func hidingSequences(_ text: String, ranges: [NSRange]) -> String {
+        guard !ranges.isEmpty else {
+            return text
+        }
+        var units = Array(text.utf16)
+        // 不接受截断或溢出的坐标，避免隐藏错误的邻近正文或产生半个代理项。
+        guard
+            ranges.allSatisfy({
+                $0.location >= 0 && $0.length >= 0 && $0.location <= units.count
+                    && $0.length <= units.count - $0.location
+                    && ($0.location == units.count || !(0xDC00...0xDFFF).contains(units[$0.location]))
+                    && ($0.location + $0.length == units.count
+                        || !(0xDC00...0xDFFF).contains(units[$0.location + $0.length]))
+            })
+        else {
+            return text
+        }
+        for range in ranges {
+            for index in range.location..<(range.location + range.length) {
+                units[index] = 0x200B
+            }
+        }
+        return String(decoding: units, as: UTF16.self)
+    }
+
     /// 业务作用：逻辑行中的控制字符以可见占位呈现，避免 TextKit 把它们当作终止符而隐藏后续正文。
     /// 参数说明:
     /// - text: 当前逻辑行的原始正文，不含行结束符。

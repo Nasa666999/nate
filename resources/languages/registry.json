@@ -8580,10 +8580,796 @@
     "extensions": [
       "ans"
     ],
-    "lineComment": "#",
+    "lineComment": "",
     "blockStart": "",
     "blockEnd": "",
-    "keywords": []
+    "keywords": [],
+    "terminalStyles": {
+      "0": {
+        "fontStyle": 0
+      },
+      "1": {
+        "fontStyle": 0,
+        "foreground": "#000000"
+      },
+      "2": {
+        "fontStyle": 0,
+        "foreground": "#CD0000"
+      },
+      "3": {
+        "fontStyle": 0,
+        "foreground": "#00CD00"
+      },
+      "4": {
+        "fontStyle": 0,
+        "foreground": "#AA5500"
+      },
+      "5": {
+        "fontStyle": 0,
+        "foreground": "#0000FF"
+      },
+      "6": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD"
+      },
+      "7": {
+        "fontStyle": 0,
+        "foreground": "#008888"
+      },
+      "8": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5"
+      },
+      "9": {
+        "fontStyle": 0,
+        "background": "#000000"
+      },
+      "10": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#000000"
+      },
+      "11": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#000000"
+      },
+      "12": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#000000"
+      },
+      "13": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#000000"
+      },
+      "14": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#000000"
+      },
+      "15": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#000000"
+      },
+      "16": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#000000"
+      },
+      "17": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#000000"
+      },
+      "18": {
+        "fontStyle": 0,
+        "background": "#CD0000"
+      },
+      "19": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#CD0000"
+      },
+      "20": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#CD0000"
+      },
+      "21": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#CD0000"
+      },
+      "22": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#CD0000"
+      },
+      "23": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#CD0000"
+      },
+      "24": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#CD0000"
+      },
+      "25": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#CD0000"
+      },
+      "26": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#CD0000"
+      },
+      "27": {
+        "fontStyle": 0,
+        "background": "#00CD00"
+      },
+      "28": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#00CD00"
+      },
+      "29": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#00CD00"
+      },
+      "30": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#00CD00"
+      },
+      "40": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#00CD00"
+      },
+      "41": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#00CD00"
+      },
+      "42": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#00CD00"
+      },
+      "43": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#00CD00"
+      },
+      "44": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#00CD00"
+      },
+      "45": {
+        "fontStyle": 0,
+        "background": "#AA5500"
+      },
+      "46": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#AA5500"
+      },
+      "47": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#AA5500"
+      },
+      "48": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#AA5500"
+      },
+      "49": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#AA5500"
+      },
+      "50": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#AA5500"
+      },
+      "51": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#AA5500"
+      },
+      "52": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#AA5500"
+      },
+      "53": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#AA5500"
+      },
+      "54": {
+        "fontStyle": 0,
+        "background": "#0000FF"
+      },
+      "55": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#0000FF"
+      },
+      "56": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#0000FF"
+      },
+      "57": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#0000FF"
+      },
+      "58": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#0000FF"
+      },
+      "59": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#0000FF"
+      },
+      "60": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#0000FF"
+      },
+      "61": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#0000FF"
+      },
+      "62": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#0000FF"
+      },
+      "63": {
+        "fontStyle": 0,
+        "background": "#CD00CD"
+      },
+      "64": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#CD00CD"
+      },
+      "65": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#CD00CD"
+      },
+      "66": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#CD00CD"
+      },
+      "67": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#CD00CD"
+      },
+      "68": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#CD00CD"
+      },
+      "69": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#CD00CD"
+      },
+      "70": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#CD00CD"
+      },
+      "71": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#CD00CD"
+      },
+      "72": {
+        "fontStyle": 0,
+        "background": "#008888"
+      },
+      "73": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#008888"
+      },
+      "74": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#008888"
+      },
+      "75": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#008888"
+      },
+      "76": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#008888"
+      },
+      "77": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#008888"
+      },
+      "78": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#008888"
+      },
+      "79": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#008888"
+      },
+      "80": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#008888"
+      },
+      "81": {
+        "fontStyle": 0,
+        "background": "#FFFFFF"
+      },
+      "82": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      },
+      "83": {
+        "fontStyle": 0,
+        "foreground": "#CD0000",
+        "background": "#FFFFFF"
+      },
+      "84": {
+        "fontStyle": 0,
+        "foreground": "#00CD00",
+        "background": "#FFFFFF"
+      },
+      "85": {
+        "fontStyle": 0,
+        "foreground": "#AA5500",
+        "background": "#FFFFFF"
+      },
+      "86": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#FFFFFF"
+      },
+      "87": {
+        "fontStyle": 0,
+        "foreground": "#CD00CD",
+        "background": "#FFFFFF"
+      },
+      "88": {
+        "fontStyle": 0,
+        "foreground": "#008888",
+        "background": "#FFFFFF"
+      },
+      "89": {
+        "fontStyle": 0,
+        "foreground": "#E5E5E5",
+        "background": "#FFFFFF"
+      },
+      "90": {
+        "fontStyle": 1
+      },
+      "91": {
+        "fontStyle": 1,
+        "foreground": "#000000"
+      },
+      "92": {
+        "fontStyle": 1,
+        "foreground": "#CD0000"
+      },
+      "93": {
+        "fontStyle": 1,
+        "foreground": "#00CD00"
+      },
+      "94": {
+        "fontStyle": 1,
+        "foreground": "#AA5500"
+      },
+      "95": {
+        "fontStyle": 1,
+        "foreground": "#0000FF"
+      },
+      "96": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD"
+      },
+      "97": {
+        "fontStyle": 1,
+        "foreground": "#008888"
+      },
+      "98": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5"
+      },
+      "99": {
+        "fontStyle": 1,
+        "background": "#000000"
+      },
+      "100": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#000000"
+      },
+      "101": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#000000"
+      },
+      "102": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#000000"
+      },
+      "103": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#000000"
+      },
+      "104": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#000000"
+      },
+      "105": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#000000"
+      },
+      "106": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#000000"
+      },
+      "107": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#000000"
+      },
+      "108": {
+        "fontStyle": 1,
+        "background": "#CD0000"
+      },
+      "109": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#CD0000"
+      },
+      "110": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#CD0000"
+      },
+      "111": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#CD0000"
+      },
+      "112": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#CD0000"
+      },
+      "113": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#CD0000"
+      },
+      "114": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#CD0000"
+      },
+      "115": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#CD0000"
+      },
+      "116": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#CD0000"
+      },
+      "117": {
+        "fontStyle": 1,
+        "background": "#00CD00"
+      },
+      "118": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#00CD00"
+      },
+      "119": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#00CD00"
+      },
+      "120": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#00CD00"
+      },
+      "121": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#00CD00"
+      },
+      "122": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#00CD00"
+      },
+      "123": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#00CD00"
+      },
+      "124": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#00CD00"
+      },
+      "125": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#00CD00"
+      },
+      "126": {
+        "fontStyle": 1,
+        "background": "#AA5500"
+      },
+      "127": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#AA5500"
+      },
+      "128": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#AA5500"
+      },
+      "129": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#AA5500"
+      },
+      "130": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#AA5500"
+      },
+      "131": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#AA5500"
+      },
+      "132": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#AA5500"
+      },
+      "133": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#AA5500"
+      },
+      "134": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#AA5500"
+      },
+      "135": {
+        "fontStyle": 1,
+        "background": "#0000FF"
+      },
+      "136": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#0000FF"
+      },
+      "137": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#0000FF"
+      },
+      "138": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#0000FF"
+      },
+      "139": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#0000FF"
+      },
+      "140": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#0000FF"
+      },
+      "141": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#0000FF"
+      },
+      "142": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#0000FF"
+      },
+      "143": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#0000FF"
+      },
+      "144": {
+        "fontStyle": 1,
+        "background": "#CD00CD"
+      },
+      "145": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#CD00CD"
+      },
+      "146": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#CD00CD"
+      },
+      "147": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#CD00CD"
+      },
+      "148": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#CD00CD"
+      },
+      "149": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#CD00CD"
+      },
+      "150": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#CD00CD"
+      },
+      "151": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#CD00CD"
+      },
+      "152": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#CD00CD"
+      },
+      "153": {
+        "fontStyle": 1,
+        "background": "#008888"
+      },
+      "154": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#008888"
+      },
+      "155": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#008888"
+      },
+      "156": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#008888"
+      },
+      "157": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#008888"
+      },
+      "158": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#008888"
+      },
+      "159": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#008888"
+      },
+      "160": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#008888"
+      },
+      "161": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#008888"
+      },
+      "162": {
+        "fontStyle": 1,
+        "background": "#FFFFFF"
+      },
+      "163": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      },
+      "164": {
+        "fontStyle": 1,
+        "foreground": "#CD0000",
+        "background": "#FFFFFF"
+      },
+      "165": {
+        "fontStyle": 1,
+        "foreground": "#00CD00",
+        "background": "#FFFFFF"
+      },
+      "166": {
+        "fontStyle": 1,
+        "foreground": "#AA5500",
+        "background": "#FFFFFF"
+      },
+      "167": {
+        "fontStyle": 1,
+        "foreground": "#0000FF",
+        "background": "#FFFFFF"
+      },
+      "168": {
+        "fontStyle": 1,
+        "foreground": "#CD00CD",
+        "background": "#FFFFFF"
+      },
+      "169": {
+        "fontStyle": 1,
+        "foreground": "#008888",
+        "background": "#FFFFFF"
+      },
+      "170": {
+        "fontStyle": 1,
+        "foreground": "#E5E5E5",
+        "background": "#FFFFFF"
+      },
+      "171": {
+        "fontStyle": 0,
+        "foreground": "#C0C0C0",
+        "background": "#FFFFFF"
+      },
+      "172": {
+        "fontStyle": 0,
+        "foreground": "#FFFF78",
+        "background": "#FFFFFF"
+      }
+    }
   },
   {
     "id": "escript",

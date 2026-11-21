@@ -9,6 +9,7 @@ public struct SyntaxToken: Sendable {
     public let range: ByteRange
     public let kind: SyntaxKind
     public let foreground: String?
+    public let background: String?
     public let fontStyle: Int
     public let lexicalStyle: String
 
@@ -17,6 +18,7 @@ public struct SyntaxToken: Sendable {
     /// - range: 所属快照字节范围。
     /// - kind: 默认主题分类。
     /// - foreground: 资源显式指定的前景色，为空时继承主题。
+    /// - background: 资源显式指定的背景色，为空时继承视图底色。
     /// - fontStyle: UDL 粗体、斜体和下划线位集合。
     /// - lexicalStyle: 原词法样式身份，为空时采用基础类别；颜色相同不代表词法作用域相同。
     /// 返回：独立呈现属性。
@@ -24,12 +26,14 @@ public struct SyntaxToken: Sendable {
         range: ByteRange,
         kind: SyntaxKind,
         foreground: String? = nil,
+        background: String? = nil,
         fontStyle: Int = 0,
         lexicalStyle: String? = nil
     ) {
         self.range = range
         self.kind = kind
         self.foreground = foreground
+        self.background = background
         self.fontStyle = fontStyle
         self.lexicalStyle = lexicalStyle ?? kind.rawValue
     }
@@ -71,7 +75,7 @@ public struct SyntaxScanner: Sendable {
     /// 返回：可跨后台任务传递的扫描上下文，词法状态由每个调用流程分别持有。
     public init(language: LanguageDefinition, snapshot: DocumentSnapshot? = nil) {
         self.language = language
-        self.snapshot = language.id == "python" ? snapshot : nil
+        self.snapshot = ["python", "escseq"].contains(language.id) ? snapshot : nil
         deadline = ContinuousClock.now.advanced(by: .seconds(5))
         keywords = Set(
             ["python", "c", "cpp"].contains(language.id)
@@ -90,6 +94,16 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "escseq" {
+            return ANSILexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                styles: language.terminalStyles,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if language.id == "c" || language.id == "cpp" {
             return CLexing.highlight(
                 text,

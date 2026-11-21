@@ -15,6 +15,7 @@ struct EditorLayoutMetrics: Equatable {
     let wrapping: Bool
     let rightToLeft: Bool
     let tabWidth: Int
+    let showSequences: Bool
 }
 
 extension EditorView {

@@ -142,7 +142,14 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             }
         }
     }
-    public var showSymbols = false
+    public var showSymbols = false {
+        didSet {
+            if oldValue != showSymbols {
+                // 控制序列显隐会改变实际字形宽度和软换行，统一撤销旧排版及依赖几何的操作资格。
+                refresh(reveal: false)
+            }
+        }
+    }
     public var indentationSettings = IndentationSettings()
     public var pairInsertionSettings = PairInsertionSettings()
     public var tabSettings = TabSettings() {
@@ -283,7 +290,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             gutter: gutterWidth,
             wrapping: wrapLines,
             rightToLeft: rtl,
-            tabWidth: tabSettings.width
+            tabWidth: tabSettings.width,
+            showSequences: showSymbols
         )
         if !wrapLines || metrics != layoutMetrics {
             projection.measured.removeAll()
@@ -332,7 +340,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             rtl: rtl,
             appearance: effectiveAppearance,
             viewport: wrapLines ? nil : viewport,
-            tabWidth: tabSettings.width
+            tabWidth: tabSettings.width,
+            showSequences: showSymbols
         )
         // 原生段落的字符与字形都占用缓存，不能仅按行数允许大量长段落同时保留。
         if layouts.count >= EditorNativeLayoutPolicy.maximumCachedLines
