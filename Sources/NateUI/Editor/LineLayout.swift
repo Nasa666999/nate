@@ -17,6 +17,7 @@ final class LineLayout {
     private var nativeLines: [NativeLineGeometry] = []
     private var orderedPositions = true
     private var orderedHeights = true
+    var syntaxBackgrounds: [(range: ByteRange, color: NSColor)] = []
 
     var renderedRange: ByteRange {
         ascii?.renderedRange ?? content.projection
@@ -107,7 +108,7 @@ final class LineLayout {
             ? []
             : tokens.compactMap {
                 token in
-                guard ["ansi:171", "ansi:172"].contains(token.lexicalStyle),
+                guard ["ansi:171", "ansi:172", "error:23", "error:24"].contains(token.lexicalStyle),
                     token.range.lower < range.upper, token.range.upper > range.lower,
                     let native = snapshot.text.nsRange(
                         ByteRange(max(range.lower, token.range.lower), min(range.upper, token.range.upper))
@@ -127,8 +128,17 @@ final class LineLayout {
         for token in tokens where token.range.lower < range.upper && token.range.upper > range.lower {
             let clipped = ByteRange(max(range.lower, token.range.lower), min(range.upper, token.range.upper))
             if let ns = snapshot.text.nsRange(clipped) {
+                var attributes = SyntaxPresentation.attributes(
+                    token: token,
+                    font: font,
+                    appearance: appearance
+                )
+                if let color = attributes.removeValue(forKey: .backgroundColor) as? NSColor {
+                    syntaxBackgrounds.append((range: clipped, color: color))
+                }
+                // 背景使用同一原生字形矩形先行绘制，不能让段落背景覆盖相邻行或稍后绘制的选择。
                 value.addAttributes(
-                    SyntaxPresentation.attributes(token: token, font: font, appearance: appearance),
+                    attributes,
                     range: NSRange(
                         location: ns.location - originUTF16,
                         length: ns.length

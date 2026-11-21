@@ -394,6 +394,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 layout.draw(at: NSPoint(x: visibleRect.minX + gutterWidth, y: y), in: context)
                 continue
             }
+            drawSyntaxBackgrounds(in: layout, y: y, context: context, budget: &markBudget)
             if line == active {
                 NSColor.controlAccentColor.withAlphaComponent(0.05).setFill()
                 NSRect(x: gutterWidth, y: y, width: bounds.width - gutterWidth, height: lineHeight).fill()

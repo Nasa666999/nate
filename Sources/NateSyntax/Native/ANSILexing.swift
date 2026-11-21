@@ -5,15 +5,17 @@ struct ANSILexing {
     var bytes: [UInt8]
     var base: Int
     let styles: [String: TerminalStyle]
+    let errorList: Bool
     var budget: ANSILexingBudget
     var tokens: [SyntaxToken] = []
 
-    /// 业务作用：ANSI 模式只解释固定源字节的样式，不执行终端命令或改变正文。
+    /// 业务作用：终端与诊断模式只解释固定源字节的样式，不执行终端命令或改变正文。
     /// 参数说明:
     /// - text: 当前原始行片段，包含真实结束符。
     /// - base: 片段在固定快照中的原始字节起点。
     /// - snapshot: 完整来源证据，用于跨 Unicode 显示断行确认同一物理行。
-    /// - styles: 随语言资源固定的原始 ANSI 样式集合。
+    /// - styles: 随语言资源固定的终端日志样式集合。
+    /// - errorList: 是否采用诊断分类及 ErrorList 的独立序列规则。
     /// - deadline: 本次完整语法任务的共同截止。
     /// - state: 当前任务状态，失败只发布明确诊断。
     /// 返回：完整物理行确认后裁回当前片段；取消、容量或来源失配时整体拒绝。
@@ -22,6 +24,7 @@ struct ANSILexing {
         base: Int,
         snapshot: DocumentSnapshot?,
         styles: [String: TerminalStyle]?,
+        errorList: Bool = false,
         deadline: ContinuousClock.Instant,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
@@ -29,13 +32,17 @@ struct ANSILexing {
             return []
         }
         do {
-            var budget = ANSILexingBudget(deadline: deadline)
+            var budget = ANSILexingBudget(
+                deadline: deadline,
+                maximumSteps: errorList ? 67_108_864 : 4_194_304
+            )
             try budget.check()
             guard text.utf8.count <= 1_048_576, base >= 0, base <= Int.max - text.utf8.count,
                 let styles, styles.count <= 256,
-                styles["0"] != nil, styles["171"] != nil, styles["172"] != nil
+                styles["0"] != nil, styles[errorList ? "23" : "171"] != nil,
+                styles[errorList ? "24" : "172"] != nil
             else {
-                throw NateError.message("ANSI 高亮缺少完整样式资源或超出行范围，当前范围保持原文。")
+                throw NateError.message("终端日志高亮缺少完整样式资源或超出行范围，当前范围保持原文。")
             }
             let requested = ByteRange(base, base + text.utf8.count)
             let source: [UInt8]
@@ -49,7 +56,7 @@ struct ANSILexing {
                     !(tree.byte(at: requested.upper - 1) == 13 && tree.byte(at: requested.upper) == 10),
                     tree.bytes(in: requested).elementsEqual(text.utf8)
                 else {
-                    throw NateError.message("ANSI 高亮来源与固定快照不一致。")
+                    throw NateError.message("终端日志高亮来源与固定快照不一致。")
                 }
                 let range = try physicalRange(requested, tree: tree, budget: &budget)
                 source = tree.bytes(in: range)
@@ -63,6 +70,7 @@ struct ANSILexing {
                 bytes: source,
                 base: origin,
                 styles: styles,
+                errorList: errorList,
                 budget: budget
             )
             try scanner.scan()
@@ -110,20 +118,20 @@ struct ANSILexing {
         while lower > 0, let byte = tree.byte(at: lower - 1), byte != 10 && byte != 13 {
             try budget.consume()
             guard upper - lower < 1_048_576 else {
-                throw NateError.message("ANSI 高亮物理行超过 1 MiB，正文保留。")
+                throw NateError.message("终端日志高亮物理行超过 1 MiB，正文保留。")
             }
             lower -= 1
         }
         while upper < tree.byteCount, tree.byte(at: upper - 1) != 10 && tree.byte(at: upper - 1) != 13 {
             try budget.consume()
             guard upper - lower < 1_048_576 else {
-                throw NateError.message("ANSI 高亮物理行超过 1 MiB，正文保留。")
+                throw NateError.message("终端日志高亮物理行超过 1 MiB，正文保留。")
             }
             let byte = tree.byte(at: upper)
             upper += 1
             if byte == 13, tree.byte(at: upper) == 10 {
                 guard upper - lower < 1_048_576 else {
-                    throw NateError.message("ANSI 高亮物理行超过 1 MiB，正文保留。")
+                    throw NateError.message("终端日志高亮物理行超过 1 MiB，正文保留。")
                 }
                 upper += 1
             }
@@ -131,9 +139,9 @@ struct ANSILexing {
         return ByteRange(lower, upper)
     }
 
-    /// 业务作用：每个 CR/LF 物理行从默认样式开始，序列只改变同一行后续文字的呈现。
+    /// 业务作用：每个 CR/LF 物理行重新确定基础类别，序列只改变同一行后续文字的呈现。
     /// 参数说明: 无。
-    /// 返回：逐行生成完整样式；空行与没有序列的普通行仍明确使用默认样式。
+    /// 返回：逐行生成完整样式；没有序列的诊断行仍保留自己的完整类别。
     mutating func scan() throws {
         var start = 0
         while start < bytes.count {
@@ -164,7 +172,18 @@ struct ANSILexing {
     /// 返回：生成当前行所有范围；清行命令仅着色，绝不删除或重排文字。
     mutating func line(_ start: Int, _ end: Int) throws {
         var cursor = start
-        var style = 0
+        var defaultStyle = 0
+        if errorList {
+            var recognition = ErrorListRecognition(
+                bytes: Array(bytes[start..<end]),
+                budget: budget
+            )
+            defaultStyle = try recognition.style()
+            budget = recognition.budget
+        }
+        var style = defaultStyle
+        let known = errorList ? 23 : 171
+        let unknown = errorList ? 24 : 172
         while cursor < end {
             var sequence = cursor
             while sequence < end {
@@ -188,16 +207,18 @@ struct ANSILexing {
                 finish += 1
             }
             guard finish < end, bytes[finish] != 0 else {
-                try emit(sequence, end, style: 172)
+                try emit(sequence, end, style: unknown)
                 break
             }
             let command = bytes[finish]
-            try emit(sequence, finish + 1, style: command == 109 || command == 75 ? 171 : 172)
+            try emit(sequence, finish + 1, style: command == 109 || command == 75 ? known : unknown)
             if command == 109 {
-                style = try sequenceStyle(sequence + 2, finish)
+                style =
+                    try errorList
+                    ? diagnosticSequenceStyle(sequence + 2, finish) : sequenceStyle(sequence + 2, finish)
             }
             else if command != 75 {
-                style = 0
+                style = defaultStyle
             }
             cursor = finish + 1
         }
@@ -265,16 +286,16 @@ struct ANSILexing {
             return
         }
         guard let attributes = styles[String(style)] else {
-            throw NateError.message("ANSI 高亮缺少当前样式定义。")
+            throw NateError.message("终端日志高亮缺少当前样式定义。")
         }
-        let identity = "ansi:" + String(style)
+        let identity = (errorList ? "error:" : "ansi:") + String(style)
         var lower = base + start
         if let previous = tokens.last, previous.lexicalStyle == identity, previous.range.upper == lower {
             lower = previous.range.lower
             tokens.removeLast()
         }
         guard tokens.count < 65_536 else {
-            throw NateError.message("ANSI 高亮超过 65536 个词法片段。")
+            throw NateError.message("终端日志高亮超过 65536 个词法片段。")
         }
         tokens.append(
             SyntaxToken(
@@ -291,14 +312,16 @@ struct ANSILexing {
 
 struct ANSILexingBudget {
     let deadline: ContinuousClock.Instant
-    private var remaining = 4_194_304
+    private var remaining: Int
 
     /// 业务作用：物理行回看、序列匹配与样式生成共享一个有限工作量。
     /// 参数说明:
     /// - deadline: 本次固定快照任务的共同截止。
+    /// - maximumSteps: 当前模式全部标记匹配和序列处理共用的扫描额度。
     /// 返回：独立的有限解析预算。
-    init(deadline: ContinuousClock.Instant) {
+    init(deadline: ContinuousClock.Instant, maximumSteps: Int = 4_194_304) {
         self.deadline = deadline
+        remaining = maximumSteps
     }
 
     /// 业务作用：有界读取与参数解释都计入同一预算，长序列不能绕过取消检查。
@@ -306,7 +329,7 @@ struct ANSILexingBudget {
     /// 返回：剩余额度有效时继续，否则整体拒绝。
     mutating func consume() throws {
         guard remaining > 0 else {
-            throw NateError.message("ANSI 高亮超过共同扫描预算。")
+            throw NateError.message("终端日志高亮超过共同扫描预算。")
         }
         remaining -= 1
         if remaining & 255 == 0 {
@@ -320,7 +343,7 @@ struct ANSILexingBudget {
     func check() throws {
         try Task.checkCancellation()
         guard ContinuousClock.now < deadline else {
-            throw NateError.message("ANSI 高亮超过共同截止。")
+            throw NateError.message("终端日志高亮超过共同截止。")
         }
     }
 }
