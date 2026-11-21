@@ -77,7 +77,10 @@ public struct SyntaxScanner: Sendable {
     public init(language: LanguageDefinition, snapshot: DocumentSnapshot? = nil) {
         self.language = language
         self.snapshot =
-            ["python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry"].contains(
+            [
+                "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
+                "srec", "tehex",
+            ].contains(
                 language.id
             )
             ? snapshot : nil
@@ -116,13 +119,16 @@ public struct SyntaxScanner: Sendable {
                 state: &state
             )
         }
-        if ["ini", "props", "diff", "makefile"].contains(language.id) {
+        if ["ini", "props", "diff", "makefile", "ihex", "srec", "tehex"].contains(language.id) {
+            let mode: LineLexicalMode =
+                language.id == "makefile"
+                ? .makefile : (LineLexicalMode(rawValue: language.id) ?? .properties)
             return PropertyLexing.highlight(
                 text,
                 base: base,
                 snapshot: snapshot,
                 styles: language.lexicalStyles,
-                mode: language.id == "diff" ? .diff : (language.id == "makefile" ? .makefile : .properties),
+                mode: mode,
                 directives: language.id == "makefile" ? language.keywords : [],
                 deadline: deadline,
                 state: &state

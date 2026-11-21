@@ -37,7 +37,7 @@ struct PropertyLexing {
         do {
             var budget = ANSILexingBudget(
                 deadline: deadline,
-                maximumSteps: mode == .makefile ? 8_388_608 : 4_194_304
+                maximumSteps: [.makefile, .ihex, .srec, .tehex].contains(mode) ? 8_388_608 : 4_194_304
             )
             try budget.check()
             if mode == .makefile {
@@ -114,6 +114,9 @@ struct PropertyLexing {
                 }
                 else if mode == .makefile {
                     try scanner.makeLine(start, end)
+                }
+                else if [.ihex, .srec, .tehex].contains(mode) {
+                    try scanner.hexLine(start, end)
                 }
                 else {
                     try scanner.line(start, end)
