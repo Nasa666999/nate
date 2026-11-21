@@ -7,7 +7,11 @@ final class TabStrip: NSScrollView {
     var onClose: ((UUID) -> Void)?
     var onAction: ((UUID, String) -> Void)?
     var onReorder: ((DocumentOrderMove) -> Bool)?
-    let stack = NSStackView()
+    let stack = TabCanvas()
+    var layoutMode = DocumentTabLayout.horizontal
+    var layoutPlan: DocumentTabLayoutPlan?
+    var layingOutTabs = false
+    var onRequiredHeight: ((CGFloat) -> Void)?
     var current: [TabPresentation] = []
     let dragOwner = UUID()
     var orderIdentity = UUID()
@@ -28,14 +32,6 @@ final class TabStrip: NSScrollView {
         hasVerticalScroller = false
         drawsBackground = true
         backgroundColor = .windowBackgroundColor
-        stack.orientation = .horizontal
-        stack.spacing = 1
-        stack.edgeInsets = NSEdgeInsets(
-            top: 0,
-            left: 4,
-            bottom: 0,
-            right: 4
-        )
         documentView = stack
         dropIndicator.wantsLayer = true
         dropIndicator.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
@@ -71,6 +67,13 @@ final class TabStrip: NSScrollView {
         guard current != tabs else {
             return
         }
+        let selectedChanged =
+            current.first(where: {
+                $0.selected
+            })?.id
+            != tabs.first(where: {
+                $0.selected
+            })?.id
         let groups = stack.arrangedSubviews.compactMap {
             $0 as? NSStackView
         }
@@ -80,10 +83,10 @@ final class TabStrip: NSScrollView {
             for (group, tab) in zip(groups, tabs) {
                 updateGroup(group, tab: tab)
             }
-            stack.frame.size = NSSize(
-                width: stack.fittingSize.width,
-                height: 32
-            )
+            layoutTabs()
+            if selectedChanged {
+                revealSelectedTab()
+            }
             return
         }
         if current.map(\.id) != tabs.map(\.id) {
@@ -129,6 +132,8 @@ final class TabStrip: NSScrollView {
                 [weak self] action in self?.onAction?(tab.id, action)
             }
             button.isBordered = false
+            button.cell?.lineBreakMode = .byTruncatingMiddle
+            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             button.font = NSFont.systemFont(ofSize: 12, weight: tab.selected ? .semibold : .regular)
             button.toolTip = tab.path ?? "未命名临时文档"
             group.addArrangedSubview(button)
@@ -146,12 +151,10 @@ final class TabStrip: NSScrollView {
             group.addArrangedSubview(close)
             stack.addArrangedSubview(group)
         }
-        stack.frame = NSRect(
-            x: 0,
-            y: 0,
-            width: stack.fittingSize.width,
-            height: 32
-        )
+        layoutTabs()
+        if selectedChanged {
+            revealSelectedTab()
+        }
     }
 
     /// 业务作用：正文和保存状态变化沿用原标签控件，真实手势仍按稳定文档身份持有来源。

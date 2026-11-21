@@ -18,6 +18,12 @@ extension ApplicationController {
             return
         }
         noteUnrecordedMacroCommand(id)
+        if id.hasPrefix("tabLayout:"),
+            let mode = DocumentTabLayout(rawValue: String(id.dropFirst("tabLayout:".count)))
+        {
+            chooseDocumentTabLayout(mode)
+            return
+        }
         if id.hasPrefix("digest:") {
             routeDigest(id)
             return

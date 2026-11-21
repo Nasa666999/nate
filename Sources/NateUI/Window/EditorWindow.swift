@@ -79,6 +79,9 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public let searchResults = SearchResultsPanel(frame: .zero)
     let resultHost = NSView()
     let tabs = TabStrip()
+    weak var tabLayoutRoot: NSView?
+    var tabHeight: NSLayoutConstraint?
+    var tabLayoutConstraints: [NSLayoutConstraint] = []
     let scroll = NSScrollView()
     let split = NSSplitView()
     let editorSplit = NSSplitView()
@@ -162,7 +165,6 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         incrementalSearch.onClose = {
             [weak self] in self?.onCommand?("closeIncrementalSearch")
         }
-        tabs.heightAnchor.constraint(equalToConstant: 33).isActive = true
         tabs.onSelect = {
             [weak self] id in self?.onSelect?(id)
         }
@@ -260,19 +262,15 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             toolbarStack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             toolbarStack.heightAnchor.constraint(equalToConstant: 38),
             tabs.topAnchor.constraint(equalTo: toolbarStack.bottomAnchor),
-            tabs.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            tabs.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            incrementalSearch.topAnchor.constraint(equalTo: tabs.bottomAnchor),
-            incrementalSearch.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             incrementalSearch.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             split.topAnchor.constraint(equalTo: incrementalSearch.bottomAnchor),
-            split.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             split.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             split.bottomAnchor.constraint(equalTo: status.topAnchor),
             status.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
             status.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
             status.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
+        configureTabLayout(in: root)
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         split.setContentHuggingPriority(.defaultLow, for: .vertical)
         editor.onChange = {

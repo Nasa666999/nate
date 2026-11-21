@@ -13,6 +13,7 @@ final class TabPreferencesRuntime {
     var loaded = false
     var settings = LanguageTabSettings()
     var warning: String?
+    var layoutWarning: String?
     var generation = UUID()
     var sourceDomain: UserDefaults?
     var sourceObject: NSObject?
@@ -87,10 +88,11 @@ extension ApplicationController {
         applyCurrentTabSettings()
     }
 
-    /// 业务作用：所有实际视图按各自文档语言解析配置，克隆焦点不成为其它文档的列宽来源。
+    /// 业务作用：窗口采用独立标签布局，各实际正文视图按各自文档语言解析 Tab 配置。
     /// 参数说明: 无。
     /// 返回：仅改变新输入及显示规则，既有原文、选择身份、历史与保存点保持原状。
     func applyCurrentTabSettings() {
+        mainWindow?.setDocumentTabLayout(currentDocumentTabLayout())
         let settings = currentTabSettings()
         mainWindow?.setTabSettings(
             Dictionary(

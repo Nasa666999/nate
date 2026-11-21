@@ -91,7 +91,8 @@ extension ApplicationController {
             let temporary: String? = marks ?? editor.textHighlightDisplayStatus
             let selected: String? = temporary ?? editor.selectedTextHighlightStatus
             let preferences: String? =
-                selected ?? selectedTextPreferences.failure ?? tabPreferences.warning
+                selected ?? selectedTextPreferences.failure ?? tabPreferences.warning ?? tabPreferences
+                .layoutWarning
                 ?? indentationPreferences.warning
                 ?? pairPreferences.warning
             let sidebar: String? = preferences ?? sidebarRecovery.failure

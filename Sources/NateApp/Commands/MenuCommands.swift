@@ -196,6 +196,7 @@ extension ApplicationController: NSMenuItemValidation {
         ] {
             add(view, title, id)
         }
+        addTabLayoutMenu(to: view)
         view.addItem(.separator())
         for (title, id, key, shifted) in [
             ("收起当前块", "foldCurrent", "[", false),
@@ -369,6 +370,13 @@ extension ApplicationController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let id = menuItem.representedObject as? String else {
             return true
+        }
+        if id.hasPrefix("tabLayout:") {
+            guard let mode = DocumentTabLayout(rawValue: String(id.dropFirst("tabLayout:".count))) else {
+                return false
+            }
+            menuItem.state = mainWindow?.documentTabLayout == mode ? .on : .off
+            return !closing && mainWindow != nil
         }
         if id.hasPrefix("savedRun:") {
             return !closing && runCommands.ready && runCommands.task == nil

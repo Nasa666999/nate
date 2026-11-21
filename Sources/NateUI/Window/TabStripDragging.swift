@@ -8,8 +8,10 @@ extension TabStrip {
     /// - event: 手势最初的鼠标按下事件。
     /// 返回：来源仍有效时建立栏内手势，否则不取得移动资格。
     func beginTitleDrag(_ source: TabButton, event: NSEvent) -> Bool {
+        layoutTabs()
         // 旧按钮和其它窗口不能借相同名称取得当前栏的顺序发布权。
-        guard activeDrag == nil, source.owner === self, let native = window, native.isVisible,
+        guard activeDrag == nil, layoutPlan?.cells.map(\.documentID) == current.map(\.id),
+            source.owner === self, let native = window, native.isVisible,
             source.window === native, event.windowNumber == native.windowNumber,
             source.orderIdentity == orderIdentity, let id = source.documentID,
             current.contains(where: {
@@ -76,6 +78,7 @@ extension TabStrip {
     /// - event: 实际释放事件。
     /// 返回：合法栏内投放提交计划，外部释放、旧顺序或旧窗口只解除反馈。
     func finishTitleDrag(_ source: TabButton, gesture: UUID?, event: NSEvent) {
+        layoutTabs()
         guard let gesture, let active = activeDrag, active.gesture == gesture else {
             return
         }
@@ -163,7 +166,7 @@ extension TabStrip {
             dropIndicator.isHidden = true
             return
         }
-        scrollForDrag(point)
+        scrollForDrag(dragLocation)
         stack.layoutSubtreeIfNeeded()
         let before = targetBefore(dragLocation)
         let index = before.flatMap {
@@ -172,17 +175,30 @@ extension TabStrip {
                 $0.id == id
             }
         }
-        let x =
-            index.flatMap {
-                stack.arrangedSubviews.indices.contains($0) ? stack.arrangedSubviews[$0].frame.minX : nil
-            }
-            ?? max(4, stack.bounds.maxX - 4)
-        dropIndicator.frame = NSRect(
-            x: x - 1,
-            y: 3,
-            width: 2,
-            height: 26
-        )
+        guard let plan = layoutPlan,
+            let cell = index.flatMap({
+                plan.cells.indices.contains($0) ? plan.cells[$0] : nil
+            }) ?? plan.cells.last
+        else {
+            dropIndicator.isHidden = true
+            return
+        }
+        if layoutMode == .vertical {
+            dropIndicator.frame = NSRect(
+                x: cell.x,
+                y: index == nil ? cell.y + cell.height : cell.y,
+                width: cell.width,
+                height: 2
+            )
+        }
+        else {
+            dropIndicator.frame = NSRect(
+                x: index == nil ? cell.x + cell.width : cell.x - 1,
+                y: cell.y + 3,
+                width: 2,
+                height: 26
+            )
+        }
         dropIndicator.isHidden = false
     }
 
@@ -192,28 +208,34 @@ extension TabStrip {
     /// 返回：目标身份，越过最后标签时为空表示末尾。
     private func targetBefore(_ windowPoint: NSPoint) -> UUID? {
         let point = stack.convert(windowPoint, from: nil)
-        for (index, view) in stack.arrangedSubviews.enumerated() where current.indices.contains(index) {
-            if point.x < view.frame.midX {
-                return current[index].id
-            }
+        guard let plan = layoutPlan, let index = try? plan.insertionIndex(x: point.x, y: point.y),
+            current.indices.contains(index)
+        else {
+            return nil
         }
-        return nil
+        return current[index].id
     }
 
     /// 业务作用：边缘悬停仅滚动标签视口，正文视口与选择保持原状。
     /// 参数说明:
-    /// - point: 标签栏内鼠标位置。
+    /// - windowPoint: 当前窗口中的真实鼠标位置。
     /// 返回：在实际可滚动范围内平滑推进，不直接移动任何标签。
-    private func scrollForDrag(_ point: NSPoint) {
+    private func scrollForDrag(_ windowPoint: NSPoint) {
         let clip = contentView.bounds
-        let maximum = max(0, stack.bounds.width - clip.width)
-        let delta: CGFloat = point.x < 24 ? -12 : (point.x > bounds.maxX - 24 ? 12 : 0)
-        let position = min(maximum, max(0, clip.minX + delta))
-        if position != clip.minX {
+        let point = contentView.convert(windowPoint, from: nil)
+        let horizontal = layoutMode == .horizontal
+        let lower = horizontal ? clip.minX : clip.minY
+        let upper = horizontal ? clip.maxX : clip.maxY
+        let coordinate = horizontal ? point.x : point.y
+        let maximum =
+            horizontal ? max(0, stack.bounds.width - clip.width) : max(0, stack.bounds.height - clip.height)
+        let delta: CGFloat = coordinate < lower + 24 ? -12 : (coordinate > upper - 24 ? 12 : 0)
+        let position = min(maximum, max(0, lower + delta))
+        if position != lower {
             contentView.scroll(
                 to: NSPoint(
-                    x: position,
-                    y: clip.minY
+                    x: horizontal ? position : clip.minX,
+                    y: horizontal ? clip.minY : position
                 )
             )
             reflectScrolledClipView(contentView)
