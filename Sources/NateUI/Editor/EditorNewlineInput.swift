@@ -1,5 +1,6 @@
 import AppKit
 import NateCore
+import NateSyntax
 
 extension EditorView {
     /// 业务作用：真实 Return 按键按每项原选择及明确自动缩进规则准备换行。
@@ -14,6 +15,10 @@ extension EditorView {
             return false
         }
         do {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+            let permit: @Sendable () -> Bool = {
+                ContinuousClock.now < deadline
+            }
             try requireCurrentRectangleLayout()
             let targets: [NewlineInsertionTarget]?
             if let state = viewSelectionState, case .rectangle = state.shape {
@@ -29,12 +34,49 @@ extension EditorView {
             else {
                 targets = nil
             }
+            let snapshot = document.snapshot
+            let structure: StructuralIndentationPlan?
+            if indentationSettings.automatic == .language {
+                let ranges =
+                    try targets?.map(\.range)
+                    ?? snapshot.selectionState?.normalized(in: snapshot.text, permit: permit).entries.map(
+                        \.selection.range
+                    )
+                    ?? []
+                structure = try StructuralIndentationPlan(
+                    snapshot: snapshot,
+                    language: language,
+                    udl: userLanguage,
+                    ranges: ranges,
+                    deadline: deadline,
+                    permit: permit
+                )
+            }
+            else {
+                structure = nil
+            }
+            let resolver: (@Sendable (NewlineInsertionTarget) throws -> NewlineIndentationAction)?
+            if let context = structure {
+                resolver = {
+                    target in
+                    try context.action(for: target, snapshot: snapshot)
+                }
+            }
+            else {
+                resolver = nil
+            }
             let plan = try PreparedNewlineInsertion(
-                snapshot: document.snapshot,
+                snapshot: snapshot,
                 targets: targets,
-                inheritIndentation: indentationSettings.automatic == .inherit
+                inheritIndentation: indentationSettings.automatic != .disabled,
+                tabSettings: tabSettings,
+                structuralIndentation: resolver,
+                permit: permit
             )
             try commitPreparedEditorInput(plan.transaction)
+            if structure?.usesLanguageRules == false {
+                onStatus?("当前语言没有适用的块缩进规则，本次完整继承原行缩进。")
+            }
             return true
         }
         catch {

@@ -29,12 +29,16 @@ public struct PreparedNewlineInsertion: Sendable {
     /// - snapshot: 含完整源选择与文档换行规则的固定正文。
     /// - targets: 矩形由原生视图证明的全部边缘，普通流式选择必须省略。
     /// - inheritIndentation: 是否继承原字节缩进及其中明确的 Tab 或虚拟保留列，已有空白不作格式转换。
+    /// - tabSettings: 结构动作增加或减少缩进时采用的当前语言规则。
+    /// - structuralIndentation: 同一来源证据为每个完整目标提供的结构动作，省略时只继承。
     /// - permit: 前缀读取、容量检查和事务构建共享的继续资格。
     /// 返回：保留建立顺序、身份和主项的完整事务；缩进读取累计超过 1 MiB 或任一目标失败时全部保留。
     public init(
         snapshot: DocumentSnapshot,
         targets: [NewlineInsertionTarget]? = nil,
         inheritIndentation: Bool = true,
+        tabSettings: TabSettings = TabSettings(),
+        structuralIndentation: (@Sendable (NewlineInsertionTarget) throws -> NewlineIndentationAction)? = nil,
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -120,16 +124,24 @@ public struct PreparedNewlineInsertion: Sendable {
             )
             // 插入点仍在前导空白中时，原生边缘保留的 Tab 列也是本次实际缩进，不能在换行后丢掉。
             let extra = indent.continuesIndentation ? target.leadingSpaces : 0
-            guard extra <= remainingOutput, indent.text.utf8.count <= remainingOutput - extra else {
-                throw NateError.message("完整换行及缩进超过正文或输出容量，未分配部分继承空白。")
-            }
-            remainingOutput -= indent.text.utf8.count + extra
+            let action = inheritIndentation ? try structuralIndentation?(target) ?? .inherit : .inherit
+            let prepared = try NewlineIndentationText.prepare(
+                prefix: indent.text,
+                ending: ending,
+                action: action,
+                settings: tabSettings,
+                extra: extra,
+                maximumBytes: remainingOutput + ending.utf8.count,
+                budget: budget
+            )
+            remainingOutput -= prepared.text.utf8.count - ending.utf8.count
             return SelectionInsertionTarget(
                 id: target.id,
                 range: target.range,
-                text: ending + indent.text + String(repeating: " ", count: extra),
+                text: prepared.text,
                 leadingSpaces: target.leadingSpaces,
-                trailingSpaces: target.trailingSpaces
+                trailingSpaces: target.trailingSpaces,
+                caretByteOffset: prepared.caret
             )
         }
         transaction = try PreparedSelectionInsertion(

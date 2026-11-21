@@ -27,7 +27,7 @@ public enum IndentationSettingsDialog {
         backspace.state = initial.backspaceUnindents ? .on : .off
         let note = NSTextField(
             wrappingLabelWithString:
-                "关闭自动缩进时，新行不生成继承缩进；继承模式分别读取每个插入点之前的原行空白。退格选项只作用于普通空光标的前导空格与 Tab，采用对应语言的 Tab 宽度。矩形和虚拟行尾保留原列删除语义，正文中的退格仍按完整字形处理。改变设置不会转换已有空白。"
+                "关闭时不生成继承缩进；继承模式分别读取每个插入点之前的原行空白。语言模式按适用的花括号、JSON 数组和 Python 冒号调整新行；成对结构间生成内层与闭合行，其它语言继承原缩进。退格选项采用各语言 Tab 宽度，只作用于普通光标的前导空白。改变设置不会转换已有空白。"
         )
         note.textColor = .secondaryLabelColor
         note.preferredMaxLayoutWidth = 480
@@ -93,6 +93,7 @@ public enum IndentationSettingsDialog {
         switch mode {
         case .disabled: return "关闭自动缩进"
         case .inherit: return "继承插入点之前的原行缩进"
+        case .language: return "按语言块结构调整新行缩进"
         }
     }
 }

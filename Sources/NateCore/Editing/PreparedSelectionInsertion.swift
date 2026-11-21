@@ -7,6 +7,7 @@ public struct SelectionInsertionTarget: Sendable {
     public let leadingSpaces: Int
     public let trailingSpaces: Int
     public let virtualColumnAfter: Int
+    public let caretByteOffset: Int?
 
     /// 业务作用：明确每项选择的实际替换、输入与保留空白，Tab 拆分和片段粘贴不提前改写源选择。
     /// 参数说明:
@@ -16,6 +17,7 @@ public struct SelectionInsertionTarget: Sendable {
     /// - leadingSpaces: 输入前保留或补齐的空格数量。
     /// - trailingSpaces: 被拆分 Tab 在输入后保留的空格数量。
     /// - virtualColumnAfter: 空操作后仍保留在真实行尾之外的光标列数。
+    /// - caretByteOffset: 光标在实际输入内的完整 UTF-8 边界，省略时位于输入末尾。
     /// 返回：尚未校验正文和容量的完整意图，不持有发布权限。
     public init(
         id: UUID,
@@ -23,7 +25,8 @@ public struct SelectionInsertionTarget: Sendable {
         text: String,
         leadingSpaces: Int = 0,
         trailingSpaces: Int = 0,
-        virtualColumnAfter: Int = 0
+        virtualColumnAfter: Int = 0,
+        caretByteOffset: Int? = nil
     ) {
         self.id = id
         self.range = range
@@ -31,6 +34,7 @@ public struct SelectionInsertionTarget: Sendable {
         self.leadingSpaces = leadingSpaces
         self.trailingSpaces = trailingSpaces
         self.virtualColumnAfter = virtualColumnAfter
+        self.caretByteOffset = caretByteOffset
     }
 }
 
@@ -106,6 +110,22 @@ public struct PreparedSelectionInsertion: Sendable {
             else {
                 throw NateError.message("保留虚拟光标只适用于没有实际插入和删除的目标。")
             }
+            if let offset = target.caretByteOffset {
+                // 输入内部光标必须有完整字节与结束符证据，不能把语义输入停在半个字符或 CRLF 中间。
+                guard offset >= 0, offset <= target.text.utf8.count, target.virtualColumnAfter == 0 else {
+                    throw NateError.invalidRange
+                }
+                let bytes = target.text.utf8
+                let index = bytes.index(bytes.startIndex, offsetBy: offset)
+                if index != bytes.endIndex {
+                    guard bytes[index] & 0xc0 != 0x80,
+                        !(bytes[index] == 10 && index != bytes.startIndex
+                            && bytes[bytes.index(before: index)] == 13)
+                    else {
+                        throw NateError.message("输入内光标不能切开 UTF-8 标量或 CRLF。")
+                    }
+                }
+            }
             if let previous {
                 guard previous.upper <= target.range.lower, !(previous.isEmpty && previous == target.range)
                 else {
@@ -137,7 +157,9 @@ public struct PreparedSelectionInsertion: Sendable {
             let value =
                 String(repeating: " ", count: target.leadingSpaces) + target.text
                 + String(repeating: " ", count: target.trailingSpaces)
-            let caret = target.range.lower + delta + target.leadingSpaces + target.text.utf8.count
+            let caret =
+                target.range.lower + delta + target.leadingSpaces
+                + (target.caretByteOffset ?? target.text.utf8.count)
             edits.append(TextEdit(target.range, value))
             results[target.id] = SelectionEntry(
                 id: target.id,
