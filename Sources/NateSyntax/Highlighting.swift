@@ -53,6 +53,7 @@ public struct SyntaxState: Sendable, Equatable {
     var python = PythonLexicalState()
     var json = JSONLexicalState()
     var c = CLexicalState()
+    var registry = RegistryLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -76,7 +77,9 @@ public struct SyntaxScanner: Sendable {
     public init(language: LanguageDefinition, snapshot: DocumentSnapshot? = nil) {
         self.language = language
         self.snapshot =
-            ["python", "escseq", "errorlist", "ini", "props", "diff", "makefile"].contains(language.id)
+            ["python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry"].contains(
+                language.id
+            )
             ? snapshot : nil
         deadline = ContinuousClock.now.advanced(by: .seconds(5))
         if language.id == "makefile" {
@@ -103,6 +106,16 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "registry" {
+            return RegistryLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                styles: language.lexicalStyles,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if ["ini", "props", "diff", "makefile"].contains(language.id) {
             return PropertyLexing.highlight(
                 text,

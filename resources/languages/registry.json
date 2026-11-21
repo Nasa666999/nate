@@ -53901,7 +53901,79 @@
     "lineComment": ";;",
     "blockStart": "",
     "blockEnd": "",
-    "keywords": []
+    "keywords": [],
+    "lexicalStyles": {
+      "32": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      },
+      "0": {
+        "fontStyle": 0,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      },
+      "1": {
+        "fontStyle": 0,
+        "foreground": "#007F00",
+        "background": "#FFFFFF"
+      },
+      "2": {
+        "fontStyle": 0,
+        "foreground": "#0000FF",
+        "background": "#FFFFFF"
+      },
+      "3": {
+        "fontStyle": 0,
+        "foreground": "#7F007F",
+        "background": "#FFFFFF"
+      },
+      "4": {
+        "fontStyle": 0,
+        "foreground": "#7F0B0C",
+        "background": "#FFFFFF"
+      },
+      "5": {
+        "fontStyle": 1,
+        "foreground": "#00007F",
+        "background": "#FFFFFF"
+      },
+      "6": {
+        "fontStyle": 0,
+        "foreground": "#530155",
+        "background": "#FFFFFF"
+      },
+      "7": {
+        "fontStyle": 0,
+        "foreground": "#FF0000",
+        "background": "#FFFFFF"
+      },
+      "8": {
+        "fontStyle": 1,
+        "foreground": "#7D8187",
+        "background": "#FFFFFF"
+      },
+      "9": {
+        "fontStyle": 0,
+        "foreground": "#7B5F15",
+        "background": "#FFFFFF"
+      },
+      "10": {
+        "fontStyle": 0,
+        "foreground": "#7B5F15",
+        "background": "#FFFFFF"
+      },
+      "11": {
+        "fontStyle": 0,
+        "foreground": "#0B6561",
+        "background": "#FFFFFF"
+      },
+      "12": {
+        "fontStyle": 1,
+        "foreground": "#000000",
+        "background": "#FFFFFF"
+      }
+    }
   },
   {
     "id": "rc",
