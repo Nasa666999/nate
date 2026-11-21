@@ -85,6 +85,8 @@ extension ApplicationController {
         let focus = editor.focusGeneration
         let authority = SearchDocumentAuthority(document)
         let base = findWindow?.options ?? searchSettingsState.options
+        let wordRules = editor.wordBoundaries
+        let wordGeneration = editor.wordBoundaryGeneration
         let fillLimit =
             action.isVolatile
             ? nil : (findWindow?.presentationPreferences ?? searchSettingsState.presentation).fillLimit
@@ -114,6 +116,7 @@ extension ApplicationController {
                 NSApp.keyWindow === window.window, window.window?.firstResponder === editor,
                 window.editor === editor, editor.focusGeneration == focus,
                 editor.selectionGeneration == selectionGeneration, editor.viewSelections == selections,
+                editor.wordBoundaryGeneration == wordGeneration,
                 self.searchNavigationGeneration == movement,
                 !window.hasMarkedEditorInput, !window.incrementalSearch.isEditingInput,
                 self.findWindow?.isEditingInput != true, input.matches(self.findWindow),
@@ -147,7 +150,8 @@ extension ApplicationController {
                     let value = try QuickFindInput(
                         text: snapshot.text,
                         selections: selections,
-                        fillLimit: fillLimit
+                        fillLimit: fillLimit,
+                        wordBoundaries: wordRules
                     )
                     try Task.checkCancellation()
                     return value
@@ -178,6 +182,7 @@ extension ApplicationController {
                 options.query = query.query
                 options.caseSensitive = action.isVolatile ? false : matching.caseSensitive
                 options.wholeWord = action.isVolatile ? false : matching.wholeWord
+                options.wordBoundaries = wordRules
                 options.wrap = action.isVolatile ? true : matching.wrap
                 let requested = options
                 let worker = Task.detached(priority: .userInitiated) {

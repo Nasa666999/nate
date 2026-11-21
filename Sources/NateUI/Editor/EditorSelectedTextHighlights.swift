@@ -146,6 +146,7 @@ extension EditorView {
                         scopes: key.scopes,
                         caseSensitive: sensitive,
                         wholeWord: whole,
+                        wordBoundaries: settings.wordBoundaries,
                         permit: {
                             !Task.isCancelled
                         }

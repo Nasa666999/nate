@@ -57,6 +57,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var onFocus: (() -> Void)?
     public var usesDefaultKeyboardRoutes = true
+    public internal(set) var wordBoundaries = WordBoundarySettings()
+    public internal(set) var wordBoundaryGeneration = UUID()
     public internal(set) var selectionGeneration = UUID()
     public internal(set) var viewSelectionState: SelectionState?
     var selectionStateRevision: UInt64 = 0

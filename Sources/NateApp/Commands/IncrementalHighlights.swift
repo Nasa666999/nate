@@ -9,6 +9,8 @@ struct IncrementalHighlightKey: Equatable {
     let revision: UInt64
     let input: UUID
     let options: IncrementalSearchOptions
+    let wordBoundaries: WordBoundarySettings
+    let wordGeneration: UUID
 }
 
 @MainActor
@@ -30,12 +32,14 @@ enum IncrementalHighlightPlan {
     /// - snapshot: 需要匹配的不可变正文。
     /// - query: 已确认的完整增量输入，不解释转义或正则。
     /// - options: 增量栏自己的匹配选项。
+    /// - wordBoundaries: 本次整词匹配固定的完整词字符规则。
     /// - permit: 当前后台请求仍有效的权限。
     /// 返回：十万项以内的完整索引及不可无损定位数量，失败不返回部分索引。
     static func prepare(
         snapshot: DocumentSnapshot,
         query: String,
         options: IncrementalSearchOptions,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings(),
         permit: @escaping @Sendable () -> Bool
     ) throws -> (highlights: PreparedTextHighlights, unmapped: Int) {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
@@ -43,9 +47,11 @@ enum IncrementalHighlightPlan {
             permit() && !Task.isCancelled && ContinuousClock.now < deadline
         }
         do {
+            var requested = options.searchOptions(query: query)
+            requested.wordBoundaries = wordBoundaries
             let result = try SearchEngine.find(
                 in: snapshot,
-                options: options.searchOptions(query: query),
+                options: requested,
                 permit: allowed
             )
             let ranges = result.hits.compactMap(\.range)
@@ -122,7 +128,9 @@ extension ApplicationController {
             editor: ObjectIdentifier(window.editor),
             revision: document.buffer.revision,
             input: bar.input.contentIdentity,
-            options: options
+            options: options,
+            wordBoundaries: window.editor.wordBoundaries,
+            wordGeneration: window.editor.wordBoundaryGeneration
         )
         if incrementalHighlights.key == key {
             return
@@ -139,6 +147,7 @@ extension ApplicationController {
             guard let self, let window, !self.closing, !Task.isCancelled,
                 self.incrementalHighlights.generation == generation, self.mainWindow === window,
                 window.isIncrementalSearchVisible, window.editor === editor,
+                editor?.wordBoundaryGeneration == key.wordGeneration,
                 !window.hasMarkedEditorInput, !bar.isEditingInput,
                 bar.input.contentIdentity == key.input, bar.options == options,
                 bar.query.utf8.elementsEqual(query.utf8),
@@ -182,6 +191,7 @@ extension ApplicationController {
                         snapshot: snapshot,
                         query: query,
                         options: options,
+                        wordBoundaries: key.wordBoundaries,
                         permit: {
                             !Task.isCancelled
                         }

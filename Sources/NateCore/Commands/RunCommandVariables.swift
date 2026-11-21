@@ -14,6 +14,7 @@ public enum RunCommandVariables {
     /// - file: 当前实际文件路径，未命名文档为空。
     /// - requested: 原始模板明确引用的规范变量名。
     /// - tabWidth: 计算主光标逻辑列的 Tab 停靠宽度。
+    /// - wordBoundaries: 当前词变量固定采用的来源视图规则。
     /// - permit: 读取和列计算仍属于本次命令准备的资格。
     /// 返回：完整原文值；未知、缺失路径、歧义选择、超量或取消拒绝，不截断或改写正文。
     public static func values(
@@ -23,6 +24,7 @@ public enum RunCommandVariables {
         file: URL?,
         requested: Set<String>,
         tabWidth: Int = 4,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings(),
         permit: @Sendable () -> Bool = {
             true
         }
@@ -87,7 +89,11 @@ public enum RunCommandVariables {
                 }
             }
             if requested.contains("word"), primary.range.isEmpty {
-                switch text.wordSelection(at: primary.head, maximumScalars: 262_144) {
+                switch text.wordSelection(
+                    at: primary.head,
+                    maximumScalars: 262_144,
+                    wordBoundaries: wordBoundaries
+                ) {
                 case .noWord: values["word"] = ""
                 case .word(let range):
                     guard range.count <= maximumValueBytes else {

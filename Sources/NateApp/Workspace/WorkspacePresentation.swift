@@ -12,6 +12,19 @@ extension ApplicationController {
         guard let active, let window = mainWindow else {
             return
         }
+        let words = currentWordBoundaries()
+        let wordRulesChanged = window.editor.wordBoundaries != words
+        if wordRulesChanged {
+            // 外部偏好更改与显式设置具有相同发布边界，旧规则计算不能在新规则下继续导航。
+            cancelQuickFind()
+            cancelMultipleSelection()
+            cancelIncrementalSearch(resetOrigin: true)
+        }
+        window.setWordBoundaries(words)
+        findWindow?.setWordBoundaries(words)
+        if wordRulesChanged {
+            refreshVisibleIncrementalHighlights()
+        }
         window.refreshSelectedTextHighlights()
         window.updateTabs(
             documents.map {

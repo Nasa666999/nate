@@ -111,11 +111,11 @@ enum LiteralMatcher {
                         let after = LiteralScalarCursor.starting(in: input, at: end)
                         let beforeWord =
                             before.map {
-                                word($0.value)
+                                options.wordBoundaries.contains($0.value)
                             } ?? false
                         let afterWord =
                             after.map {
-                                word($0.value)
+                                options.wordBoundaries.contains($0.value)
                             } ?? false
                         whole = !beforeWord && !afterWord
                     }

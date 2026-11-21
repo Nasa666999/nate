@@ -7,11 +7,30 @@ public enum SearchMode: String, Sendable, Codable, CaseIterable {
 }
 
 public struct SearchOptions: Sendable, Codable, Equatable {
+    private enum CodingKeys: String, CodingKey {
+        case query
+        case replacement
+        case mode
+        case caseSensitive
+        case wholeWord
+        case wordBoundaries
+        case dotMatchesNewline
+        case wrap
+        case backwards
+        case selectionOnly
+        case recursive
+        case includeHidden
+        case ignoreOpenBuffers
+        case maxMatches
+        case stepLimit
+    }
+
     public var query = ""
     public var replacement = ""
     public var mode: SearchMode = .literal
     public var caseSensitive = false
     public var wholeWord = false
+    public var wordBoundaries = WordBoundarySettings()
     public var dotMatchesNewline = false
     public var wrap = true
     public var backwards = false
@@ -36,6 +55,7 @@ public struct SearchOptions: Sendable, Codable, Equatable {
         lhs.mode == rhs.mode
             && lhs.caseSensitive == rhs.caseSensitive
             && lhs.wholeWord == rhs.wholeWord
+            && lhs.wordBoundaries == rhs.wordBoundaries
             && lhs.dotMatchesNewline == rhs.dotMatchesNewline
             && lhs.wrap == rhs.wrap
             && lhs.backwards == rhs.backwards
@@ -59,5 +79,55 @@ public struct SearchOptions: Sendable, Codable, Equatable {
         guard query.utf8.count <= 1_048_576 else {
             throw NateError.message("查找内容超过 1 MiB UTF-8 输入上限，请缩小完整表达式。")
         }
+    }
+
+    /// 业务作用：旧查找归档缺少附加词规则时沿用默认，已有完整搜索字段仍须逐项有效。
+    /// 参数说明:
+    /// - decoder: 完整查找或宏中固定的查找条件。
+    /// 返回：全部条件及词边界合法时恢复，未知或损坏词规则不进入搜索任务。
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        query = try values.decode(String.self, forKey: .query)
+        replacement = try values.decode(String.self, forKey: .replacement)
+        mode = try values.decode(SearchMode.self, forKey: .mode)
+        caseSensitive = try values.decode(Bool.self, forKey: .caseSensitive)
+        wholeWord = try values.decode(Bool.self, forKey: .wholeWord)
+        wordBoundaries =
+            try values.decodeIfPresent(WordBoundarySettings.self, forKey: .wordBoundaries)
+            ?? WordBoundarySettings()
+        dotMatchesNewline = try values.decode(Bool.self, forKey: .dotMatchesNewline)
+        wrap = try values.decode(Bool.self, forKey: .wrap)
+        backwards = try values.decode(Bool.self, forKey: .backwards)
+        selectionOnly = try values.decode(Bool.self, forKey: .selectionOnly)
+        recursive = try values.decode(Bool.self, forKey: .recursive)
+        includeHidden = try values.decode(Bool.self, forKey: .includeHidden)
+        ignoreOpenBuffers = try values.decode(Bool.self, forKey: .ignoreOpenBuffers)
+        maxMatches = try values.decode(Int.self, forKey: .maxMatches)
+        stepLimit = try values.decode(Int.self, forKey: .stepLimit)
+    }
+
+    /// 业务作用：搜索和宏固定当时的完整词边界规则，默认规则省略新增字段以保留既有归档形态。
+    /// 参数说明:
+    /// - encoder: 本次明确保存的完整查找条件。
+    /// 返回：完整字段写入归档，之后的全局词规则变化不改写已保存的请求。
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(query, forKey: .query)
+        try values.encode(replacement, forKey: .replacement)
+        try values.encode(mode, forKey: .mode)
+        try values.encode(caseSensitive, forKey: .caseSensitive)
+        try values.encode(wholeWord, forKey: .wholeWord)
+        if wordBoundaries != WordBoundarySettings() {
+            try values.encode(wordBoundaries, forKey: .wordBoundaries)
+        }
+        try values.encode(dotMatchesNewline, forKey: .dotMatchesNewline)
+        try values.encode(wrap, forKey: .wrap)
+        try values.encode(backwards, forKey: .backwards)
+        try values.encode(selectionOnly, forKey: .selectionOnly)
+        try values.encode(recursive, forKey: .recursive)
+        try values.encode(includeHidden, forKey: .includeHidden)
+        try values.encode(ignoreOpenBuffers, forKey: .ignoreOpenBuffers)
+        try values.encode(maxMatches, forKey: .maxMatches)
+        try values.encode(stepLimit, forKey: .stepLimit)
     }
 }

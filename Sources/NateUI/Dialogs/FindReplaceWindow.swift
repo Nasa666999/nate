@@ -1,4 +1,5 @@
 import AppKit
+import NateCore
 import NateSearch
 
 @MainActor
@@ -7,6 +8,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     public var onDismiss: (() -> Void)?
     public var onSelectionContextRequest: (() -> Void)?
     public var presentationPreferences = SearchPresentationPreferences()
+    public internal(set) var wordBoundaries = WordBoundarySettings()
     public internal(set) var resultPreferences = SearchResultPreferences()
     public internal(set) var stylePreferences = StyleMarkPreferences()
     public var isEditingInput: Bool {
@@ -83,6 +85,9 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
     public var confirmsOpenReplacement: Bool {
         confirmOpen.state == .on
     }
+    /// 业务作用：执行请求固定完整搜索条件与当前词规则，不借用后来变化的全局偏好。
+    /// 参数说明: 无。
+    /// 返回：当前已确认输入与独立规则的完整值快照。
     public var options: SearchOptions {
         var result = SearchOptions()
         result.query = query.stringValue
@@ -90,6 +95,7 @@ public final class FindReplaceWindow: NSWindowController, NSTextFieldDelegate, N
         result.mode = SearchMode.allCases[max(0, mode.indexOfSelectedItem)]
         result.caseSensitive = caseSensitive.state == .on
         result.wholeWord = wholeWord.state == .on
+        result.wordBoundaries = wordBoundaries
         result.dotMatchesNewline = dot.state == .on
         result.backwards = backwards.state == .on
         result.wrap = wrap.state == .on

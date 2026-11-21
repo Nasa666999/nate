@@ -66,7 +66,8 @@ extension ApplicationController {
             generation: selectedTextPreferences.generation,
             findGeneration: options.useFindOptions ? findWindow?.configurationIdentity : nil,
             findCaseSensitive: options.useFindOptions && find.caseSensitive,
-            findWholeWord: options.useFindOptions && find.wholeWord
+            findWholeWord: options.useFindOptions && find.wholeWord,
+            wordBoundaries: window.editor.wordBoundaries
         )
     }
 

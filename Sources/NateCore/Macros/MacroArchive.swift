@@ -335,18 +335,30 @@ public enum MacroArchive {
     /// 业务作用：完整搜索状态不能忽略未来字段后按另一种表达式、范围或替换策略执行。
     /// 参数说明:
     /// - object: 从有界归档读取的单个搜索动作对象。
-    /// 返回：包装及全部当前选项字段明确且完整时继续，其它格式拒绝。
+    /// 返回：原有搜索字段完整且可选词规则明确完整时继续，未知或残缺字段拒绝。
     private static func validateSearchObject(_ object: Any) throws {
         guard let fields = object as? [String: Any],
             Set(fields.keys) == ["command", "options", "stayAfterReplace"],
-            let options = fields["options"] as? [String: Any],
-            Set(options.keys) == [
-                "query", "replacement", "mode", "caseSensitive", "wholeWord", "dotMatchesNewline",
-                "wrap", "backwards", "selectionOnly", "recursive", "includeHidden", "ignoreOpenBuffers",
-                "maxMatches", "stepLimit",
-            ]
+            let options = fields["options"] as? [String: Any]
         else {
             throw MacroArchiveError.unsupportedFormat
+        }
+        let required: Set<String> = [
+            "query", "replacement", "mode", "caseSensitive", "wholeWord", "dotMatchesNewline",
+            "wrap", "backwards", "selectionOnly", "recursive", "includeHidden", "ignoreOpenBuffers",
+            "maxMatches", "stepLimit",
+        ]
+        let keys = Set(options.keys)
+        guard keys == required || keys == required.union(["wordBoundaries"]) else {
+            throw MacroArchiveError.unsupportedFormat
+        }
+        if let object = options["wordBoundaries"] {
+            // 新词规则必须完整保留两个业务字段，不能忽略未来字段后按另一种边界执行宏。
+            guard let words = object as? [String: Any],
+                Set(words.keys) == ["useCustom", "additionalCharacters"]
+            else {
+                throw MacroArchiveError.unsupportedFormat
+            }
         }
     }
 

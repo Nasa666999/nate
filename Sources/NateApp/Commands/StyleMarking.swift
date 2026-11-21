@@ -41,6 +41,8 @@ extension ApplicationController {
         let configuration = styleMarks.generation
         let snapshot = context.document.buffer.markSnapshot
         let selections = context.editor.viewSelections
+        let wordRules = context.editor.wordBoundaries
+        let wordGeneration = context.editor.wordBoundaryGeneration
         let movement = searchNavigationGeneration
         let input = SearchRequestInput(findWindow)
         let authority = SearchDocumentAuthority(context.document)
@@ -53,6 +55,7 @@ extension ApplicationController {
                 self.styleMarks.generation == configuration, self.styleMarkPreferences == preferences,
                 input.matches(self.findWindow), self.findWindow?.isEditingInput != true,
                 !window.hasMarkedEditorInput, window.editor === editor, editor?.viewSelections == selections,
+                editor?.wordBoundaryGeneration == wordGeneration,
                 self.searchNavigationGeneration == movement, let document = authority.document,
                 self.active === document,
                 self.documents.contains(where: {
@@ -90,6 +93,7 @@ extension ApplicationController {
                         style: style,
                         all: allOccurrences,
                         preferences: preferences,
+                        wordBoundaries: wordRules,
                         permit: {
                             !Task.isCancelled
                         }

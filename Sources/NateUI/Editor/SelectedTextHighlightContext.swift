@@ -8,6 +8,7 @@ public struct SelectedTextHighlightSettings: Equatable, Sendable {
     public let findGeneration: UUID?
     public let findCaseSensitive: Bool
     public let findWholeWord: Bool
+    public let wordBoundaries: WordBoundarySettings
 
     /// 业务作用：每个临时匹配固定独立设置身份，复用查找选项时同时固定查找配置身份。
     /// 参数说明:
@@ -16,19 +17,22 @@ public struct SelectedTextHighlightSettings: Equatable, Sendable {
     /// - findGeneration: 复用查找条件时的配置身份，独立模式为空。
     /// - findCaseSensitive: 查找窗口当前大小写选项。
     /// - findWholeWord: 查找窗口当前整词选项。
+    /// - wordBoundaries: 本次选词与整词匹配共同固定的完整规则。
     /// 返回：无正文与视图引用的不可变设置，偏好往返变化不能复用旧身份。
     public init(
         options: SelectedTextHighlightOptions,
         generation: UUID,
         findGeneration: UUID?,
         findCaseSensitive: Bool,
-        findWholeWord: Bool
+        findWholeWord: Bool,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings()
     ) {
         self.options = options
         self.generation = generation
         self.findGeneration = findGeneration
         self.findCaseSensitive = findCaseSensitive
         self.findWholeWord = findWholeWord
+        self.wordBoundaries = wordBoundaries
     }
 }
 

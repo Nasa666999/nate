@@ -41,9 +41,18 @@ extension PieceTree {
     /// 参数说明:
     /// - position: 合法标量边界的光标位置，位于词尾时允许选择前一个词。
     /// - maximumScalars: 整个单词允许的最大标量数量。
-    /// 返回：字母、数字、组合标记和下划线组成的完整范围；无单词、无效位置或超限为空。
-    public func wordRange(at position: Int, maximumScalars: Int) -> ByteRange? {
-        if case .word(let range) = wordSelection(at: position, maximumScalars: maximumScalars) {
+    /// - wordBoundaries: 当前已固定的默认及附加词字符规则。
+    /// 返回：当前规则下的完整词范围；无单词、无效位置或超限为空。
+    public func wordRange(
+        at position: Int,
+        maximumScalars: Int,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings()
+    ) -> ByteRange? {
+        if case .word(let range) = wordSelection(
+            at: position,
+            maximumScalars: maximumScalars,
+            wordBoundaries: wordBoundaries
+        ) {
             return range
         }
         return nil
@@ -53,8 +62,13 @@ extension PieceTree {
     /// 参数说明:
     /// - position: 当前快照的合法标量边界。
     /// - maximumScalars: 整词的最大标量数量。
+    /// - wordBoundaries: 本次取词固定的默认与附加字符规则。
     /// 返回：完整单词范围、无单词或明确超限；无效位置和非正预算不生成范围。
-    public func wordSelection(at position: Int, maximumScalars: Int) -> WordSelection {
+    public func wordSelection(
+        at position: Int,
+        maximumScalars: Int,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings()
+    ) -> WordSelection {
         guard maximumScalars > 0, isBoundary(position) else {
             return .noWord
         }
@@ -65,7 +79,8 @@ extension PieceTree {
             while !isBoundary(previous) {
                 previous -= 1
             }
-            guard let scalar = scalarStarting(at: previous), Self.isWordScalar(scalar.value) else {
+            guard let scalar = scalarStarting(at: previous), wordBoundaries.contains(scalar.value.value)
+            else {
                 break
             }
             guard count < maximumScalars else {
@@ -75,7 +90,7 @@ extension PieceTree {
             lower = previous
         }
         var upper = position
-        while let scalar = scalarStarting(at: upper), Self.isWordScalar(scalar.value) {
+        while let scalar = scalarStarting(at: upper), wordBoundaries.contains(scalar.value.value) {
             guard count < maximumScalars else {
                 return .exceedsLimit
             }
@@ -108,11 +123,4 @@ extension PieceTree {
         }
     }
 
-    /// 业务作用：单词填入使用固定 Unicode 17.0.0 分类，与搜索整词边界一致且不依赖系统库版本。
-    /// 参数说明:
-    /// - scalar: 当前正文标量。
-    /// 返回：字母、数字、组合标记或 ASCII 下划线为真，其它标点和空白为假。
-    private static func isWordScalar(_ scalar: Unicode.Scalar) -> Bool {
-        UnicodeWordClassification.contains(scalar.value)
-    }
 }

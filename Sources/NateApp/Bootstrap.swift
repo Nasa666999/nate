@@ -30,6 +30,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let historyAction = HistoryActionRuntime()
     let lineSorting = LineSortingRuntime()
     let displayPreferences = EditorDisplayPreferencesRuntime()
+    let wordPreferences = WordBoundaryRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),

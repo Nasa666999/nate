@@ -13,11 +13,12 @@ struct RunCommandSourceProof {
     let viewSelection: UUID
     let editing: UUID
     let tabGeneration: UUID
+    let wordGeneration: UUID
     let target: UInt64
     let name: String
     let file: URL?
 
-    /// 业务作用：固定实际变量来源，确认期间的正文、选择或路径往返不能继续使用旧预览。
+    /// 业务作用：固定实际变量来源，确认期间的正文、选择、词规则或路径往返不能继续使用旧预览。
     /// 参数说明:
     /// - document: 原活动文档实例。
     /// - window: 原工作区窗口。
@@ -32,6 +33,7 @@ struct RunCommandSourceProof {
         viewSelection = editor.selectionGeneration
         editing = document.buffer.editingAuthorityGeneration
         tabGeneration = editor.tabSettingsGeneration
+        wordGeneration = editor.wordBoundaryGeneration
         target = document.targetGeneration
         name = document.name
         file = document.url
@@ -40,7 +42,7 @@ struct RunCommandSourceProof {
     /// 业务作用：预览与执行之间只接受同一文档实例及控制代次，返回相同文字或光标也不能恢复旧资格。
     /// 参数说明:
     /// - application: 当前实际工作区。
-    /// 返回：原文档、视图、正文、选择、路径及权限证据均未改变且没有候选时为真。
+    /// 返回：原文档、视图、正文、选择、词规则、路径及权限证据均未改变且没有候选时为真。
     func matches(_ application: ApplicationController) -> Bool {
         !application.closing && !document.closing && application.active === document
             && application.mainWindow === window && window.editor === editor
@@ -49,6 +51,7 @@ struct RunCommandSourceProof {
             && editor.selectionGeneration == viewSelection && document.targetGeneration == target
             && document.buffer.editingAuthorityGeneration == editing
             && editor.tabSettingsGeneration == tabGeneration
+            && editor.wordBoundaryGeneration == wordGeneration
             && document.name.utf8.elementsEqual(name.utf8) && document.url == file
             && !window.hasMarkedEditorInput
     }
@@ -118,6 +121,7 @@ extension ApplicationController {
         }
         let text = document.buffer.text, name = document.name, file = document.url
         let tabWidth = editor.tabSettings.width
+        let wordRules = editor.wordBoundaries
         let defaultDirectory =
             file?.deletingLastPathComponent()
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
@@ -156,6 +160,7 @@ extension ApplicationController {
                             file: file,
                             requested: referenced,
                             tabWidth: tabWidth,
+                            wordBoundaries: wordRules,
                             permit: {
                                 !token.isCancelled
                             }

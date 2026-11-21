@@ -96,7 +96,11 @@ extension EditorView {
         else if event.clickCount == 2 {
             let range: ByteRange
             // 分隔符也可能占多个字节，直接沿标量边界找整词，不复制整行或按一个字节推算词首。
-            switch document.text.wordSelection(at: position, maximumScalars: 262_144) {
+            switch document.text.wordSelection(
+                at: position,
+                maximumScalars: 262_144,
+                wordBoundaries: wordBoundaries
+            ) {
             case .word(let word):
                 range = word
             case .noWord:

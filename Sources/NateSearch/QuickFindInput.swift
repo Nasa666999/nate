@@ -11,8 +11,14 @@ public struct QuickFindInput: Sendable {
     /// - text: 当前视图所属的不可变正文。
     /// - selections: 真实视图选区，多选与虚拟列不能缩成一个查询。
     /// - fillLimit: 更新查找条件时使用的标量上限；临时搜索为空，仍受 1 MiB 表达式与完整词预算约束。
+    /// - wordBoundaries: 当前来源视图已固定的词字符规则。
     /// 返回：完整字面原文与导航起点，不改变选区；非法范围、超限、无选区且无光标词时整体失败。
-    public init(text: PieceTree, selections: [TextSelection], fillLimit: Int?) throws {
+    public init(
+        text: PieceTree,
+        selections: [TextSelection],
+        fillLimit: Int?,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings()
+    ) throws {
         if let fillLimit {
             guard (1...262_144).contains(fillLimit) else {
                 throw NateError.message("快捷搜索填入上限须为 1–262144 个标量。")
@@ -26,7 +32,11 @@ public struct QuickFindInput: Sendable {
         }
         let range: ByteRange
         if selected.range.isEmpty {
-            switch text.wordSelection(at: selected.head, maximumScalars: fillLimit ?? 262_144) {
+            switch text.wordSelection(
+                at: selected.head,
+                maximumScalars: fillLimit ?? 262_144,
+                wordBoundaries: wordBoundaries
+            ) {
             case .word(let word): range = word
             case .noWord: throw NateError.message("当前没有选中文本或完整光标词。")
             case .exceedsLimit:

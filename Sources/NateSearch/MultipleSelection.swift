@@ -32,13 +32,15 @@ public struct PreparedMultipleSelection: Sendable {
     /// - query: 同一多选序列保留的完整原文，首次动作为空并从最后选区或完整光标词读取。
     /// - action: 全部匹配、追加下一个或替换最后选区为下一个匹配。
     /// - options: 多选独立的大小写与整词开关。
+    /// - wordBoundaries: 本次取词和整词查找固定的完整规则。
     /// 返回：最多十万个选区和完整原查询；取消、五秒超时或超量时不返回部分计划。
     public init(
         snapshot: DocumentSnapshot,
         selections: [TextSelection],
         query: String? = nil,
         action: MultipleSelectionAction,
-        options: MultipleSelectionOptions
+        options: MultipleSelectionOptions,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings()
     ) throws {
         try Task.checkCancellation()
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
@@ -61,7 +63,8 @@ public struct PreparedMultipleSelection: Sendable {
             let input = try QuickFindInput(
                 text: snapshot.text,
                 selections: [lastSelection],
-                fillLimit: nil
+                fillLimit: nil,
+                wordBoundaries: wordBoundaries
             )
             expression = input.query
             if input.expandedWord {
@@ -80,6 +83,7 @@ public struct PreparedMultipleSelection: Sendable {
         search.query = expression
         search.caseSensitive = options.caseSensitive
         search.wholeWord = options.wholeWord
+        search.wordBoundaries = wordBoundaries
         try search.validateInput()
         let input = SearchInput(snapshot.text)
         let permit: @Sendable () -> Bool = {

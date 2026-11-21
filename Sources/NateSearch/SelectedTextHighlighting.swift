@@ -7,11 +7,13 @@ public enum SelectedTextHighlighting {
     /// - source: 选区所属的不可变正文。
     /// - selections: 来源视图的真实选区，不从共享文档推断克隆位置。
     /// - wholeWord: 是否要求整个选区恰好为完整词。
+    /// - wordBoundaries: 来源视图固定的完整词字符规则。
     /// 返回：最多 1 MiB 的完整单行原文；普通空选区、多选、虚拟列、跨行或部分词不生成表达式，非法范围和超限失败。
     public static func expression(
         source: DocumentSnapshot,
         selections: [TextSelection],
-        wholeWord: Bool
+        wholeWord: Bool,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings()
     ) throws -> String? {
         guard selections.count == 1, let selection = selections.first,
             !selection.range.isEmpty, selection.virtualColumn == 0
@@ -30,7 +32,11 @@ public enum SelectedTextHighlighting {
             return nil
         }
         if wholeWord {
-            switch source.text.wordSelection(at: range.lower, maximumScalars: 262_144) {
+            switch source.text.wordSelection(
+                at: range.lower,
+                maximumScalars: 262_144,
+                wordBoundaries: wordBoundaries
+            ) {
             case .word(let word):
                 guard word == range else {
                     return nil
@@ -51,6 +57,7 @@ public enum SelectedTextHighlighting {
     /// - scopes: 至多 400 个有序、不交叠的可见行区间，折叠内容不扩大匹配范围。
     /// - caseSensitive: 当前实际匹配是否区分大小写。
     /// - wholeWord: 当前实际匹配是否只接受完整词。
+    /// - wordBoundaries: 来源表达式及目标整词查找共同采用的完整字符规则。
     /// - permit: 本次临时匹配仍有效的执行资格。
     /// 返回：至多十万项的完整视口索引与不可定位数量；普通无效选择为空，取消、超限或两秒预算失败不返回部分索引。
     public static func prepare(
@@ -60,6 +67,7 @@ public enum SelectedTextHighlighting {
         scopes: [ByteRange],
         caseSensitive: Bool,
         wholeWord: Bool,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings(),
         permit: @escaping @Sendable () -> Bool
     ) throws -> (highlights: PreparedTextHighlights?, unmapped: Int) {
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
@@ -69,7 +77,14 @@ public enum SelectedTextHighlighting {
         guard allowed() else {
             throw CancellationError()
         }
-        guard let query = try expression(source: source, selections: selections, wholeWord: wholeWord) else {
+        guard
+            let query = try expression(
+                source: source,
+                selections: selections,
+                wholeWord: wholeWord,
+                wordBoundaries: wordBoundaries
+            )
+        else {
             return (nil, 0)
         }
         guard scopes.count <= 400 else {
@@ -79,6 +94,7 @@ public enum SelectedTextHighlighting {
         options.query = query
         options.caseSensitive = caseSensitive
         options.wholeWord = wholeWord
+        options.wordBoundaries = wordBoundaries
         var ranges: [ByteRange] = []
         var unmapped = 0
         var previousEnd = 0

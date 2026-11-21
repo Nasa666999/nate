@@ -99,6 +99,8 @@ extension ApplicationController {
         let input = SearchRequestInput(findWindow)
         let authority = SearchDocumentAuthority(document)
         let snapshot = document.buffer.snapshot, options = runtime.options
+        let wordRules = editor.wordBoundaries
+        let wordGeneration = editor.wordBoundaryGeneration
         let editing = document.buffer.editingAuthorityGeneration
         let current: @MainActor () -> Bool = {
             [weak self, weak window, weak editor] in
@@ -109,6 +111,7 @@ extension ApplicationController {
                 authority.matches(source), source.buffer.revision == revision,
                 source.buffer.editingAuthorityGeneration == editing,
                 editor.selectionGeneration == selections, editor.viewSelections == original,
+                editor.wordBoundaryGeneration == wordGeneration,
                 editor.focusGeneration == focus,
                 self.searchNavigationGeneration == movement, self.queryGeneration == queryIdentity,
                 input.matches(self.findWindow)
@@ -130,7 +133,8 @@ extension ApplicationController {
                         selections: original,
                         query: query,
                         action: action,
-                        options: options
+                        options: options,
+                        wordBoundaries: wordRules
                     )
                 }
                 let plan = try await withTaskCancellationHandler(

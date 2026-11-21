@@ -11,6 +11,7 @@ enum StyleMarkPlanning {
     /// - style: 本次添加的持久颜色组。
     /// - all: 是否在全文标记所选文本的所有字面匹配。
     /// - preferences: 独立于查找窗口的样式匹配偏好。
+    /// - wordBoundaries: 本次完整取词与整词标记固定的来源规则。
     /// - permit: 本次后台操作仍有效的取消权限。
     /// 返回：保留旧样式的完整标记计划、实际匹配数和无法无损表示数；无词、超限或非法范围整体失败。
     static func prepare(
@@ -19,6 +20,7 @@ enum StyleMarkPlanning {
         style: DocumentMarkStyle,
         all: Bool,
         preferences: StyleMarkPreferences,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings(),
         permit: @escaping @Sendable () -> Bool
     ) throws -> (plan: PreparedDocumentMarks, matched: Int, unmapped: Int) {
         guard permit() else {
@@ -35,7 +37,7 @@ enum StyleMarkPlanning {
             guard selections.count == 1, let selection = selections.first, selection.virtualColumn == 0 else {
                 throw NateError.message("标记全部匹配需要一个实际选区或一个光标；多选可使用“仅标记选区”。")
             }
-            let range = try sourceRange(selection, tree: tree)
+            let range = try sourceRange(selection, tree: tree, wordBoundaries: wordBoundaries)
             // 完整表达式必须先满足容量与字符边界，不能截断长选区后标记另一段文本。
             guard range.count <= 1_048_576 else {
                 throw NateError.message("样式匹配文本超过 1 MiB，原样式保留。")
@@ -44,6 +46,7 @@ enum StyleMarkPlanning {
             options.query = tree.text(in: range)
             options.caseSensitive = preferences.caseSensitive
             options.wholeWord = preferences.wholeWord
+            options.wordBoundaries = wordBoundaries
             let result = try SearchEngine.find(in: snapshot.document, options: options, permit: permit)
             ranges = result.hits.compactMap(\.range)
             matched = result.hits.count
@@ -58,7 +61,7 @@ enum StyleMarkPlanning {
                 else {
                     throw NateError.message("多光标请先选中实际正文，再添加颜色样式。")
                 }
-                ranges = [try sourceRange(selection, tree: tree)]
+                ranges = [try sourceRange(selection, tree: tree, wordBoundaries: wordBoundaries)]
             }
             else {
                 ranges = selected
@@ -80,8 +83,13 @@ enum StyleMarkPlanning {
     /// 参数说明:
     /// - selection: 当前视图中的单个真实选区或光标。
     /// - tree: 该选区所属固定正文。
+    /// - wordBoundaries: 当前来源已固定的完整词字符规则。
     /// 返回：完整选区或至多 262144 标量的当前词；非词位置、边界非法或超限明确失败。
-    private static func sourceRange(_ selection: TextSelection, tree: PieceTree) throws -> ByteRange {
+    private static func sourceRange(
+        _ selection: TextSelection,
+        tree: PieceTree,
+        wordBoundaries: WordBoundarySettings
+    ) throws -> ByteRange {
         let range = selection.range
         guard tree.isBoundary(range.lower), tree.isBoundary(range.upper) else {
             throw NateError.invalidRange
@@ -89,7 +97,11 @@ enum StyleMarkPlanning {
         if !range.isEmpty {
             return range
         }
-        switch tree.wordSelection(at: selection.head, maximumScalars: 262_144) {
+        switch tree.wordSelection(
+            at: selection.head,
+            maximumScalars: 262_144,
+            wordBoundaries: wordBoundaries
+        ) {
         case .word(let word): return word
         case .noWord: throw NateError.message("当前位置没有可标记的单词，请先选择正文。")
         case .exceedsLimit: throw NateError.message("当前词超过 262144 个标量，原样式保留；可选择较短正文。")

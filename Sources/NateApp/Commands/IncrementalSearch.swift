@@ -101,7 +101,8 @@ extension ApplicationController {
             let context = try SearchPresentation.context(
                 text: document.buffer.text,
                 selections: window.editor.viewSelections,
-                preferences: findWindow?.presentationPreferences ?? searchSettingsState.presentation
+                preferences: findWindow?.presentationPreferences ?? searchSettingsState.presentation,
+                wordBoundaries: window.editor.wordBoundaries
             )
             window.showIncrementalSearch(query: context.query, options: incrementalOptions)
         }
@@ -174,6 +175,7 @@ extension ApplicationController {
         resultNavigationGeneration = UUID()
         searchNavigationEvidence = nil
         let editor = window.editor
+        let wordGeneration = editor.wordBoundaryGeneration
         let buffer = document.buffer
         let snapshot = buffer.snapshot
         let selections = editor.viewSelections
@@ -196,7 +198,9 @@ extension ApplicationController {
         let inputIdentity = bar.input.contentIdentity
         let movement = searchNavigationGeneration
         let authority = SearchDocumentAuthority(document)
-        let requested = options.searchOptions(query: query)
+        var currentOptions = options.searchOptions(query: query)
+        currentOptions.wordBoundaries = editor.wordBoundaries
+        let requested = currentOptions
         bar.feedback.stringValue = "正在查找…"
         incrementalTask = Task {
             [weak self, weak editor] in
@@ -239,6 +243,7 @@ extension ApplicationController {
                 // 相同 UUID 或相同查询不足以导航；移动光标、换视图、重开文档及保护态都会撤销原位置证据。
                 guard movement == self.searchNavigationGeneration,
                     let editor, window.editor === editor, editor.document === buffer,
+                    editor.wordBoundaryGeneration == wordGeneration,
                     let current = self.active, authority.matches(current), current.buffer === buffer,
                     !buffer.isEditingSuspended, !window.hasMarkedEditorInput,
                     editor.viewSelections == selections
@@ -268,6 +273,7 @@ extension ApplicationController {
             }
             catch {
                 if generation == self.incrementalGeneration, window.isIncrementalSearchVisible,
+                    editor?.wordBoundaryGeneration == wordGeneration,
                     !window.hasMarkedEditorInput,
                     bar.query.utf8.elementsEqual(query.utf8), bar.options == options,
                     !bar.isEditingInput, !bar.input.hasMarkedInput

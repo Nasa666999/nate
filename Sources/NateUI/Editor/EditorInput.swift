@@ -231,8 +231,8 @@ extension EditorView {
                         break
                     }
                     let cluster = tree.text(in: ByteRange(min(position, next), max(position, next)))
-                    let isWord = cluster.contains {
-                        $0.isLetter || $0.isNumber || $0 == "_"
+                    let isWord = cluster.unicodeScalars.contains {
+                        wordBoundaries.contains($0.value)
                     }
                     if enteredWord && !isWord {
                         break

@@ -7,6 +7,7 @@ extension ApplicationController {
     /// 返回：现有或完成回调装配的新窗口；归档无效时使用有效默认设置并保留错误状态。
     func ensureFindWindow() -> FindReplaceWindow {
         if let findWindow {
+            findWindow.setWordBoundaries(mainWindow?.editor.wordBoundaries ?? currentWordBoundaries())
             return findWindow
         }
         let window = FindReplaceWindow()
@@ -16,6 +17,7 @@ extension ApplicationController {
         catch {
             searchSettingsError = error.localizedDescription
         }
+        window.setWordBoundaries(mainWindow?.editor.wordBoundaries ?? currentWordBoundaries())
         if searchSettingsURL != nil {
             window.onStateChange = {
                 [weak self] state in

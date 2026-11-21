@@ -25,7 +25,8 @@ extension ApplicationController {
             let context = try SearchPresentation.context(
                 text: active?.buffer.text ?? PieceTree(),
                 selections: selections,
-                preferences: preferences
+                preferences: preferences,
+                wordBoundaries: mainWindow?.editor.wordBoundaries ?? currentWordBoundaries()
             )
             findWindow.applySelectionContext(context)
             return context.query

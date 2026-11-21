@@ -35,11 +35,13 @@ public enum SearchPresentation {
     /// - text: 当前焦点文档的不可变正文。
     /// - selections: 当前视图的完整选区，多选和虚拟列不作为连续搜索范围。
     /// - preferences: 用户的填入与自动勾选设置。
+    /// - wordBoundaries: 本次光标取词固定的完整字符规则。
     /// 返回：可选的完整填入原文、选区是否可用及自动勾选意图；手动控制时勾选意图为空。
     public static func context(
         text: PieceTree,
         selections: [TextSelection],
-        preferences: SearchPresentationPreferences
+        preferences: SearchPresentationPreferences,
+        wordBoundaries: WordBoundarySettings = WordBoundarySettings()
     ) throws -> SearchPresentationContext {
         try preferences.validate()
         let single = selections.count == 1 && selections[0].virtualColumn == 0 ? selections[0] : nil
@@ -60,13 +62,20 @@ public enum SearchPresentation {
             }
         }
         else if preferences.fillFromSelection, preferences.fillFromWord, let single {
-            candidate = text.wordRange(at: single.head, maximumScalars: preferences.fillLimit)
+            candidate = text.wordRange(
+                at: single.head,
+                maximumScalars: preferences.fillLimit,
+                wordBoundaries: wordBoundaries
+            )
         }
         let query = candidate.map {
             text.text(in: $0)
         }
         let allowed =
-            preferences.fillMultiline || query?.utf8.contains(where: { $0 == 10 || $0 == 13 }) != true
+            preferences.fillMultiline
+            || query?.utf8.contains(where: {
+                $0 == 10 || $0 == 13
+            }) != true
         return SearchPresentationContext(
             query: allowed ? query : nil,
             selectionEligible: eligible,

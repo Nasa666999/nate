@@ -99,6 +99,7 @@ extension FindReplaceWindow {
         query.stringValue = state.options.query
         presentationPreferences = state.presentation
         resultPreferences = state.results
+        wordBoundaries = state.options.wordBoundaries
         stylePreferences = state.styling
         replacement.stringValue = state.options.replacement
         directory.stringValue = state.directory
