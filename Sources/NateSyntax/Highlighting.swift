@@ -55,6 +55,7 @@ public struct SyntaxState: Sendable, Equatable {
     var c = CLexicalState()
     var registry = RegistryLexicalState()
     var latex = LatexLexicalState()
+    var lisp = LispLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -80,7 +81,7 @@ public struct SyntaxScanner: Sendable {
         self.snapshot =
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
-                "srec", "tehex", "tex", "latex",
+                "srec", "tehex", "tex", "latex", "lisp", "scheme",
             ].contains(
                 language.id
             )
@@ -94,7 +95,7 @@ public struct SyntaxScanner: Sendable {
             return
         }
         keywords = Set(
-            ["python", "c", "cpp"].contains(language.id)
+            ["python", "c", "cpp", "lisp", "scheme"].contains(language.id)
                 ? language.keywordGroups?["instre1"] ?? language.keywords : language.keywords
         )
         secondaryKeywords = Set(
@@ -110,6 +111,19 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if ["lisp", "scheme"].contains(language.id) {
+            return LispLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                language: language.id,
+                styles: language.lexicalStyles,
+                keywords: keywords,
+                secondary: secondaryKeywords,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if language.id == "latex" {
             return LatexLexing.highlight(
                 text,

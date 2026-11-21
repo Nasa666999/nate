@@ -118,6 +118,15 @@
     "author": "G. HU",
     "implementation": "LaTeX 控制词、数学、环境、可选参数与逐字状态及环境和章节折叠的 Swift 适配"
   },
+  "lispLexing": {
+    "project": "Lexilla",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexLisp.cxx",
+    "license": "License for Lexilla, Scintilla, and SciTE",
+    "licenseFile": "Lexilla-LICENSE.txt",
+    "copyright": "Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>",
+    "author": "Alexey Yutkin",
+    "implementation": "Lisp 与 Scheme 名称、符号、读取宏、字符串和注释词法及操作符括号层级折叠的 Swift 适配"
+  },
   "jsonIdentifiers": {
     "project": "Unicode Character Database",
     "source": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",

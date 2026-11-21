@@ -40,13 +40,19 @@ public struct FoldIndex: Sendable {
         }
         let allowed = Self.openers(for: language?.id ?? "")
         let deadline = ContinuousClock.now.advanced(
-            by: ["python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex"].contains(
+            by: [
+                "python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex", "lisp",
+                "scheme",
+            ].contains(
                 language?.id ?? ""
             )
                 ? .seconds(5) : .seconds(1)
         )
         var candidates: [FoldRegion] = []
-        if let language, language.id == "latex" {
+        if let language, ["lisp", "scheme"].contains(language.id) {
+            candidates = try LispFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
+        }
+        else if let language, language.id == "latex" {
             candidates = try LatexFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, language.id == "tex" {
