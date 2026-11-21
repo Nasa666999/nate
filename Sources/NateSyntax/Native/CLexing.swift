@@ -6,6 +6,7 @@ struct CLexing {
     let base: Int
     let keywords: Set<String>
     let secondaryKeywords: Set<String>
+    let globalClasses: Set<String>
     let documentationKeywords: Set<String>
     let snapshot: DocumentSnapshot?
     let unicodeLineEnding: Bool
@@ -22,6 +23,7 @@ struct CLexing {
     /// - language: 当前固定的 C 或 C++ 模式身份。
     /// - keywords: 当前语言的主要关键字集合。
     /// - secondaryKeywords: 当前语言的次要关键字集合。
+    /// - globalClasses: 当前语言在共享词法中单独呈现的全局类与内置名称。
     /// - documentationKeywords: 当前语言明确定义的文档注释命令集合。
     /// - snapshot: 固定当前范围、跨行及前后文证据的完整正文快照。
     /// - deadline: 本次固定快照分析的共同截止。
@@ -33,6 +35,7 @@ struct CLexing {
         language: String,
         keywords: Set<String>,
         secondaryKeywords: Set<String>,
+        globalClasses: Set<String>,
         documentationKeywords: Set<String>,
         snapshot: DocumentSnapshot? = nil,
         deadline: ContinuousClock.Instant,
@@ -73,6 +76,7 @@ struct CLexing {
                 base: base,
                 keywords: keywords,
                 secondaryKeywords: secondaryKeywords,
+                globalClasses: globalClasses,
                 documentationKeywords: documentationKeywords,
                 snapshot: snapshot,
                 unicodeLineEnding: text.hasSuffix("\u{0085}") || text.hasSuffix("\u{2028}")

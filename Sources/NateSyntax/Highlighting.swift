@@ -67,6 +67,7 @@ public struct SyntaxScanner: Sendable {
     let language: LanguageDefinition
     let keywords: Set<String>
     let secondaryKeywords: Set<String>
+    let globalClasses: Set<String>
     let documentationKeywords: Set<String>
     let snapshot: DocumentSnapshot?
     let deadline: ContinuousClock.Instant
@@ -84,24 +85,30 @@ public struct SyntaxScanner: Sendable {
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp",
             ].contains(
                 language.id
-            )
+            ) || language.usesSharedCLexer
             ? snapshot : nil
         deadline = ContinuousClock.now.advanced(by: .seconds(5))
         if language.id == "makefile" {
             // Makefile 在行扫描入口有界复验原始词表，提前建立 String 集合会合并名称并重复占用资源。
             keywords = []
             secondaryKeywords = []
+            globalClasses = []
             documentationKeywords = []
             return
         }
         keywords = Set(
-            ["python", "c", "cpp", "lisp", "scheme"].contains(language.id)
+            (language.usesSharedCLexer || ["python", "lisp", "scheme"].contains(language.id))
                 ? language.keywordGroups?["instre1"] ?? language.keywords : language.keywords
         )
         secondaryKeywords = Set(
-            language.keywordGroups?[["c", "cpp"].contains(language.id) ? "type1" : "instre2"] ?? []
+            language.keywordGroups?[language.usesSharedCLexer ? "type1" : "instre2"] ?? []
         )
-        documentationKeywords = Set(language.keywordGroups?["type2"] ?? [])
+        globalClasses = Set(language.usesSharedCLexer ? language.keywordGroups?["instre2"] ?? [] : [])
+        documentationKeywords = Set(
+            language.usesSharedCLexer && !["c", "cpp"].contains(language.id)
+                ? language.keywordGroups?["cppDocumentation"] ?? []
+                : language.keywordGroups?["type2"] ?? []
+        )
     }
 
     /// 业务作用：在固定语言定义下识别当前行并更新其后续词法状态。
@@ -170,13 +177,14 @@ public struct SyntaxScanner: Sendable {
                 state: &state
             )
         }
-        if language.id == "c" || language.id == "cpp" {
+        if language.usesSharedCLexer {
             return CLexing.highlight(
                 text,
                 base: base,
                 language: language.id,
                 keywords: keywords,
                 secondaryKeywords: secondaryKeywords,
+                globalClasses: globalClasses,
                 documentationKeywords: documentationKeywords,
                 snapshot: snapshot,
                 deadline: deadline,

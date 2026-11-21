@@ -42,7 +42,9 @@ extension CLexing {
             wasContinued || continues
             ? "identifier"
             : (keywords.contains(value)
-                ? "keyword" : (secondaryKeywords.contains(value) ? "type" : "identifier"))
+                ? "keyword"
+                : (secondaryKeywords.contains(value)
+                    ? "type" : (globalClasses.contains(value) ? "globalClass" : "identifier")))
         try emitCode(start, cursor, kind: style == "identifier" ? .text : .keyword, style: style)
     }
 

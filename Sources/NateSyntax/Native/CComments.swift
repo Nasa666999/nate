@@ -51,7 +51,7 @@ extension CLexing {
     /// 参数说明: 无。
     /// 返回：完整消费文档命令时为真，其它情况保留原字节供普通注释处理。
     mutating func documentationCommand() throws -> Bool {
-        guard state.documentation, !documentationKeywords.isEmpty, [64, 92].contains(bytes[cursor]),
+        guard state.documentation, [64, 92].contains(bytes[cursor]),
             cursor + 1 < bytes.count, ![9, 10, 11, 12, 13, 32].contains(bytes[cursor + 1])
         else {
             return false

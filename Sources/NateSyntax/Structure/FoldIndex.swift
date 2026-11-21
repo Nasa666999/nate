@@ -45,7 +45,7 @@ public struct FoldIndex: Sendable {
                 "scheme",
             ].contains(
                 language?.id ?? ""
-            )
+            ) || language?.usesSharedCLexer == true
                 ? .seconds(5) : .seconds(1)
         )
         var candidates: [FoldRegion] = []
@@ -68,7 +68,7 @@ public struct FoldIndex: Sendable {
                 deadline: deadline
             )
         }
-        else if let language, ["c", "cpp"].contains(language.id) {
+        else if let language, language.usesSharedCLexer {
             candidates = try CFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, language.id == "python" {

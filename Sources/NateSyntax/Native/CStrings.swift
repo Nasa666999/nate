@@ -9,10 +9,20 @@ extension CLexing {
         Array($0.utf8)
     }
 
-    /// 业务作用：原始字面、逐字字面和编码前缀只在完整词元起点识别，普通名称中的 R 不授予字符串身份。
+    /// 业务作用：原始字面、逐字字面和编码前缀只在完整词元起点识别，Go 另接受反引号原始正文。
     /// 参数说明: 无。
     /// 返回：合法字面起始完整消费时为真，否则原位置保留给普通词元处理。
     mutating func beginLiteral() throws -> Bool {
+        if state.language == "go", !state.preprocessor, bytes[cursor] == 96 {
+            state.rawEnding = [96]
+            state.rawMatched = 0
+            state.rawVisibleBeforeMatch = nil
+            state.expectsHeader = false
+            literalStart = cursor
+            try emit(cursor, cursor + 1, kind: .string, style: "raw")
+            cursor += 1
+            return true
+        }
         if !state.preprocessor, bytes[cursor] == 64, cursor + 1 < bytes.count, bytes[cursor + 1] == 34 {
             state.verbatim = true
             state.expectsHeader = false
@@ -99,14 +109,14 @@ extension CLexing {
         }
     }
 
-    /// 业务作用：原始字面只按精确结束定界符关闭，反斜线和源码换行均保留字面含义。
+    /// 业务作用：原始字面只按精确结束定界符关闭，Go 反引号与 C 原始字面都保留反斜线和源码换行。
     /// 参数说明: 无。
     /// 返回：推进一个原字节，完整定界符匹配后解除原始字面状态。
     mutating func rawByte() throws {
         let byte = bytes[cursor]
         state.logicalStart = false
         let previous = state.previousNonWhite
-        if state.rawMatched == 0, byte == 41 {
+        if state.rawMatched == 0, byte == state.rawEnding.first {
             state.rawVisibleBeforeMatch = previous
         }
         try emit(cursor, cursor + 1, kind: .string, style: "raw")
@@ -114,8 +124,8 @@ extension CLexing {
             state.rawMatched += 1
         }
         else {
-            state.rawMatched = byte == 41 ? 1 : 0
-            state.rawVisibleBeforeMatch = byte == 41 ? previous : nil
+            state.rawMatched = byte == state.rawEnding.first ? 1 : 0
+            state.rawVisibleBeforeMatch = byte == state.rawEnding.first ? previous : nil
         }
         cursor += 1
         if state.rawMatched == state.rawEnding.count {

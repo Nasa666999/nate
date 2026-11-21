@@ -13,6 +13,13 @@ public struct LanguageDefinition: Codable, Sendable, Identifiable {
     var identifierRules: UnicodeIdentifierRules?
     var terminalStyles: [String: LanguageTokenStyle]?
     var lexicalStyles: [String: LanguageTokenStyle]?
+
+    /// 业务作用：按内置语言身份选择共享 C 词法与折叠规则，避免把仅有相似括号的语言误归入同一语法。
+    /// 参数说明: 无。
+    /// 返回：C、C++、Java、C#、Go、Swift、ActionScript 与资源文件为真，其它语言保持独立规则。
+    public var usesSharedCLexer: Bool {
+        ["c", "cpp", "java", "cs", "go", "swift", "actionscript", "rc"].contains(id)
+    }
 }
 
 struct LanguageTokenStyle: Codable, Sendable {

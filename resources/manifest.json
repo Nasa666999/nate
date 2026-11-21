@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "4d1da6c31c9f2e338b66e5b8cea5a3fbd693a85e006b1d5ab12b634384dc5994"
+      "sha256" : "dde1249738451469211e45f464b225877604b5bc169497c444415bf35e43834f"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
