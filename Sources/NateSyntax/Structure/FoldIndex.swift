@@ -18,14 +18,14 @@ public struct FoldIndex: Sendable {
     /// 参数说明:
     /// - language: 当前内置语言资源。
     /// - udl: 独立用户语言；其折叠需采用自己的字面规则。
-    /// 返回：当前语言具有括号、缩进、配置节或差异层级规则时为真。
+    /// 返回：当前语言具有语法、注释、预处理、缩进、配置节或差异层级规则时为真。
     public static func supports(language: LanguageDefinition?, udl: UDLDefinition?) -> Bool {
         udl == nil
             && (["python", "ini", "props", "diff"].contains(language?.id ?? "")
                 || !openers(for: language?.id ?? "").isEmpty)
     }
 
-    /// 业务作用：将同一修订的词法证据按语言规则转成真实行折叠范围，未完成结构不用于隐藏正文。
+    /// 业务作用：将同一修订的词法证据按语言规则转成真实行折叠范围，缺少完整分析证据时不隐藏正文。
     /// 参数说明:
     /// - snapshot: 配对所属的完整正文快照。
     /// - brackets: 已完成且与快照身份一致的结构证据。
@@ -38,10 +38,14 @@ public struct FoldIndex: Sendable {
         }
         let allowed = Self.openers(for: language?.id ?? "")
         let deadline = ContinuousClock.now.advanced(
-            by: ["python", "ini", "props", "diff"].contains(language?.id ?? "") ? .seconds(5) : .seconds(1)
+            by: ["python", "ini", "props", "diff", "c", "cpp"].contains(language?.id ?? "")
+                ? .seconds(5) : .seconds(1)
         )
         var candidates: [FoldRegion] = []
-        if let language, language.id == "python" {
+        if let language, ["c", "cpp"].contains(language.id) {
+            candidates = try CFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
+        }
+        else if let language, language.id == "python" {
             candidates = try PythonFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, ["ini", "props"].contains(language.id) {

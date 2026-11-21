@@ -37,7 +37,7 @@
     "license": "License for Lexilla, Scintilla, and SciTE",
     "licenseFile": "Lexilla-LICENSE.txt",
     "copyright": "Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>",
-    "implementation": "C/C++ 词法类别与字面边界的 Swift 适配"
+    "implementation": "C/C++ 词法类别、字面边界与结构折叠的 Swift 适配"
   },
   "ansiLexing": {
     "project": "Lexilla",

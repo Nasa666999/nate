@@ -93,6 +93,8 @@ struct CLexing {
             let splice = spliceWidth(at: cursor)
             if splice > 0 {
                 try emitContext(cursor, cursor + splice)
+                // 块注释只接受原文中相邻的结束符；物理续行不能把分隔两行的星号与斜线拼成结束符。
+                state.blockStar = false
                 state.splicedWord = false
                 state.skipSplicedLineFeed = bytes[cursor + 1] == 13 && splice == 2
                 cursor += splice
