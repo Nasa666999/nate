@@ -29,6 +29,10 @@ public enum SyntaxPresentation {
         if let background = token.background.flatMap(ThemePalette.hexColor) {
             result[.backgroundColor] = ThemePalette.resolved(background, appearance: appearance)
         }
+        if let adapted = NativeSyntaxContrast.colors(token: token, appearance: appearance) {
+            result[.foregroundColor] = adapted.foreground
+            result[.backgroundColor] = adapted.background
+        }
         if token.fontStyle & 4 != 0 {
             result[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
