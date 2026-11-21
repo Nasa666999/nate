@@ -41,6 +41,7 @@ extension EditorWindow {
         }
         clone.font = editor.font
         clone.tabSettings = editor.tabSettings
+        clone.indentationSettings = editor.indentationSettings
         clone.language = editor.language
         clone.userLanguage = editor.userLanguage
         clone.onStatus = {

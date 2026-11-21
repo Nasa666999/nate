@@ -142,6 +142,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let digests = DigestRuntime()
     let printing = PrintRuntime()
     let tabPreferences = TabPreferencesRuntime()
+    let indentationPreferences = IndentationPreferencesRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []

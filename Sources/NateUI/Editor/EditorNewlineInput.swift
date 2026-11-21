@@ -2,7 +2,7 @@ import AppKit
 import NateCore
 
 extension EditorView {
-    /// 业务作用：真实 Return 按键按每项原选择准备换行，主光标不替其它行提供缩进。
+    /// 业务作用：真实 Return 按键按每项原选择及明确自动缩进规则准备换行。
     /// 参数说明: 无。
     /// 返回：全部目标完整提交时为真；候选、权限、原生矩形或缩进预算失败时原状态保持不变。
     @discardableResult
@@ -29,7 +29,11 @@ extension EditorView {
             else {
                 targets = nil
             }
-            let plan = try PreparedNewlineInsertion(snapshot: document.snapshot, targets: targets)
+            let plan = try PreparedNewlineInsertion(
+                snapshot: document.snapshot,
+                targets: targets,
+                inheritIndentation: indentationSettings.automatic == .inherit
+            )
             try commitPreparedEditorInput(plan.transaction)
             return true
         }

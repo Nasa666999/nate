@@ -38,6 +38,7 @@ extension ApplicationController {
             window.editor.userLanguage = userLanguages[active.language]
         }
         applyCurrentTabSettings()
+        window.setIndentationSettings(currentIndentationSettings())
         let head = active.buffer.primarySelection?.head ?? 0
         let line = active.buffer.text.lineNumber(at: head)
         let lineStart = active.buffer.text.lineStart(line)
@@ -88,7 +89,9 @@ extension ApplicationController {
             let marks: String? = syntax ?? editor.markDisplayStatus
             let temporary: String? = marks ?? editor.textHighlightDisplayStatus
             let selected: String? = temporary ?? editor.selectedTextHighlightStatus
-            let preferences: String? = selected ?? selectedTextPreferences.failure ?? tabPreferences.warning
+            let preferences: String? =
+                selected ?? selectedTextPreferences.failure ?? tabPreferences.warning
+                ?? indentationPreferences.warning
             let sidebar: String? = preferences ?? sidebarRecovery.failure
             let importing: String? = pausedWorkspace.task != nil ? "正在导入保留工作区…" : nil
             let matching: String? = sidebar ?? multipleSelection.failure

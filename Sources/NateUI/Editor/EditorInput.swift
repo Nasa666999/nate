@@ -72,7 +72,7 @@ extension EditorView {
         }
     }
 
-    /// 业务作用：逐字删除不切开扩展字形簇，多光标操作一次提交。
+    /// 业务作用：空光标逐字删除保持完整字形簇，开启缩进退格时普通前导空白退至原 Tab 停靠位。
     /// 参数说明:
     /// - forward: 是否删除光标后的字形。
     /// 返回：完整事务或合法边界上的无变化为真，候选、权限或边界准备失败为假；虚拟空白不写入正文。
@@ -110,69 +110,25 @@ extension EditorView {
                 return false
             }
         }
-        var navigation: GraphemeNavigation
-        do {
-            navigation = try GraphemeNavigation(text: document.text)
-        }
-        catch {
-            onStatus?(error.localizedDescription)
+        // 删除同样需要原完整选择和实际写入资格，拒绝期间不能先归并或重新安装元数据。
+        guard !document.isReadOnly, !document.isEditingSuspended else {
+            onStatus?("文档只读或处于编辑保护，原内容与完整状态保留。")
             return false
         }
-        var ranges: [ByteRange] = []
-        var after: [TextSelection] = []
-        for selection in document.normalizedSelections() {
-            if selection.range.isEmpty && selection.virtualColumn > 0 {
-                after.append(
-                    TextSelection(
-                        anchor: selection.head,
-                        head: selection.head,
-                        virtualColumn: max(0, selection.virtualColumn - (forward ? 0 : 1))
-                    )
-                )
-                continue
-            }
-            let range: ByteRange
-            do {
-                range =
-                    selection.range.isEmpty
-                    ? try navigation.range(at: selection.head, forward: forward) : selection.range
-            }
-            catch {
-                // 所有目标共用完整边界证据；任一目标超限时不能只删除此前已准备的其它光标范围。
-                onStatus?(error.localizedDescription)
-                return false
-            }
-            if !range.isEmpty {
-                ranges.append(range)
-            }
-            after.append(TextSelection(anchor: range.lower, head: range.lower))
-        }
-        var merged: [ByteRange] = []
-        for range in ranges.sorted(by: {
-            $0.lower < $1.lower
-        }) {
-            if let last = merged.last, range.lower <= last.upper {
-                merged[merged.count - 1] = ByteRange(last.lower, max(last.upper, range.upper))
-            }
-            else {
-                merged.append(range)
-            }
-        }
-        let edits = merged.map {
-            TextEdit($0, "")
+        guard synchronizeDocumentSelectionState() else {
+            return false
         }
         do {
-            let positions = try PositionMap(edits: edits)
-            after = after.map {
-                TextSelection(
-                    anchor: positions.map($0.anchor),
-                    head: positions.map($0.head),
-                    virtualColumn: $0.virtualColumn
-                )
-            }
-            let changed = try document.commit(edits, selectionsAfter: after, name: forward ? "向后删除" : "退格")
-            if !changed {
-                viewSelections = after
+            let plan = try PreparedTextDeletion(
+                snapshot: document.snapshot,
+                forward: forward,
+                settings: tabSettings,
+                backspaceUnindents: indentationSettings.backspaceUnindents
+            )
+            let changed = try document.commit(plan.transaction)
+            // 正文与完整结果已原子发布，界面通知之前安装实际存活身份，纯虚拟删除也沿同一状态同步。
+            if let state = document.selectionState {
+                adoptViewSelectionState(state)
             }
             refresh(reveal: true)
             if changed {

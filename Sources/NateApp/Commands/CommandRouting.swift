@@ -319,6 +319,7 @@ extension ApplicationController {
             }
         case "assistancePreferences": showAssistancePreferences()
         case "tabPreferences": showTabPreferences()
+        case "indentationPreferences": showIndentationPreferences()
         case "wrap":
             mainWindow?.editor.wrapLines.toggle()
             mainWindow?.editor.refresh()

@@ -16,4 +16,16 @@ extension EditorWindow {
             editor.tabSettings = value
         }
     }
+
+    /// 业务作用：所有当前克隆采用明确的全局自动缩进和退格规则，不修改任何既有空白或视觉边缘。
+    /// 参数说明:
+    /// - settings: 当前完整且合法的输入策略。
+    /// 返回：只改变后续按键行为，正文、选择、历史、字体和停靠宽度保持原状。
+    public func setIndentationSettings(_ settings: IndentationSettings) {
+        for view in editorSplit.arrangedSubviews {
+            if let editor = (view as? NSScrollView)?.documentView as? EditorView {
+                editor.indentationSettings = settings
+            }
+        }
+    }
 }

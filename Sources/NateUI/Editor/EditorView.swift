@@ -142,6 +142,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         }
     }
     public var showSymbols = false
+    public var indentationSettings = IndentationSettings()
     public var tabSettings = TabSettings() {
         didSet {
             if oldValue != tabSettings {

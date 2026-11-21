@@ -15,6 +15,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "设置…", "preferences", key: ",")
         add(application, "补全与参数提示…", "assistancePreferences")
         add(application, "Tab 与缩进…", "tabPreferences")
+        add(application, "自动缩进与退格…", "indentationPreferences")
         add(application, "保存时备份设置…", "saveBackupPreferences")
         add(application, "快捷键映射器…", "keyboardMap")
         application.addItem(.separator())
