@@ -115,6 +115,7 @@ public enum MacroActionPresentation {
     private static func editorName(_ command: EditorCommand) -> String {
         switch command {
         case .deleteBackward: return "向前退格"
+        case .insertTab: return "按当前规则输入 Tab"
         case .deleteForward: return "向后删除"
         case .moveLeft: return "左移一个字形"
         case .moveRight: return "右移一个字形"

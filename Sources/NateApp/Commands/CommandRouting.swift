@@ -318,6 +318,7 @@ extension ApplicationController {
                 mainWindow?.showResults(output)
             }
         case "assistancePreferences": showAssistancePreferences()
+        case "tabPreferences": showTabPreferences()
         case "wrap":
             mainWindow?.editor.wrapLines.toggle()
             mainWindow?.editor.refresh()

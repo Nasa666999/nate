@@ -59,10 +59,17 @@ extension ApplicationController {
     /// 返回：完整样式成功时提供只读快照；词法预算失效时拒绝生成部分样式输出。
     func styledSnapshot(_ document: WorkspaceDocument) throws -> NSAttributedString {
         let tree = document.buffer.text
+        let font = mainWindow?.editor.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.tabStops = []
+        paragraph.defaultTabInterval =
+            (" " as NSString).size(withAttributes: [.font: font]).width
+            * CGFloat(currentTabSettings().settings(for: document.language).width)
         let value = NSMutableAttributedString(
             string: tree.text(),
             attributes: [
-                .font: mainWindow?.editor.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                .font: font,
+                .paragraphStyle: paragraph,
                 .foregroundColor: NSColor.textColor,
             ]
         )

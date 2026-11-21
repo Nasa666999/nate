@@ -25,6 +25,7 @@ extension ApplicationController {
             return
         }
         let original = editor.viewSelections, selection = editor.selectionGeneration
+        let tabGeneration = editor.tabSettingsGeneration
         let editing = document.buffer.editingAuthorityGeneration
         let authority = SearchDocumentAuthority(document)
         let input = SearchRequestInput(findWindow)
@@ -33,7 +34,7 @@ extension ApplicationController {
             let first = document.buffer.text.lineNumber(at: selected.head)
             scope =
                 "范围：第 \(first + 1) 行当前字素列至末行，共 \(document.buffer.text.lineCount - first) 行。"
-                + "\n每个完整字形簇计一列，Tab 按四列停靠；短行补空格，Tab 内部按原停靠宽度拆分。"
+                + "\n每个完整字形簇计一列，Tab 按 \(editor.tabSettings.width) 列停靠；短行补空格，Tab 内部按原停靠宽度拆分。"
         }
         else {
             scope = "范围：\(original.count) 个明确选区，按文档从上到下替换；交叠目标归并，虚拟列仅在插入时补空白。"
@@ -46,9 +47,10 @@ extension ApplicationController {
             current === document, currentWindow === window, currentEditor === editor,
             authority.matches(document), document.buffer.editingAuthorityGeneration == editing,
             editor.selectionGeneration == selection,
+            editor.tabSettingsGeneration == tabGeneration,
             editor.viewSelections == original, input.matches(findWindow)
         else {
-            window.status.stringValue = "表单等待期间正文、选区或输入已改变，请重新打开列编辑器。"
+            window.status.stringValue = "表单等待期间正文、选区、Tab 规则或输入已改变，请重新打开列编辑器。"
             return
         }
         performColumnInsertion(value)
@@ -81,6 +83,7 @@ extension ApplicationController {
         let request = runtime.generation
         let snapshot = document.buffer.snapshot, selections = editor.viewSelections
         let selection = editor.selectionGeneration, focus = editor.focusGeneration
+        let tabWidth = editor.tabSettings.width, tabGeneration = editor.tabSettingsGeneration
         let movement = searchNavigationGeneration, query = queryGeneration
         let input = SearchRequestInput(findWindow)
         let authority = SearchDocumentAuthority(document)
@@ -94,6 +97,7 @@ extension ApplicationController {
                 authority.matches(source), !source.buffer.isReadOnly,
                 source.buffer.editingAuthorityGeneration == editing,
                 editor.selectionGeneration == selection, editor.viewSelections == selections,
+                editor.tabSettingsGeneration == tabGeneration,
                 editor.focusGeneration == focus, self.searchNavigationGeneration == movement,
                 self.queryGeneration == query, input.matches(self.findWindow)
             else {
@@ -113,7 +117,7 @@ extension ApplicationController {
                         snapshot: snapshot,
                         selections: selections,
                         value: value,
-                        tabWidth: 4
+                        tabWidth: tabWidth
                     )
                 }
                 let plan = try await withTaskCancellationHandler(

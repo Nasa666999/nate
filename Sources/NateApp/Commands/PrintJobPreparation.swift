@@ -72,7 +72,8 @@ extension ApplicationController {
             background: SyntaxPresentation.resolved(
                 .textBackgroundColor,
                 appearance: editor.effectiveAppearance
-            )
+            ),
+            tabWidth: editor.tabSettings.width
         )
         guard let info = NSPrintInfo.shared.copy() as? NSPrintInfo else {
             throw NateError.message("系统没有提供独立打印状态，原纸张设置保持原状。")

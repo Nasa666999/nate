@@ -1,4 +1,5 @@
 import AppKit
+import NateCore
 
 extension EditorWindow {
     /// 业务作用：关闭文档时释放它的全部克隆视图，避免已移出工作区的正文继续接受输入。
@@ -39,6 +40,7 @@ extension EditorWindow {
             return self.selectedTextContext(for: clone)
         }
         clone.font = editor.font
+        clone.tabSettings = editor.tabSettings
         clone.language = editor.language
         clone.userLanguage = editor.userLanguage
         clone.onStatus = {

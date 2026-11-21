@@ -141,6 +141,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let textTools = TextToolRuntime()
     let digests = DigestRuntime()
     let printing = PrintRuntime()
+    let tabPreferences = TabPreferencesRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []

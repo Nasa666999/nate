@@ -63,7 +63,6 @@ extension EditorView {
                 )
             }
             insertText(newline + indent, replacementRange: NSRange(location: NSNotFound, length: 0))
-        case "insertTab:": insertText("\t", replacementRange: NSRange(location: NSNotFound, length: 0))
         case "cancelOperation:":
             if composition != nil {
                 composition = nil

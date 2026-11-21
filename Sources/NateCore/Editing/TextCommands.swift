@@ -33,8 +33,9 @@ extension DocumentBuffer {
     /// 参数说明:
     /// - command: 用户选择的具体转换。
     /// - tabWidth: 当前语言的视觉 Tab 停靠间距。
+    /// - indentWithTabs: 增加缩进是否使用真实 Tab，空格方式使用完整停靠间距。
     /// 返回：一次命令形成一个事务，保留混合换行直到显式转换。
-    public func perform(_ command: TextCommand, tabWidth: Int = 4) throws {
+    public func perform(_ command: TextCommand, tabWidth: Int = 4, indentWithTabs: Bool = false) throws {
         if let options = command.lineSortOptions {
             let plan = try PreparedLineSort(
                 snapshot: snapshot,
@@ -91,7 +92,15 @@ extension DocumentBuffer {
         }
         let edits = try merged.map {
             range in
-            TextEdit(range, try TextTransforms.apply(command, to: text.text(in: range), tabWidth: width))
+            TextEdit(
+                range,
+                try TextTransforms.apply(
+                    command,
+                    to: text.text(in: range),
+                    tabWidth: width,
+                    indentWithTabs: indentWithTabs
+                )
+            )
         }
         var format = self.format
         if command == .eolLF {
@@ -135,8 +144,14 @@ public enum TextTransforms {
     /// - command: 变换类型。
     /// - text: 固定输入片段。
     /// - tabWidth: Tab 视觉停靠间距。
+    /// - indentWithTabs: 增加缩进使用真实 Tab，其它转换仍按实际停靠间距处理。
     /// 返回：完整转换文本，不触碰磁盘或文档历史；行排序超量或换行边界无法完整保持时失败。
-    public static func apply(_ command: TextCommand, to text: String, tabWidth: Int) throws -> String {
+    public static func apply(
+        _ command: TextCommand,
+        to text: String,
+        tabWidth: Int,
+        indentWithTabs: Bool = false
+    ) throws -> String {
         if let options = command.lineSortOptions {
             let snapshot = DocumentSnapshot(id: UUID(), revision: 0, text: PieceTree(text))
             return try PreparedLineSort(
@@ -236,7 +251,7 @@ public enum TextTransforms {
                             $0 == " " || $0 == "\t"
                         }).reversed()
                     )
-                case .indent: body = String(repeating: " ", count: tabWidth) + body
+                case .indent: body = (indentWithTabs ? "\t" : String(repeating: " ", count: tabWidth)) + body
                 case .outdent:
                     if body.first == "\t" {
                         body.removeFirst()

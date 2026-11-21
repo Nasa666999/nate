@@ -20,7 +20,8 @@ extension ApplicationController {
             return false
         }
         do {
-            try active.buffer.perform(command)
+            let tabs = mainWindow?.editor.tabSettings ?? TabSettings()
+            try active.buffer.perform(command, tabWidth: tabs.width, indentWithTabs: !tabs.useSpaces)
             if macroRecording && !macroPlaying {
                 appendRecordedMacroAction(.command(command.rawValue))
             }

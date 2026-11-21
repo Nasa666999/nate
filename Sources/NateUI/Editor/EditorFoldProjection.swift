@@ -14,6 +14,7 @@ struct EditorLayoutMetrics: Equatable {
     let gutter: CGFloat
     let wrapping: Bool
     let rightToLeft: Bool
+    let tabWidth: Int
 }
 
 extension EditorView {

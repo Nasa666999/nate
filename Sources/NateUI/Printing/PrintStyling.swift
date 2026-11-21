@@ -27,7 +27,8 @@ extension DocumentPrintView {
                 ?? NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byWordWrapping
             paragraph.tabStops = []
-            paragraph.defaultTabInterval = (" " as NSString).size(withAttributes: [.font: font]).width * 4
+            paragraph.defaultTabInterval =
+                (" " as NSString).size(withAttributes: [.font: font]).width * CGFloat(source.tabWidth)
             result.addAttribute(.paragraphStyle, value: paragraph.copy(), range: range)
             let foreground = (attributes[.foregroundColor] as? NSColor)?.usingColorSpace(.deviceRGB) ?? .black
             result.addAttribute(

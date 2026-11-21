@@ -157,6 +157,7 @@ extension EditorView {
         var hash = SHA256()
         hash.update(data: Data("NateRectangleStyles".utf8))
         hash.update(data: EditorNativeLayoutPolicy.identityData)
+        hash.update(data: Data("tabWidth=\(tabSettings.width)".utf8))
         for data in [languageResource ?? Data(), userLanguage?.originalXML ?? Data()] {
             hash.update(data: Data(String(data.count).utf8))
             hash.update(data: Data([0]))

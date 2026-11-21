@@ -142,6 +142,14 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         }
     }
     public var showSymbols = false
+    public var tabSettings = TabSettings() {
+        didSet {
+            if oldValue != tabSettings {
+                tabSettingsDidChange()
+            }
+        }
+    }
+    public internal(set) var tabSettingsGeneration = UUID()
     public var wrapLines = false {
         didSet {
             if oldValue != wrapLines {
@@ -271,7 +279,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             width: viewport.width,
             gutter: gutterWidth,
             wrapping: wrapLines,
-            rightToLeft: rtl
+            rightToLeft: rtl,
+            tabWidth: tabSettings.width
         )
         if !wrapLines || metrics != layoutMetrics {
             projection.measured.removeAll()
@@ -319,7 +328,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             tokens: tokens,
             rtl: rtl,
             appearance: effectiveAppearance,
-            viewport: wrapLines ? nil : viewport
+            viewport: wrapLines ? nil : viewport,
+            tabWidth: tabSettings.width
         )
         // 原生段落的字符与字形都占用缓存，不能仅按行数允许大量长段落同时保留。
         if layouts.count >= EditorNativeLayoutPolicy.maximumCachedLines

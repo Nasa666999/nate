@@ -12,6 +12,7 @@ struct RunCommandSourceProof {
     let documentSelection: UUID
     let viewSelection: UUID
     let editing: UUID
+    let tabGeneration: UUID
     let target: UInt64
     let name: String
     let file: URL?
@@ -30,6 +31,7 @@ struct RunCommandSourceProof {
         documentSelection = document.buffer.selectionGeneration
         viewSelection = editor.selectionGeneration
         editing = document.buffer.editingAuthorityGeneration
+        tabGeneration = editor.tabSettingsGeneration
         target = document.targetGeneration
         name = document.name
         file = document.url
@@ -46,6 +48,7 @@ struct RunCommandSourceProof {
             && document.buffer.selectionGeneration == documentSelection
             && editor.selectionGeneration == viewSelection && document.targetGeneration == target
             && document.buffer.editingAuthorityGeneration == editing
+            && editor.tabSettingsGeneration == tabGeneration
             && document.name.utf8.elementsEqual(name.utf8) && document.url == file
             && !window.hasMarkedEditorInput
     }
@@ -114,6 +117,7 @@ extension ApplicationController {
             return
         }
         let text = document.buffer.text, name = document.name, file = document.url
+        let tabWidth = editor.tabSettings.width
         let defaultDirectory =
             file?.deletingLastPathComponent()
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
@@ -151,6 +155,7 @@ extension ApplicationController {
                             displayName: name,
                             file: file,
                             requested: referenced,
+                            tabWidth: tabWidth,
                             permit: {
                                 !token.isCancelled
                             }

@@ -36,6 +36,7 @@ final class LineLayout {
     /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
     /// - viewport: 不换行时的真实可见正文矩形，省略时保留完整原生段落流程。
     /// - nativeASCII: 已证明独立 ASCII 的有界内部段落，关闭上下文连字与字距调整。
+    /// - tabWidth: 当前语言的合法 Tab 停靠间距。
     /// 返回：只读 TextKit 2 布局缓存，控制字符只在呈现副本中使用等长占位，原文与坐标保持一致。
     init(
         snapshot: DocumentSnapshot,
@@ -46,7 +47,8 @@ final class LineLayout {
         rtl: Bool,
         appearance: NSAppearance,
         viewport: NSRect? = nil,
-        nativeASCII: Bool = false
+        nativeASCII: Bool = false,
+        tabWidth: Int = 4
     ) {
         self.range = range
         horizontallyOrderedASCII = !rtl && snapshot.text.isPrintableASCII(in: range)
@@ -85,7 +87,8 @@ final class LineLayout {
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
         paragraph.defaultTabInterval =
-            max(1, NSAttributedString(string: " ", attributes: [.font: font]).size().width) * 4
+            max(1, NSAttributedString(string: " ", attributes: [.font: font]).size().width)
+            * CGFloat(tabWidth)
         paragraph.tabStops = []
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
