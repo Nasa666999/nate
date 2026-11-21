@@ -41,6 +41,7 @@ extension EditorWindow {
         }
         clone.font = editor.font
         clone.setWordBoundaries(editor.wordBoundaries)
+        clone.setDelimiterSelectionSettings(editor.delimiterSelectionSettings)
         clone.tabSettings = editor.tabSettings
         clone.indentationSettings = editor.indentationSettings
         clone.pairInsertionSettings = editor.pairInsertionSettings

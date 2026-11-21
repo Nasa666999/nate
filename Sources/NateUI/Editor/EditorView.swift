@@ -8,6 +8,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         didSet {
             if oldValue !== document {
                 clipboard.cancel()
+                boundaries.cancelDelimiterSelection()
                 // 文档生命周期改变后，旧候选和拖选不能沿用相同修订号写入另一个正文。
                 composition = nil
                 inputContext?.discardMarkedText()
@@ -57,8 +58,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var onFocus: (() -> Void)?
     public var usesDefaultKeyboardRoutes = true
-    public internal(set) var wordBoundaries = WordBoundarySettings()
-    public internal(set) var wordBoundaryGeneration = UUID()
+    let boundaries = EditorBoundaryRuntime()
     public internal(set) var selectionGeneration = UUID()
     public internal(set) var viewSelectionState: SelectionState?
     var selectionStateRevision: UInt64 = 0
@@ -207,17 +207,6 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var hasComposition: Bool {
         composition != nil
-    }
-    var displayTree: PieceTree {
-        guard !confirmingComposition, let composition, composition.revision == document.revision else {
-            return document.text
-        }
-        // 候选前的虚拟定位只进入展示树，确认前的自动保存和撤销来源仍保持原正文。
-        let displayed =
-            String(repeating: " ", count: composition.virtualPadding) + composition.text
-            + String(repeating: " ", count: composition.displaySuffix)
-        return (try? document.text.replacing(composition.originalRange, with: displayed))
-            ?? document.text
     }
 
     /// 业务作用：建立共享文档上的独立编辑视图及输入上下文。
@@ -560,6 +549,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public override func resignFirstResponder() -> Bool {
         // 交出焦点即收回等待中的导航权，后续候选收束和焦点返回不能复活旧请求。
         focusGeneration = UUID()
+        boundaries.cancelDelimiterSelection()
         clipboard.cancel()
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard finishComposition() else {
@@ -580,6 +570,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         super.viewDidMoveToWindow()
         observeBracketFocus()
         if window == nil {
+            boundaries.cancelDelimiterSelection()
             clipboard.cancel()
             cancelSelectedTextHighlights()
             brackets.pending = nil

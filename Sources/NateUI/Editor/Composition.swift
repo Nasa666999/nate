@@ -16,6 +16,21 @@ struct CompositionSession {
 }
 
 extension EditorView {
+    /// 业务作用：输入法预编辑只进入展示树，持久化和撤销始终读取原正文。
+    /// 参数说明: 无。
+    /// 返回：组合仍属于当前修订时的完整展示树，否则返回已提交正文。
+    var displayTree: PieceTree {
+        guard !confirmingComposition, let composition, composition.revision == document.revision else {
+            return document.text
+        }
+        // 候选前的虚拟定位只进入展示树，确认前的自动保存和撤销来源仍保持原正文。
+        let displayed =
+            String(repeating: " ", count: composition.virtualPadding) + composition.text
+            + String(repeating: " ", count: composition.displaySuffix)
+        return (try? document.text.replacing(composition.originalRange, with: displayed))
+            ?? document.text
+    }
+
     /// 业务作用：在独立覆盖层中显示输入法候选，自动保存只读取已提交正文。
     /// 参数说明:
     /// - string: 预编辑文字或带属性候选。
@@ -48,6 +63,8 @@ extension EditorView {
             return
         }
         if composition == nil {
+            // 候选开始即撤销旧分隔符选择；随后取消候选也不能恢复原任务的选择权。
+            boundaries.cancelDelimiterSelection()
             clipboard.cancel()
             guard synchronizeDocumentSelectionState() else {
                 return

@@ -31,6 +31,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let lineSorting = LineSortingRuntime()
     let displayPreferences = EditorDisplayPreferencesRuntime()
     let wordPreferences = WordBoundaryRuntime()
+    let delimiterPreferences = DelimiterSelectionRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),

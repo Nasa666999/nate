@@ -330,6 +330,11 @@ extension ApplicationController {
         case "indentationPreferences": showIndentationPreferences()
         case "pairPreferences": showPairPreferences()
         case "wordBoundaryPreferences": showWordBoundaryPreferences()
+        case "delimiterSelectionPreferences": showDelimiterSelectionPreferences()
+        case "selectConfiguredDelimiters":
+            if let (_, _, editor) = quickFindContext(), let position = editor.primarySelection?.head {
+                editor.selectInsideConfiguredDelimiters(at: position)
+            }
         case "wrap":
             mainWindow?.editor.wrapLines.toggle()
             mainWindow?.editor.refresh()

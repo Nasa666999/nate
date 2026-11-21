@@ -28,7 +28,7 @@ extension EditorView {
         return min(layout.range.upper, tree.byteOffset(utf16: units) ?? layout.range.lower)
     }
 
-    /// 业务作用：分别处理书签、整行选择、完整 Unicode 单词、多光标和普通文本拖选。
+    /// 业务作用：分别处理书签、整行、配置分隔符、完整 Unicode 单词、多光标和普通文本拖选。
     /// 参数说明:
     /// - event: 鼠标按下事件。
     /// 返回：建立确定的拖选锚点，边栏不修改正文，单词超出 262144 个标量时保留光标并明确反馈。
@@ -60,6 +60,7 @@ extension EditorView {
         guard finishComposition() else {
             return
         }
+        boundaries.cancelDelimiterSelection()
         window?.makeFirstResponder(self)
         let position =
             gutterX < gutterWidth ? document.text.lineStart(requestedLine) : bytePosition(at: point)
@@ -85,6 +86,12 @@ extension EditorView {
             if let region = folds.index?.region(at: row), region.startLine == row {
                 performFold(.toggle, line: row)
             }
+            return
+        }
+        if event.clickCount == 2,
+            event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command
+        {
+            selectInsideConfiguredDelimiters(at: position)
             return
         }
         clearRectangularSelection()

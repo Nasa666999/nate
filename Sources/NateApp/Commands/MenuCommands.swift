@@ -18,6 +18,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "自动缩进与退格…", "indentationPreferences")
         add(application, "括号与引号配对…", "pairPreferences")
         add(application, "词字符与边界…", "wordBoundaryPreferences")
+        add(application, "分隔符选择…", "delimiterSelectionPreferences")
         add(application, "保存时备份设置…", "saveBackupPreferences")
         add(application, "快捷键映射器…", "keyboardMap")
         application.addItem(.separator())
@@ -168,6 +169,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(search, "选择整对括号", "selectBracketPair", key: "b")
         search.items.last?.keyEquivalentModifierMask = [.command, .option]
         add(search, "选择括号内部", "selectInsideBracket", key: "B")
+        add(search, "选择配置分隔符内部", "selectConfiguredDelimiters")
         search.addItem(.separator())
         for (title, id, key) in [
             ("查找…", "find", "f"), ("替换…", "replace", "H"), ("文件中查找…", "findFiles", "F"),

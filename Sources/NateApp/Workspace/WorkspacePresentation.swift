@@ -21,6 +21,7 @@ extension ApplicationController {
             cancelIncrementalSearch(resetOrigin: true)
         }
         window.setWordBoundaries(words)
+        window.setDelimiterSelectionSettings(currentDelimiterSelectionSettings())
         findWindow?.setWordBoundaries(words)
         if wordRulesChanged {
             refreshVisibleIncrementalHighlights()
