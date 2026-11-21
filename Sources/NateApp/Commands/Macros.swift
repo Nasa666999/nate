@@ -4,6 +4,17 @@ import NatePlatform
 import NateStorage
 
 extension ApplicationController {
+    /// 业务作用：实际配对和闭合越过成功后只记录一个完整语义动作，不把生成文字重复录入普通输入。
+    /// 参数说明:
+    /// - command: 来源正文视图已执行成功的完整配对定义和真实字符。
+    /// 返回：仅实际正文焦点的当前录制追加，播放或其它焦点不追加。
+    func recordPairInput(_ command: PairInputCommand) {
+        guard macroRecording, !macroPlaying, quickFindContext() != nil else {
+            return
+        }
+        appendRecordedMacroAction(.pairInput(command))
+    }
+
     /// 业务作用：复制与剪切只在系统剪贴板及关联正文事务成功后记录当前选择语义，不保存原光标坐标。
     /// 参数说明:
     /// - cutting: 本次是否在复制成功后删除正文。
@@ -123,6 +134,11 @@ extension ApplicationController {
                     return
                 }
                 switch action {
+                case .pairInput(let command):
+                    searchContinuation = nil
+                    guard editor.submitPairInput(command) else {
+                        return
+                    }
                 case .clipboardCopy(let cutting, let line):
                     searchContinuation = nil
                     guard await editor.copySelection(cutting: cutting, copyLineWithoutSelection: line) else {

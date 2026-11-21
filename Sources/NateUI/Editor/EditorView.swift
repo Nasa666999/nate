@@ -110,6 +110,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var syntaxFailedLines: Range<Int>?
     public var onChange: (() -> Void)?
     public var onTextInput: ((String) -> Void)?
+    public var onPairInput: ((PairInputCommand) -> Void)?
     public var onEditorCommand: ((EditorCommand) -> Void)?
     public var onClipboardCapture: ((ClipboardPayload) -> Void)?
     public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
@@ -143,6 +144,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var showSymbols = false
     public var indentationSettings = IndentationSettings()
+    public var pairInsertionSettings = PairInsertionSettings()
     public var tabSettings = TabSettings() {
         didSet {
             if oldValue != tabSettings {

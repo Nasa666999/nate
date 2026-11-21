@@ -30,6 +30,18 @@ public enum MacroArchive {
             try budget.check()
             try action.validateSupport()
             switch action {
+            case .pairInput(let command):
+                writer.unsigned(UInt8(7))
+                writer.unsigned(
+                    UInt8(
+                        (command.skipExisting ? 1 : 0)
+                            | (command.input.utf8.elementsEqual(command.pair.closing.utf8) ? 2 : 0)
+                    )
+                )
+                writer.unsigned(UInt16(command.pair.opening.utf8.count))
+                try writer.append(Data(command.pair.opening.utf8))
+                writer.unsigned(UInt16(command.pair.closing.utf8.count))
+                try writer.append(Data(command.pair.closing.utf8))
             case .clipboardCopy(let cutting, let line):
                 writer.unsigned(UInt8(6))
                 writer.unsigned(UInt8((cutting ? 1 : 0) | (line ? 2 : 0)))
@@ -139,6 +151,31 @@ public enum MacroArchive {
             try budget.check()
             let action: MacroAction
             switch try reader.unsigned(UInt8.self) {
+            case 7:
+                let flags = try reader.unsigned(UInt8.self)
+                guard flags <= 3 else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                let openingSize = Int(try reader.unsigned(UInt16.self))
+                guard (1...64).contains(openingSize),
+                    let opening = String(data: try reader.bytes(openingSize), encoding: .utf8)
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                let closingSize = Int(try reader.unsigned(UInt16.self))
+                guard (1...64).contains(closingSize),
+                    let closing = String(data: try reader.bytes(closingSize), encoding: .utf8)
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                let pair = try AutomaticPair(opening: opening, closing: closing)
+                action = .pairInput(
+                    try PairInputCommand(
+                        pair: pair,
+                        input: flags & 2 == 0 ? opening : closing,
+                        skipExisting: flags & 1 != 0
+                    )
+                )
             case 6:
                 let flags = try reader.unsigned(UInt8.self)
                 guard flags <= 3 else {
@@ -226,6 +263,19 @@ public enum MacroArchive {
             }
             let action: MacroAction
             switch kind {
+            case "pairInput":
+                guard Set(fields.keys) == ["_0"], let command = fields["_0"] as? [String: Any],
+                    Set(command.keys) == ["pair", "input", "skipExisting"],
+                    let pair = command["pair"] as? [String: Any], Set(pair.keys) == ["opening", "closing"]
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                action = .pairInput(
+                    try JSONDecoder().decode(
+                        PairInputCommand.self,
+                        from: JSONSerialization.data(withJSONObject: command)
+                    )
+                )
             case "clipboardCopy":
                 guard Set(fields.keys) == ["cutting", "copyLineWithoutSelection"] else {
                     throw MacroArchiveError.unsupportedFormat

@@ -42,6 +42,7 @@ extension EditorWindow {
         clone.font = editor.font
         clone.tabSettings = editor.tabSettings
         clone.indentationSettings = editor.indentationSettings
+        clone.pairInsertionSettings = editor.pairInsertionSettings
         clone.language = editor.language
         clone.userLanguage = editor.userLanguage
         clone.onStatus = {
@@ -94,6 +95,14 @@ extension EditorWindow {
             }
             self.editor = clone
             self.onTextInput?(text)
+        }
+        clone.onPairInput = {
+            [weak self, weak clone] command in
+            guard let self, let clone else {
+                return
+            }
+            self.editor = clone
+            self.onPairInput?(command)
         }
         clone.onEditorCommand = {
             [weak self, weak clone] command in

@@ -143,6 +143,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let printing = PrintRuntime()
     let tabPreferences = TabPreferencesRuntime()
     let indentationPreferences = IndentationPreferencesRuntime()
+    let pairPreferences = PairPreferencesRuntime()
     var retainedWindows: [NSWindowController] = []
     var resultNavigation: [ResultNavigation] = []
     var resultBatches: [SearchResultBatchState] = []
@@ -444,6 +445,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
         window.onTextInput = {
             [weak self] in self?.recordTextInput($0)
+        }
+        window.onPairInput = {
+            [weak self] in self?.recordPairInput($0)
         }
         window.onEditorCommand = {
             [weak self] in self?.recordEditorCommand($0)

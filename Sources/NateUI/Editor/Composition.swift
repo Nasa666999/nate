@@ -108,6 +108,20 @@ extension EditorView {
     /// 返回：实际正文变化形成一次撤销单元，相同文字只收束选择；失效组合或准备失败保留原正文与选择。
     public func insertText(_ string: Any, replacementRange: NSRange) {
         let value = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+        if composition == nil, replacementRange.location == NSNotFound, !overwrite,
+            case .stream? = viewSelectionState?.shape
+        {
+            do {
+                if let command = try pairInsertionSettings.command(for: value) {
+                    _ = submitPairInput(command)
+                    return
+                }
+            }
+            catch {
+                onStatus?(error.localizedDescription)
+                return
+            }
+        }
         _ = commitTextInput(value, replacementRange: replacementRange)
     }
 
