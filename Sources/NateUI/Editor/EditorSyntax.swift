@@ -57,8 +57,8 @@ extension EditorView {
             syntaxGeneration = UUID()
             syntaxFailure = nil
             syntaxFailedLines = nil
-            // Python 续行与 Registry 有限前瞻依赖后续原文，正文变化后须重新确认完整前缀与检查点修订。
-            if !["python", "registry"].contains(language.id), syntaxDocument == document.id,
+            // 续行及 Registry、LaTeX 参数前瞻依赖后续原文，正文变化后须重新确认完整前缀与检查点修订。
+            if !["python", "registry", "latex"].contains(language.id), syntaxDocument == document.id,
                 syntaxLanguage == resource,
                 syntaxRevision < UInt64.max,
                 syntaxRevision + 1 == document.revision,

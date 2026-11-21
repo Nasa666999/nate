@@ -21,7 +21,9 @@ public struct FoldIndex: Sendable {
     /// 返回：当前语言具有语法、注释、预处理、缩进、配置节或差异层级规则时为真。
     public static func supports(language: LanguageDefinition?, udl: UDLDefinition?) -> Bool {
         udl == nil
-            && (["python", "ini", "props", "diff", "registry", "ihex", "tex"].contains(language?.id ?? "")
+            && (["python", "ini", "props", "diff", "registry", "ihex", "tex", "latex"].contains(
+                language?.id ?? ""
+            )
                 || !openers(for: language?.id ?? "").isEmpty)
     }
 
@@ -38,13 +40,16 @@ public struct FoldIndex: Sendable {
         }
         let allowed = Self.openers(for: language?.id ?? "")
         let deadline = ContinuousClock.now.advanced(
-            by: ["python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex"].contains(
+            by: ["python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex"].contains(
                 language?.id ?? ""
             )
                 ? .seconds(5) : .seconds(1)
         )
         var candidates: [FoldRegion] = []
-        if let language, language.id == "tex" {
+        if let language, language.id == "latex" {
+            candidates = try LatexFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
+        }
+        else if let language, language.id == "tex" {
             candidates = try TeXFolding.regions(snapshot: snapshot, deadline: deadline)
         }
         else if let language, language.id == "ihex" {
