@@ -4,7 +4,7 @@ import NateCore
 extension EditorView {
     /// 业务作用：原生键盘和宏使用相同编辑意图，只有完整成功后才记录，失败不能继续后续动作。
     /// 参数说明:
-    /// - command: 已明确识别的方向、选择、逐字删除、换行或配置化 Tab 输入意图。
+    /// - command: 已明确识别的方向、选择、删除、换行、Tab 或标签结束符输入意图。
     /// 返回：正文或选择成功完成时为真，合法边界上的无变化也为真；保护、候选或准备失败为假。
     @discardableResult
     public func performEditorCommand(_ command: EditorCommand) -> Bool {
@@ -22,6 +22,7 @@ extension EditorView {
         case .deleteForward: succeeded = delete(forward: true)
         case .insertTab: succeeded = insertConfiguredTab()
         case .insertNewline: succeeded = insertConfiguredNewline()
+        case .insertMarkupTagEnd: succeeded = insertMarkupTagEnd()
         case .moveLeft: succeeded = move(horizontal: -1)
         case .moveRight: succeeded = move(horizontal: 1)
         case .moveUp: succeeded = move(vertical: -1)
@@ -59,7 +60,9 @@ extension EditorView {
         guard succeeded else {
             return false
         }
-        if ![EditorCommand.deleteBackward, .deleteForward, .insertTab, .insertNewline].contains(command) {
+        if ![EditorCommand.deleteBackward, .deleteForward, .insertTab, .insertNewline, .insertMarkupTagEnd]
+            .contains(command)
+        {
             clearRectangularSelection()
             needsDisplay = true
             revealSelection()

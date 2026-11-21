@@ -124,6 +124,7 @@ public enum MacroActionPresentation {
         case .deleteBackward: return "向前退格"
         case .insertTab: return "按当前规则输入 Tab"
         case .insertNewline: return "按当前规则逐光标换行"
+        case .insertMarkupTagEnd: return "输入标签结束符并按当前语言闭合"
         case .deleteForward: return "向后删除"
         case .moveLeft: return "左移一个字形"
         case .moveRight: return "右移一个字形"

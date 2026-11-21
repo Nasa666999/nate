@@ -4,6 +4,7 @@ public enum EditorCommand: String, CaseIterable, Codable, Sendable {
     case deleteBackward, deleteForward
     case insertTab
     case insertNewline
+    case insertMarkupTagEnd
     case moveLeft, moveRight, moveUp, moveDown
     case extendLeft, extendRight, extendUp, extendDown
     case lineStart, lineEnd, extendLineStart, extendLineEnd

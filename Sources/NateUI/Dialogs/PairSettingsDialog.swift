@@ -22,6 +22,12 @@ public enum PairSettingsDialog {
             action: nil
         )
         skip.state = initial.skipExisting ? .on : .off
+        let markup = NSButton(
+            checkboxWithTitle: "自动插入 HTML/XML 闭合标签",
+            target: nil,
+            action: nil
+        )
+        markup.state = initial.closeMarkupTags ? .on : .off
         let heading = NSStackView(views: [
             NSTextField(labelWithString: "开端 · 单个完整字形"),
             NSTextField(labelWithString: "闭合 · 单个完整字形"),
@@ -32,14 +38,16 @@ public enum PairSettingsDialog {
         }
         let note = NSTextField(
             wrappingLabelWithString:
-                "最多 64 项，每端最多 64 个 UTF-8 字节，不能含空白或控制符。相同开端不能重复。普通选择被一对字符替换，光标位于两端之间；词内对称引号及反斜杠转义保留字面输入。覆盖模式、矩形、输入法候选、粘贴与工具原文不自动配对。"
+                "最多 64 项，每端最多 64 个 UTF-8 字节，不能含空白或控制符。相同开端不能重复。普通选择被一对字符替换，光标位于两端之间；词内对称引号及反斜杠转义保留字面输入。HTML/XML 标签结束符优先使用独立闭合规则。覆盖模式、矩形、输入法候选、粘贴与工具原文不自动配对。"
         )
         note.textColor = .secondaryLabelColor
         note.preferredMaxLayoutWidth = 520
         let status = NSTextField(wrappingLabelWithString: warning ?? "")
         status.textColor = .systemOrange
         status.preferredMaxLayoutWidth = 520
-        let form = NSStackView(views: [enabled, skip, heading, draft.scroll, draft.buttons, note, status])
+        let form = NSStackView(views: [
+            enabled, skip, markup, heading, draft.scroll, draft.buttons, note, status,
+        ])
         form.orientation = .vertical
         form.alignment = .leading
         form.spacing = 10
@@ -85,7 +93,8 @@ public enum PairSettingsDialog {
                 return try PairInsertionSettings(
                     enabled: enabled.state == .on,
                     pairs: pairs,
-                    skipExisting: skip.state == .on
+                    skipExisting: skip.state == .on,
+                    closeMarkupTags: markup.state == .on
                 )
             }
             catch {

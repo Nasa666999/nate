@@ -4,6 +4,7 @@ public struct PairInsertionSettings: Sendable, Equatable, Codable {
     public let enabled: Bool
     public let pairs: [AutomaticPair]
     public let skipExisting: Bool
+    public let closeMarkupTags: Bool
 
     /// 业务作用：未配置时保留字面输入习惯，明确启用后才使用预装括号和引号定义。
     /// 参数说明: 无。
@@ -11,6 +12,7 @@ public struct PairInsertionSettings: Sendable, Equatable, Codable {
     public init() {
         enabled = false
         skipExisting = true
+        closeMarkupTags = false
         pairs = AutomaticPair.standardPairs
     }
 
@@ -19,8 +21,11 @@ public struct PairInsertionSettings: Sendable, Equatable, Codable {
     /// - enabled: 是否对普通直接输入启用配对。
     /// - pairs: 最多六十四项、开端原字节唯一的完整定义，空列表允许暂停所有配对。
     /// - skipExisting: 是否越过当前同字节闭合符。
+    /// - closeMarkupTags: 是否独立启用 HTML/XML 开始标签结束时的闭合输入。
     /// 返回：完整且无歧义的配置；重复开端或过量列表时拒绝整份。
-    public init(enabled: Bool, pairs: [AutomaticPair], skipExisting: Bool) throws {
+    public init(enabled: Bool, pairs: [AutomaticPair], skipExisting: Bool, closeMarkupTags: Bool = false)
+        throws
+    {
         guard pairs.count <= 64,
             Set(
                 pairs.map {
@@ -33,6 +38,7 @@ public struct PairInsertionSettings: Sendable, Equatable, Codable {
         self.enabled = enabled
         self.pairs = pairs
         self.skipExisting = skipExisting
+        self.closeMarkupTags = closeMarkupTags
     }
 
     /// 业务作用：选择真实直接输入对应的定义，原字节宏及其它插入入口不调用此策略。
@@ -63,7 +69,8 @@ public struct PairInsertionSettings: Sendable, Equatable, Codable {
         try self.init(
             enabled: values.decode(Bool.self, forKey: .enabled),
             pairs: values.decode([AutomaticPair].self, forKey: .pairs),
-            skipExisting: values.decode(Bool.self, forKey: .skipExisting)
+            skipExisting: values.decode(Bool.self, forKey: .skipExisting),
+            closeMarkupTags: values.decodeIfPresent(Bool.self, forKey: .closeMarkupTags) ?? false
         )
     }
 }

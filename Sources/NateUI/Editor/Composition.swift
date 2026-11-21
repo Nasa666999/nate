@@ -108,6 +108,13 @@ extension EditorView {
     /// 返回：实际正文变化形成一次撤销单元，相同文字只收束选择；失效组合或准备失败保留原正文与选择。
     public func insertText(_ string: Any, replacementRange: NSRange) {
         let value = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+        if composition == nil, replacementRange.location == NSNotFound, !overwrite, value == ">",
+            pairInsertionSettings.closeMarkupTags, language?.id == "html" || language?.id == "xml",
+            case .stream? = viewSelectionState?.shape
+        {
+            _ = performEditorCommand(.insertMarkupTagEnd)
+            return
+        }
         if composition == nil, replacementRange.location == NSNotFound, !overwrite,
             case .stream? = viewSelectionState?.shape
         {

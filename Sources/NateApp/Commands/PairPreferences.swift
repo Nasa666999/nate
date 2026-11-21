@@ -49,8 +49,15 @@ extension ApplicationController {
                     throw NateError.message("配对设置不是 32 KiB 以内的完整归档。")
                 }
                 let archive = try JSONDecoder().decode(PairPreferencesArchive.self, from: data)
-                guard archive.format == 1 else {
+                guard archive.format == 2 || archive.format == 1 && !archive.settings.closeMarkupTags else {
                     throw NateError.message("配对设置格式尚不受支持。")
+                }
+                if archive.format == 2 {
+                    let wire = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    let fields = wire?["settings"] as? [String: Any]
+                    guard let flag = fields?["closeMarkupTags"], !(flag is NSNull) else {
+                        throw NateError.message("当前配对归档缺少完整的标签闭合开关。")
+                    }
                 }
                 runtime.settings = archive.settings
             }
@@ -68,7 +75,7 @@ extension ApplicationController {
     func savePairSettings(_ settings: PairInsertionSettings) throws {
         let data = try JSONEncoder().encode(
             PairPreferencesArchive(
-                format: 1,
+                format: 2,
                 settings: settings
             )
         )
