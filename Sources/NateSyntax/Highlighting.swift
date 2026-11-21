@@ -33,6 +33,13 @@ public struct SyntaxToken: Sendable {
         self.fontStyle = fontStyle
         self.lexicalStyle = lexicalStyle ?? kind.rawValue
     }
+
+    /// 业务作用：代码结构只使用真实代码标点，字符串、注释和宏体不能制造主代码块。
+    /// 参数说明: 无。
+    /// 返回：当前范围不应贡献代码折叠或结构缩进标点时为真。
+    public var isStructureOpaque: Bool {
+        kind == .string || kind == .comment || lexicalStyle == "c:preprocessor"
+    }
 }
 
 public struct SyntaxState: Sendable, Equatable {
@@ -41,6 +48,7 @@ public struct SyntaxState: Sendable, Equatable {
     public var diagnostic: String?
     var python = PythonLexicalState()
     var json = JSONLexicalState()
+    var c = CLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -52,6 +60,7 @@ public struct SyntaxScanner: Sendable {
     let language: LanguageDefinition
     let keywords: Set<String>
     let secondaryKeywords: Set<String>
+    let documentationKeywords: Set<String>
     let snapshot: DocumentSnapshot?
     let deadline: ContinuousClock.Instant
 
@@ -65,10 +74,13 @@ public struct SyntaxScanner: Sendable {
         self.snapshot = language.id == "python" ? snapshot : nil
         deadline = ContinuousClock.now.advanced(by: .seconds(5))
         keywords = Set(
-            language.id == "python"
+            ["python", "c", "cpp"].contains(language.id)
                 ? language.keywordGroups?["instre1"] ?? language.keywords : language.keywords
         )
-        secondaryKeywords = Set(language.keywordGroups?["instre2"] ?? [])
+        secondaryKeywords = Set(
+            language.keywordGroups?[["c", "cpp"].contains(language.id) ? "type1" : "instre2"] ?? []
+        )
+        documentationKeywords = Set(language.keywordGroups?["type2"] ?? [])
     }
 
     /// 业务作用：在固定语言定义下识别当前行并更新其后续词法状态。
@@ -78,6 +90,18 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "c" || language.id == "cpp" {
+            return CLexing.highlight(
+                text,
+                base: base,
+                language: language.id,
+                keywords: keywords,
+                secondaryKeywords: secondaryKeywords,
+                documentationKeywords: documentationKeywords,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if language.id == "json" || language.id == "json5" {
             return JSONLexing.highlight(
                 text,

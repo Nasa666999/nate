@@ -32,17 +32,17 @@ public enum SyntaxPresentation {
         return result
     }
 
-    /// 业务作用：字符串内的属性、转义和非法片段使用可辨颜色，基础字符串身份仍供折叠与配对排除。
+    /// 业务作用：内置词法的属性、类型、转义与非法片段使用可辨颜色，不改变其原有结构作用域。
     /// 参数说明:
     /// - token: 已完成词法分析的原始片段。
     /// 返回：动态系统颜色，由调用方在来源外观中解析。
     private static func lexicalColor(_ token: SyntaxToken) -> NSColor {
         switch token.lexicalStyle {
-        case "json:property":
+        case "json:property", "c:type", "c:documentationKeyword":
             return .systemTeal
-        case "json:escape":
+        case "json:escape", "c:escape":
             return .systemOrange
-        case "json:invalid":
+        case "json:invalid", "c:invalid", "c:documentationInvalid":
             return .systemRed
         default:
             return ThemePalette.color(token.kind)

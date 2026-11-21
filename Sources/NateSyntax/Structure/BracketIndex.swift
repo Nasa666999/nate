@@ -111,11 +111,11 @@ public struct BracketIndex: Sendable {
                     tokenIndex += 1
                 }
                 var style = plain
-                var kind = SyntaxKind.text
+                var opaque = false
                 if tokenIndex < ordered.count, ordered[tokenIndex].range.lower <= position {
                     let token = ordered[tokenIndex]
                     style = token.lexicalStyle
-                    kind = token.kind
+                    opaque = token.isStructureOpaque
                 }
                 let key = BracketClass(
                     opener: opener,
@@ -138,7 +138,7 @@ public struct BracketIndex: Sendable {
                         position: previous,
                         partner: position
                     )
-                    if kind != .comment && kind != .string {
+                    if !opaque {
                         pairs.append(
                             StructuralBracketPair(
                                 range: ByteRange(previous, position + 1),

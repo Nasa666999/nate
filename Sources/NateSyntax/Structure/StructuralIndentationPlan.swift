@@ -86,7 +86,9 @@ public struct StructuralIndentationPlan: Sendable {
             }
             consumed += row.count
             let source = snapshot.text.text(in: row)
-            let startsInBlockComment = !state.blockEnd.isEmpty || state.json.blockComment
+            let startsInBlockComment =
+                !state.blockEnd.isEmpty || state.json.blockComment || state.c.blockComment
+            let startsInDirective = state.c.preprocessor
             let tokens = scanner.highlight(source, base: row.lower, state: &state)
             guard state.diagnostic == nil else {
                 throw NateError.message(state.diagnostic ?? "语言缩进缺少完整词法状态。")
@@ -95,11 +97,16 @@ public struct StructuralIndentationPlan: Sendable {
                 continue
             }
             var code = Array(source.utf8)
-            for token in tokens where token.kind == .comment || token.kind == .string {
+            let directiveLine =
+                startsInDirective
+                || tokens.contains {
+                    $0.lexicalStyle == "c:preprocessor"
+                }
+            for token in tokens where token.isStructureOpaque {
                 let lower = token.range.lower - row.lower
                 let upper = token.range.upper - row.lower
-                // 字符串是完整的不透明表达式，不能把它移除后让前面的块标点冒充行尾；注释不制造代码。
-                let replacement: UInt8 = token.kind == .comment ? 32 : 127
+                // 字符串是完整的不透明表达式，不能让前面的标点冒充行尾；注释与宏体不制造主代码块。
+                let replacement: UInt8 = token.kind == .string ? 127 : 32
                 for index in lower..<upper {
                     if index & 255 == 0 {
                         try Self.check(deadline: deadline, permit: permit)
@@ -152,7 +159,7 @@ public struct StructuralIndentationPlan: Sendable {
                 else {
                     insideBlockComment = false
                 }
-                if insideString || insideBlockComment {
+                if insideString || insideBlockComment || directiveLine {
                     output[target] = .inherit
                 }
                 else if identifier == "python" {
