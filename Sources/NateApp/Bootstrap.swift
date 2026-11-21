@@ -32,6 +32,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let displayPreferences = EditorDisplayPreferencesRuntime()
     let wordPreferences = WordBoundaryRuntime()
     let delimiterPreferences = DelimiterSelectionRuntime()
+    let dateTimePreferences = DateTimePreferencesRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),

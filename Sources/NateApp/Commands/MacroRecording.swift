@@ -125,6 +125,7 @@ extension ApplicationController {
             "pasteHTMLSource", "pasteRTFSource", "pasteBinary", "copyBinary", "cutBinary",
             "lineSort", "cancelLineSort", "selectionChanged", "typingAssistance", "compositionBegan",
             "compositionEnded", "clipboardBegan", "unrecordedEditorCommand",
+            "dateTime", "dateTimeShort", "dateTimeLong",
         ]
         guard !quiet.contains(id) else {
             return

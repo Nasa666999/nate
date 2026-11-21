@@ -331,6 +331,7 @@ extension ApplicationController {
         case "pairPreferences": showPairPreferences()
         case "wordBoundaryPreferences": showWordBoundaryPreferences()
         case "delimiterSelectionPreferences": showDelimiterSelectionPreferences()
+        case "dateTimePreferences": showDateTimePreferences()
         case "selectConfiguredDelimiters":
             if let (_, _, editor) = quickFindContext(), let position = editor.primarySelection?.head {
                 editor.selectInsideConfiguredDelimiters(at: position)
@@ -395,8 +396,9 @@ extension ApplicationController {
             refreshUI()
         case "multipleSelectionCase", "multipleSelectionWord": toggleMultipleSelectionOption(id)
         case "moveLineUp", "moveLineDown", "blankAbove", "blankBelow": lineCommand(id)
-        case "dateTime":
-            insert(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .medium))
+        case "dateTime": insertDateTime(.custom)
+        case "dateTimeShort": insertDateTime(.short)
+        case "dateTimeLong": insertDateTime(.long)
         case "columnEditor": columnEditor()
         case "rectangleLeft", "rectangleRight", "rectangleUp", "rectangleDown":
             guard let (_, _, editor) = quickFindContext() else {
