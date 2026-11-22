@@ -86,9 +86,15 @@ public struct BracketIndex: Sendable {
             let text = snapshot.text.text(in: range)
             let tokens =
                 udl.map {
-                    UDLLexer.highlight(text, base: range.lower, definition: $0, state: &user)
+                    UDLLexer.highlight(
+                        text,
+                        base: range.lower,
+                        definition: $0,
+                        state: &user,
+                        deadline: deadline
+                    )
                 } ?? scanner?.highlight(text, base: range.lower, state: &native) ?? []
-            if let diagnostic = native.diagnostic {
+            if let diagnostic = native.diagnostic ?? user.diagnostic {
                 // 词法状态失去完整证据时不能把余下字符串或表达式当成可导航结构。
                 throw NateError.message(diagnostic)
             }

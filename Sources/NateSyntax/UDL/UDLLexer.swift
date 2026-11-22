@@ -10,6 +10,8 @@ public struct UDLContext: Sendable, Equatable {
 
 public struct UDLState: Sendable, Equatable {
     var contexts: [UDLContext] = []
+    var ruleGeneration: UUID?
+    public fileprivate(set) var diagnostic: String?
 
     /// 业务作用：建立独立 UDL 行首状态，供跨行分隔符和注释传播。
     /// 参数说明: 无。
@@ -24,16 +26,71 @@ public enum UDLLexer {
     /// - base: 文档内字节起点。
     /// - definition: 已校验完整 UDL。
     /// - state: 安全边界处的跨行状态。
-    /// 返回：有顺序的样式范围，未闭合上下文传给后续片段。
-    public static func highlight(_ text: String, base: Int, definition: UDLDefinition, state: inout UDLState)
-        -> [SyntaxToken]
-    {
+    /// - deadline: 所属分析的共同截止，省略时本行仍至多五秒。
+    /// - permit: 整份分析继续准备的资格。
+    /// 返回：完整样式与上下文一次发布；取消、容量或规则代次不符时保留原上下文并记录原因。
+    public static func highlight(
+        _ text: String,
+        base: Int,
+        definition: UDLDefinition,
+        state: inout UDLState,
+        deadline: ContinuousClock.Instant? = nil,
+        permit: @escaping @Sendable () -> Bool = {
+            true
+        }
+    ) -> [SyntaxToken] {
+        guard state.diagnostic == nil else {
+            return []
+        }
+        let budget = UDLScanBudget(deadline: deadline, permit: permit)
+        do {
+            try budget.check()
+            guard text.utf8.count <= 1_048_576, base >= 0, base <= Int.max - text.utf8.count,
+                state.contexts.count <= 128,
+                state.ruleGeneration == nil || state.ruleGeneration == definition.generation
+            else {
+                throw NateError.message("UDL 行范围、嵌套容量或规则代次不一致。")
+            }
+            try budget.validate(definition)
+            var candidate = state
+            let tokens = try scan(text, base: base, definition: definition, state: &candidate, budget: budget)
+            try budget.check()
+            candidate.ruleGeneration = definition.generation
+            state = candidate
+            return tokens
+        }
+        catch {
+            // 先保留完整旧上下文再报告失败，不能截去较早开端或发布已完成的部分样式。
+            state.diagnostic = error.localizedDescription
+            return []
+        }
+    }
+
+    /// 业务作用：在独立候选状态内执行全部字面规则，成功前不改动调用方的有效行首状态。
+    /// 参数说明:
+    /// - text: 当前完整物理行或明确连续片段。
+    /// - base: 原文起点。
+    /// - definition: 本次固定规则代次。
+    /// - state: 仅本次扫描使用的候选状态。
+    /// - budget: 规则索引、匹配及输出共用的预算。
+    /// 返回：全部范围和上下文完整时返回样式，否则抛错并由入口保留旧状态。
+    private static func scan(
+        _ text: String,
+        base: Int,
+        definition: UDLDefinition,
+        state: inout UDLState,
+        budget: UDLScanBudget
+    ) throws -> [SyntaxToken] {
         let bytes = Array(text.utf8)
         let comments = indexed(definition.lists["Comments"] ?? [])
         let delimiters = indexed(definition.lists["Delimiters"] ?? [])
         var tokens: [SyntaxToken] = []
         var i = 0
         while i < bytes.count {
+            try budget.consume()
+            guard tokens.count <= 65_536 else {
+                throw NateError.message("UDL 单行词法片段超过 65536 个。")
+            }
             let start = i
             let context = state.contexts.last
             let nesting =
@@ -41,7 +98,13 @@ public enum UDLLexer {
                     definition.styles[$0.style]?.nesting
                 } ?? UInt32.max
             if let context,
-                let escape = longest(context.escapes, bytes: bytes, at: i, ignoreCase: definition.caseIgnored)
+                let escape = try budget.longest(
+                    key: context.style + ":escape",
+                    patterns: context.escapes,
+                    bytes: bytes,
+                    offset: i,
+                    ignoreCase: definition.caseIgnored
+                )
             {
                 i = min(bytes.count, i + escape.utf8.count)
                 if i < bytes.count {
@@ -60,7 +123,13 @@ public enum UDLLexer {
                 continue
             }
             if let context,
-                let end = longest(context.ends, bytes: bytes, at: i, ignoreCase: definition.caseIgnored)
+                let end = try budget.longest(
+                    key: context.style + ":end",
+                    patterns: context.ends,
+                    bytes: bytes,
+                    offset: i,
+                    ignoreCase: definition.caseIgnored
+                )
             {
                 i += end.utf8.count
                 emit(
@@ -79,10 +148,11 @@ public enum UDLLexer {
             }
             var entered = false
             if nesting & 0x100 != 0,
-                let opener = longest(
-                    comments[3] ?? [],
+                let opener = try budget.longest(
+                    key: "Comments3",
+                    patterns: comments[3] ?? [],
                     bytes: bytes,
-                    at: i,
+                    offset: i,
                     ignoreCase: definition.caseIgnored
                 )
             {
@@ -93,10 +163,11 @@ public enum UDLLexer {
                 entered = true
             }
             else if nesting & 0x200 != 0,
-                let opener = longest(
-                    comments[0] ?? [],
+                let opener = try budget.longest(
+                    key: "Comments0",
+                    patterns: comments[0] ?? [],
                     bytes: bytes,
-                    at: i,
+                    offset: i,
                     ignoreCase: definition.caseIgnored
                 )
             {
@@ -115,10 +186,11 @@ public enum UDLLexer {
             }
             else {
                 for group in 0..<8 where nesting & (1 << group) != 0 {
-                    if let opener = longest(
-                        delimiters[group * 3] ?? [],
+                    if let opener = try budget.longest(
+                        key: "Delimiter\(group)",
+                        patterns: delimiters[group * 3] ?? [],
                         bytes: bytes,
-                        at: i,
+                        offset: i,
                         ignoreCase: definition.caseIgnored
                     ) {
                         let ends = delimiters[group * 3 + 2] ?? []
@@ -140,7 +212,7 @@ public enum UDLLexer {
             }
             if entered {
                 if state.contexts.count > 128 {
-                    state.contexts.removeFirst(state.contexts.count - 128)
+                    throw NateError.message("UDL 嵌套超过 128 层，原上下文保留。")
                 }
                 emit(
                     &tokens,
@@ -154,10 +226,11 @@ public enum UDLLexer {
             var matched = false
             for group in 1...8 where nesting & (1 << (group + 9)) != 0 {
                 if i == 0 || !word(bytes[i - 1]),
-                    let keyword = longest(
-                        definition.lists["Keywords\(group)"] ?? [],
+                    let keyword = try budget.longest(
+                        key: "Keywords\(group)",
+                        patterns: definition.lists["Keywords\(group)"] ?? [],
                         bytes: bytes,
-                        at: i,
+                        offset: i,
                         ignoreCase: definition.caseIgnored
                     )
                 {
@@ -180,10 +253,11 @@ public enum UDLLexer {
                 continue
             }
             for group in 1...2 where nesting & (group == 1 ? 0x1000000 : 0x2000000) != 0 {
-                if let op = longest(
-                    definition.lists["Operators\(group)"] ?? [],
+                if let op = try budget.longest(
+                    key: "Operators\(group)",
+                    patterns: definition.lists["Operators\(group)"] ?? [],
                     bytes: bytes,
-                    at: i,
+                    offset: i,
                     ignoreCase: definition.caseIgnored
                 ) {
                     let end = i + op.utf8.count
@@ -209,6 +283,7 @@ public enum UDLLexer {
             if nesting & 0x4000000 != 0, (48...57).contains(bytes[i]), i == 0 || !word(bytes[i - 1]) {
                 i += 1
                 while i < bytes.count && ((48...57).contains(bytes[i]) || [46, 44, 95].contains(bytes[i])) {
+                    try budget.consume()
                     i += 1
                 }
                 emit(&tokens, start: base + start, end: base + i, style: "NUMBERS", definition: definition)
@@ -229,6 +304,9 @@ public enum UDLLexer {
         state.contexts.removeAll {
             $0.lineOnly
         }
+        guard tokens.count <= 65_536 else {
+            throw NateError.message("UDL 单行词法片段超过 65536 个。")
+        }
         return tokens
     }
 
@@ -244,36 +322,6 @@ public enum UDLLexer {
             }
         }
         return result
-    }
-
-    /// 业务作用：冲突的字面起止标记按最长匹配后原定义顺序确定。
-    /// 参数说明:
-    /// - patterns: 当前组允许的标记。
-    /// - bytes: 输入原字节。
-    /// - at: 当前字节位置。
-    /// - ignoreCase: UDL 大小写选项。
-    /// 返回：实际匹配的规则；不匹配为空。
-    static func longest(_ patterns: [String], bytes: [UInt8], at: Int, ignoreCase: Bool) -> String? {
-        patterns.enumerated().filter {
-            _,
-            pattern in
-            let count = pattern.utf8.count
-            guard count > 0, at + count <= bytes.count else {
-                return false
-            }
-            let slice = bytes[at..<(at + count)]
-            if !ignoreCase {
-                return slice.elementsEqual(pattern.utf8)
-            }
-            return String(decoding: slice, as: UTF8.self).lowercased().utf8.elementsEqual(
-                pattern.lowercased().utf8
-            )
-        }.max {
-            a,
-            b in
-            a.element.utf8.count == b.element.utf8.count
-                ? a.offset > b.offset : a.element.utf8.count < b.element.utf8.count
-        }?.element
     }
 
     /// 业务作用：连续相同样式合并输出，避免按字节生成大量呈现对象。
@@ -304,7 +352,8 @@ public enum UDLLexer {
         var start = start
         if let previous = tokens.last, previous.range.upper == start, previous.kind == kind,
             previous.lexicalStyle == lexicalStyle,
-            previous.foreground == rule?.foreground, previous.fontStyle == rule?.fontStyle ?? 0
+            previous.foreground == rule?.foreground, previous.background == rule?.background,
+            previous.fontStyle == rule?.fontStyle ?? 0
         {
             start = previous.range.lower
             tokens.removeLast()
@@ -314,6 +363,7 @@ public enum UDLLexer {
                 range: ByteRange(start, end),
                 kind: kind,
                 foreground: rule?.foreground,
+                background: rule?.background,
                 fontStyle: rule?.fontStyle ?? 0,
                 lexicalStyle: lexicalStyle
             )

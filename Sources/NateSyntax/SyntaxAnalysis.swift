@@ -60,9 +60,15 @@ public struct SyntaxAnalysis: Sendable {
             let text = snapshot.text.text(in: range)
             let tokens =
                 udl.map {
-                    UDLLexer.highlight(text, base: range.lower, definition: $0, state: &user)
+                    UDLLexer.highlight(
+                        text,
+                        base: range.lower,
+                        definition: $0,
+                        state: &user,
+                        deadline: deadline
+                    )
                 } ?? scanner.highlight(text, base: range.lower, state: &native)
-            if let diagnostic = native.diagnostic {
+            if let diagnostic = native.diagnostic ?? user.diagnostic {
                 throw NateError.message(diagnostic)
             }
             if visible.contains(line) {

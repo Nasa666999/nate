@@ -10,14 +10,47 @@ public struct UDLStyle: Sendable {
 }
 
 public struct UDLDefinition: Sendable {
-    public var name: String
-    public var extensions: [String]
-    public var caseIgnored: Bool
-    public var prefix: Set<Int>
-    public var lists: [String: [String]]
-    public var styles: [String: UDLStyle]
-    public var originalXML: Data
-    public var diagnostics: [String]
+    public private(set) var generation = UUID()
+    public var name: String {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var extensions: [String] {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var caseIgnored: Bool {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var prefix: Set<Int> {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var lists: [String: [String]] {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var styles: [String: UDLStyle] {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var originalXML: Data {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var diagnostics: [String] {
+        didSet {
+            generation = UUID()
+        }
+    }
     public var id: String {
         "udl:" + name
     }

@@ -93,7 +93,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     }
     public var userLanguage: UDLDefinition? {
         didSet {
-            if oldValue?.originalXML != userLanguage?.originalXML {
+            if oldValue?.generation != userLanguage?.generation {
+                // 同一 XML 的运行时规则或样式也可能改变，旧状态与视觉目标不能沿原名称继续取得权限。
                 updateRectangleStyleIdentity()
                 invalidateSyntax()
             }

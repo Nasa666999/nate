@@ -163,6 +163,9 @@ extension EditorView {
             hash.update(data: Data([0]))
             hash.update(data: data)
         }
+        if let userLanguage {
+            UDLResourceIdentity.update(userLanguage, hash: &hash)
+        }
         let digest = hash.finalize().map {
             String(format: "%02x", $0)
         }.joined()
