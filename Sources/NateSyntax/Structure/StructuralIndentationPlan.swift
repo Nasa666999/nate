@@ -74,7 +74,7 @@ public struct StructuralIndentationPlan: Sendable {
         guard lastLine < 1_048_576 else {
             throw NateError.message("语言缩进的前置词法传播超过一百万行。")
         }
-        let scanner = SyntaxScanner(language: language, snapshot: snapshot)
+        let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
         let supportsControlLines =
             identifier != "python"
             && !["perl", "rust", "powershell", "json", "json5"].contains(identifier)

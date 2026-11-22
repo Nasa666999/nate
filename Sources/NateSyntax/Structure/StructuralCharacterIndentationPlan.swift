@@ -69,7 +69,7 @@ public struct StructuralCharacterIndentationPlan: Sendable {
         guard lastLine < 1_048_576 else {
             throw NateError.message("结构字符的前置词法传播超过一百万行。")
         }
-        let scanner = SyntaxScanner(language: language, snapshot: snapshot)
+        let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
         var lexical = SyntaxState()
         var stack: [(byte: UInt8, line: Int)] = []
         var previous: (line: Int, increase: Bool)?
