@@ -58,47 +58,18 @@ extension ApplicationController {
     /// - document: 要读取的文档。
     /// 返回：按来源外观固定语法前景、背景和字体的只读快照；词法预算失效时拒绝部分输出。
     func styledSnapshot(_ document: WorkspaceDocument) throws -> NSAttributedString {
-        let tree = document.buffer.text
         let font = mainWindow?.editor.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let appearance = mainWindow?.editor.effectiveAppearance ?? NSApp.effectiveAppearance
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.tabStops = []
-        paragraph.defaultTabInterval =
-            (" " as NSString).size(withAttributes: [.font: font]).width
-            * CGFloat(currentTabSettings().settings(for: document.language).width)
-        let value = NSMutableAttributedString(
-            string: tree.text(),
-            attributes: [
-                .font: font,
-                .paragraphStyle: paragraph,
-                .foregroundColor: NSColor.textColor,
-            ]
+        return try styledPrintSnapshot(
+            snapshot: document.buffer.snapshot,
+            range: ByteRange(0, document.buffer.text.byteCount),
+            language: document.language,
+            udl: outputUserLanguage(document, appearance: appearance),
+            font: font,
+            appearance: appearance,
+            rtl: mainWindow?.editor.rtl ?? false,
+            color: .document
         )
-        if let language = registry?.language(document.language) {
-            var state = SyntaxState()
-            let scanner = SyntaxScanner(language: language, snapshot: document.buffer.snapshot)
-            for line in 0..<tree.lineCount {
-                let range = tree.lineRange(line)
-                for token in scanner.highlight(
-                    tree.text(in: range),
-                    base: range.lower,
-                    state: &state
-                ) {
-                    guard let ns = tree.nsRange(token.range) else {
-                        continue
-                    }
-                    value.addAttributes(
-                        SyntaxPresentation.attributes(token: token, font: font, appearance: appearance),
-                        range: ns
-                    )
-                }
-                if let diagnostic = state.diagnostic {
-                    // 不完整词法状态不能冒充可交付样式，打印和导出在任何外部写入前停止。
-                    throw NateError.message(diagnostic)
-                }
-            }
-        }
-        return value
     }
 
     /// 业务作用：HTML/RTF 导出保留语法色，成功不改变原文件关联或保存点。

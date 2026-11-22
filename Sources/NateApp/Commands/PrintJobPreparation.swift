@@ -57,6 +57,7 @@ extension ApplicationController {
             snapshot: snapshot,
             range: range,
             language: document.language,
+            udl: editor.userLanguage,
             font: editor.font,
             appearance: editor.effectiveAppearance,
             rtl: editor.rtl,
