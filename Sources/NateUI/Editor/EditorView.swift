@@ -202,6 +202,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         fontMetrics.height(font: font, definition: userLanguage)
     }
     let fontMetrics = UDLFontMetrics()
+    var geometryLayoutWidth: CGFloat?
     public override var isFlipped: Bool {
         true
     }
@@ -329,8 +330,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             range: range,
             font: font,
             fontZoomAdjustment: fontZoomAdjustment,
-            width: wrapLines
-                ? max(80, (enclosingScrollView?.contentSize.width ?? 900) - gutterWidth - 16) : 1_000_000,
+            virtualSpaceFont: defaultVirtualSpaceFont,
+            width: nativeBodyLayoutWidth,
             tokens: tokens,
             rtl: rtl,
             appearance: effectiveAppearance,

@@ -206,9 +206,17 @@ extension EditorView {
             $0.selection.virtualColumn > 0
         }
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        if allVirtual {
+            return try prepareVirtualRectangleDeletion(
+                snapshot: snapshot,
+                state: state,
+                shape: shape,
+                forward: forward,
+                deadline: deadline
+            )
+        }
         var navigation = try GraphemeNavigation(text: snapshot.text)
         var targets: [SelectionInsertionTarget] = []
-        var virtual: [UUID: Int] = [:]
         for entry in state.entries {
             try Task.checkCancellation()
             guard ContinuousClock.now < deadline else {
@@ -218,7 +226,6 @@ extension EditorView {
             let target: SelectionInsertionTarget
             if entry.selection.virtualColumn > 0 {
                 let column = max(0, entry.selection.virtualColumn - (forward ? 0 : 1))
-                virtual[entry.id] = column
                 target = SelectionInsertionTarget(
                     id: entry.id,
                     range: entry.selection.range,
@@ -245,35 +252,10 @@ extension EditorView {
             }
             targets.append(target)
         }
-        let after: SelectionShape
-        if allVirtual {
-            let shift = forward ? 0 : rectangleColumnWidth
-            let edges = try shape.edges.map {
-                try SelectionVirtualEdge(
-                    selectionID: $0.selectionID,
-                    leadingColumns: virtual[$0.selectionID] ?? 0,
-                    projection: $0.projection
-                )
-            }
-            after = .rectangle(
-                try RectangleSelectionShape(
-                    anchorX: max(0, shape.anchorX - shift),
-                    headX: max(0, shape.headX - shift),
-                    zeroWidth: true,
-                    edges: edges,
-                    anchorID: shape.anchorID,
-                    headID: shape.headID,
-                    layoutContext: shape.layoutContext
-                )
-            )
-        }
-        else {
-            after = .stream
-        }
         return try PreparedSelectionInsertion(
             snapshot: snapshot,
             targets: targets,
-            shapeAfter: after,
+            shapeAfter: .stream,
             name: "列删除"
         ).transaction
     }
@@ -367,6 +349,7 @@ extension EditorView {
     /// - x: 不含边栏的视觉横坐标。
     /// 返回：完整字节边界或 Tab 内按空格宽度取最近列的意图，尚不展开 Tab。
     private func rectangleEditingEdge(row: Int, x: Double) throws -> RectangleEditingEdge {
+        try requireGeometrySyntax(row: row)
         let body = document.text.lineRange(row, includeEnding: false)
         let layout = layoutLine(row)
         // 原生字形缺席时不授予视觉列写入资格，已有选择和正文必须完整保留。
@@ -399,7 +382,7 @@ extension EditorView {
                 continue
             }
             let span = Double(last.minX - first.minX)
-            let measured = abs(span) / rectangleColumnWidth
+            let measured = abs(span) / layout.columnWidth(at: units - layout.originUTF16)
             guard measured.isFinite, measured > 0, measured <= 1_000_000 else {
                 throw NateError.message("Tab 视觉跨度超过一百万列，未展开部分空白。")
             }

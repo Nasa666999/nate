@@ -11,9 +11,7 @@ extension EditorView {
             fontName: font.fontName,
             pointSize: Double(font.pointSize),
             fontTraits: UInt32(truncatingIfNeeded: font.fontDescriptor.symbolicTraits.rawValue),
-            layoutWidth: wrapLines
-                ? Double(max(80, (enclosingScrollView?.contentSize.width ?? 900) - gutterWidth - 16))
-                : 1_000_000,
+            layoutWidth: Double(nativeBodyLayoutWidth),
             rightToLeft: rtl,
             styleIdentity: rectangleStyleIdentity
         )

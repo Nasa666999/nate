@@ -18,6 +18,7 @@ public struct SyntaxAnalysis: Sendable {
     /// - visible: 需要保留样式的逻辑行范围。
     /// - startLine: 可信行首检查点。
     /// - initial: 与该检查点匹配的词法状态。
+    /// - deadline: 所属操作的共同截止，为空时最多五秒，调用方不能借新分析延长既有期限。
     /// 返回：有界可见行样式及稀疏行首状态，取消不发布部分配置。
     public static func analyze(
         snapshot: DocumentSnapshot,
@@ -25,7 +26,8 @@ public struct SyntaxAnalysis: Sendable {
         udl: UDLDefinition?,
         visible: Range<Int>,
         startLine: Int,
-        initial: LexicalState?
+        initial: LexicalState?,
+        deadline: ContinuousClock.Instant? = nil
     ) throws -> SyntaxAnalysis {
         var native = SyntaxState()
         var user = UDLState()
@@ -37,13 +39,17 @@ public struct SyntaxAnalysis: Sendable {
         }
         var checkpoints: [Int: LexicalState] = [:]
         var output: [Int: [SyntaxToken]] = [:]
-        let scanner = SyntaxScanner(language: language, snapshot: snapshot)
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        let taskDeadline = min(deadline ?? .now.advanced(by: .seconds(5)), .now.advanced(by: .seconds(5)))
+        try Task.checkCancellation()
+        guard ContinuousClock.now < taskDeadline else {
+            throw NateError.message("当前高亮任务已超过所属操作截止，未准备部分样式。")
+        }
+        let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: taskDeadline)
         var consumed = 0
         var retainedTokens = 0
         for line in startLine..<min(snapshot.text.lineCount, visible.upperBound) {
             try Task.checkCancellation()
-            guard ContinuousClock.now < deadline, consumed <= 64 * 1024 * 1024 else {
+            guard ContinuousClock.now < taskDeadline else {
                 throw NateError.message("当前高亮任务超出资源预算，正文仍可编辑；请在较近位置继续查看。")
             }
             if line % 128 == 0 {
@@ -53,10 +59,11 @@ public struct SyntaxAnalysis: Sendable {
                 }
             }
             let range = snapshot.text.lineRange(line)
-            consumed += range.count
-            guard range.count <= 1_048_576 else {
-                throw NateError.message("当前高亮暂停：单行超过 1 MB，无法确认后续词法状态。")
+            // 单次范围在复制前纳入共同容量，最后一行也不能越过总量后再发布样式。
+            guard range.count <= 1_048_576, consumed <= 64 * 1024 * 1024 - range.count else {
+                throw NateError.message("当前高亮暂停：单行超过 1 MiB 或总量超过 64 MiB，无法确认后续词法状态。")
             }
+            consumed += range.count
             let text = snapshot.text.text(in: range)
             let tokens =
                 udl.map {
@@ -66,7 +73,7 @@ public struct SyntaxAnalysis: Sendable {
                         definition: $0,
                         state: &user,
                         source: snapshot,
-                        deadline: deadline
+                        deadline: taskDeadline
                     )
                 } ?? scanner.highlight(text, base: range.lower, state: &native)
             if let diagnostic = native.diagnostic ?? user.diagnostic {
@@ -79,6 +86,11 @@ public struct SyntaxAnalysis: Sendable {
                 retainedTokens += tokens.count
                 output[line] = tokens
             }
+        }
+        try Task.checkCancellation()
+        // 最后一行也须在共同期限内完成，过期样式不能借循环已经结束而取得发布权。
+        guard ContinuousClock.now < taskDeadline else {
+            throw NateError.message("完整高亮已超过所属操作截止，未发布部分样式。")
         }
         return SyntaxAnalysis(
             tokens: output,

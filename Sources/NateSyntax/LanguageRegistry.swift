@@ -20,6 +20,21 @@ public struct LanguageDefinition: Codable, Sendable, Identifiable {
     public var usesSharedCLexer: Bool {
         ["c", "cpp", "java", "cs", "go", "swift", "actionscript", "rc"].contains(id)
     }
+
+    /// 业务作用：几何只等待可能改变字体或隐藏字符的内置样式，纯颜色资源不阻断原生列定位。
+    /// 参数说明: 无。
+    /// 返回：ANSI 控制序列或实际字体装饰可能改变字形时为真，其它内置资源的基础字体已具备完整证据。
+    public var requiresLexicalGeometry: Bool {
+        if ["escseq", "errorlist"].contains(id) {
+            return true
+        }
+        return lexicalStyles?.values.contains(where: {
+            $0.fontStyle & 3 != 0
+        }) == true
+            || terminalStyles?.values.contains(where: {
+                $0.fontStyle & 3 != 0
+            }) == true
+    }
 }
 
 struct LanguageTokenStyle: Codable, Sendable {

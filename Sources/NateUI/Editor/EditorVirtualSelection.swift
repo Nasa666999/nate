@@ -87,7 +87,7 @@ extension EditorView {
     /// 返回：相对真实原生光标的水平偏移，不向正文写入空格。
     func selectionCaretOffset(for selection: TextSelection) -> CGFloat {
         guard !hasStaleRectangleLayout else {
-            return CGFloat(selection.virtualColumn) * CGFloat(rectangleColumnWidth)
+            return CGFloat(selection.virtualColumn) * CGFloat(rectangleColumnWidth(at: selection.head))
         }
         var columns = selection.virtualColumn
         if composition == nil, let state = viewSelectionState,
@@ -112,7 +112,7 @@ extension EditorView {
                 columns += edge.trailingColumns
             }
         }
-        return CGFloat(Double(columns) * rectangleColumnWidth)
+        return CGFloat(Double(columns) * rectangleColumnWidth(at: selection.head))
     }
 
     /// 业务作用：矩形活动边缘位于 Tab 内部时保留可见光标列，系统查询不能跳到整份 Tab 的前后端。
@@ -178,7 +178,7 @@ extension EditorView {
             return
         }
         let end = layout.caret(at: layout.characterCount)
-        let width = CGFloat(rectangleColumnWidth)
+        let width = CGFloat(layout.virtualColumnWidth)
         NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6).setFill()
         NSRect(
             x: gutterWidth + end.minX + CGFloat(edge.leadingColumns) * width,

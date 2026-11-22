@@ -24,10 +24,10 @@ extension EditorView {
         do {
             let deadline = ContinuousClock.now.advanced(by: .seconds(2))
             let zero = abs(anchorX - headX) < 0.5
-            let width = rectangleColumnWidth
             var selections: [TextSelection] = []
             var trailing: [Int] = []
             for row in projection.visibleLines(in: min(anchorRow, headRow)...max(anchorRow, headRow)) {
+                let width = layoutLine(row).virtualColumnWidth
                 try Task.checkCancellation()
                 guard ContinuousClock.now < deadline else {
                     throw NateError.message("矩形字形命中超过两秒，原选择保留。")
@@ -42,9 +42,9 @@ extension EditorView {
                 guard leading <= 1_000_000, ending <= 1_000_000 else {
                     throw NateError.message("矩形虚拟位置超过一百万列，未建立部分目标。")
                 }
-                let virtual = anchor == head && head == body.upper ? Int(leading) : 0
+                let virtual = anchor == head && head == body.upper ? Int(leading.rounded()) : 0
                 selections.append(TextSelection(anchor: anchor, head: head, virtualColumn: virtual))
-                trailing.append(zero ? 0 : max(0, Int(ending) - virtual))
+                trailing.append(zero ? 0 : max(0, Int(ending.rounded()) - virtual))
             }
             guard ContinuousClock.now < deadline else {
                 throw NateError.message("矩形字形命中超过两秒，原选择保留。")
@@ -71,6 +71,7 @@ extension EditorView {
     /// - x: 不含边栏的原生视觉横坐标。
     /// 返回：当前行内完整字形边界；共享上下文不足时失败，不返回近似标量边界。
     func rectangleHit(row: Int, x: Double) throws -> Int {
+        try requireGeometrySyntax(row: row)
         let body = document.text.lineRange(row, includeEnding: false)
         let layout = layoutLine(row)
         // 暂停排版的行没有像素到原字节的证据，不能用空布局建立矩形目标。

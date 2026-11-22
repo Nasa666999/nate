@@ -210,6 +210,7 @@ extension EditorView {
     /// 返回：相对正文左边缘的真实像素位置，虚拟部分使用当前字体空格列宽；缺少原生布局证据时失败。
     func rectangleCaretX(at offset: Int, virtual: Int) throws -> Double {
         let row = document.text.lineNumber(at: offset)
+        try requireGeometrySyntax(row: row)
         let layout = layoutLine(row)
         // 没有真实光标位置时不能生成零列或 NaN 供后续虚拟空白计算使用。
         if let reason = layout.unavailableReason {
@@ -217,13 +218,13 @@ extension EditorView {
         }
         let units = document.text.utf16Offset(byte: offset) ?? layout.originUTF16
         return Double(layout.caret(at: units - layout.originUTF16).minX)
-            + Double(virtual) * rectangleColumnWidth
+            + Double(virtual) * layout.virtualColumnWidth
     }
 
-    /// 业务作用：虚拟列和键盘矩形步长使用当前字体的真实空格宽度，比例字体不取最宽字形估算。
+    /// 业务作用：活动行的虚拟列和键盘矩形步长沿实际行末字体，不把主视图基础字号当作全部行的字体。
     /// 参数说明: 无。
     /// 返回：至少一个像素的空格列宽，仅用于本视图的视觉坐标。
     var rectangleColumnWidth: Double {
-        max(1, Double(NSAttributedString(string: " ", attributes: [.font: font]).size().width))
+        rectangleColumnWidth(at: primarySelection?.head ?? 0)
     }
 }

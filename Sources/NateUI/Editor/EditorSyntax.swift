@@ -144,28 +144,7 @@ extension EditorView {
                 else {
                     return
                 }
-                self.syntaxCache = result.tokens
-                self.syntaxCheckpoints.merge(result.checkpoints) {
-                    _,
-                    latest in latest
-                }
-                if self.syntaxCheckpoints.count > 4096 {
-                    var keep = Set(
-                        self.syntaxCheckpoints.keys.sorted {
-                            abs($0 - first) < abs($1 - first)
-                        }.prefix(4095)
-                    )
-                    if let earliest = self.syntaxCheckpoints.keys.min() {
-                        keep.insert(earliest)
-                    }
-                    self.syntaxCheckpoints = self.syntaxCheckpoints.filter {
-                        keep.contains($0.key)
-                    }
-                }
-                self.syntaxFailure = nil
-                self.syntaxFailedLines = nil
-                self.layouts.removeAll()
-                self.needsDisplay = true
+                self.installSyntaxAnalysis(result, near: first)
             }
             catch {
                 guard let self, self.syntaxGeneration == generation else {

@@ -88,8 +88,13 @@ public struct SyntaxScanner: Sendable {
     /// 参数说明:
     /// - language: 本次分析采用的不可变语言定义。
     /// - snapshot: 完整呈现时用于确认后续字面证据；为空时只传播当前片段的状态。
+    /// - deadline: 所属完整操作的共同截止，为空时最多五秒。
     /// 返回：可跨后台任务传递的扫描上下文，词法状态由每个调用流程分别持有。
-    public init(language: LanguageDefinition, snapshot: DocumentSnapshot? = nil) {
+    public init(
+        language: LanguageDefinition,
+        snapshot: DocumentSnapshot? = nil,
+        deadline: ContinuousClock.Instant? = nil
+    ) {
         self.language = language
         self.snapshot =
             [
@@ -99,7 +104,7 @@ public struct SyntaxScanner: Sendable {
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
-        deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        self.deadline = min(deadline ?? .now.advanced(by: .seconds(5)), .now.advanced(by: .seconds(5)))
         if language.id == "makefile" {
             // Makefile 在行扫描入口有界复验原始词表，提前建立 String 集合会合并名称并重复占用资源。
             keywords = []

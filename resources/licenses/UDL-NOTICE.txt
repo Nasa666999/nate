@@ -15,3 +15,10 @@ Swift 适配采用有界原字节扫描、明确小数与注释位置配置、�
 普通整词保留真实前向边界、运算符及折叠优先级，前缀着色覆盖完整原词范围；
 注释与分隔符编号限于对应的两位 ASCII 数字，编号后完整 UTF-8 标记属于明确说明的增强行为；
 不调用 Windows 或 Scintilla 运行时，也不作为数值有效性或可计算性的证明。
+
+行末虚拟空间的字体、最近空格边缘与薄矩形退格投影语义参考 Scintilla 的原生编辑流程；
+Nate 使用 TextKit 2 的实际字形和字体测量建立坐标，仍只通过统一正文事务发布选择与输入。
+行末样式来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/scintilla/src/PositionCache.cxx
+虚拟空间来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/scintilla/src/EditView.cxx
+薄矩形投影来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/scintilla/src/Editor.cxx
+Scintilla 的版权与完整许可见同目录 Lexilla-LICENSE.txt，其许可同时适用于 Lexilla、Scintilla 与 SciTE。

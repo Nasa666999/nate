@@ -194,7 +194,7 @@ extension EditorView {
         guard proof.matches(self) else {
             throw CancellationError()
         }
-        let layout = try clipboardBlockLayout(content, deadline: deadline)
+        let layout = try await clipboardBlockLayout(content, deadline: deadline)
         guard proof.matches(self) else {
             throw CancellationError()
         }

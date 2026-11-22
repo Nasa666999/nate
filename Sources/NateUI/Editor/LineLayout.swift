@@ -17,6 +17,7 @@ final class LineLayout {
     private var nativeLines: [NativeLineGeometry] = []
     private var orderedPositions = true
     private var orderedHeights = true
+    private let virtualFont: NSFont
     var syntaxBackgrounds: [(range: ByteRange, color: NSColor, fillsLineEnd: Bool)] = []
 
     var renderedRange: ByteRange {
@@ -32,6 +33,7 @@ final class LineLayout {
     /// - range: 完整逻辑行范围。
     /// - font: 当前视图字体。
     /// - fontZoomAdjustment: 来源视图的实际点数差值，资源字号与继承字号分别采用同一缩放意图。
+    /// - virtualSpaceFont: 空的文件末行没有词法字节时使用的来源默认样式字体。
     /// - width: 排版宽度。
     /// - tokens: 当前快照语法呈现。
     /// - rtl: 段落基础方向。
@@ -46,6 +48,7 @@ final class LineLayout {
         range: ByteRange,
         font: NSFont,
         fontZoomAdjustment: CGFloat = 0,
+        virtualSpaceFont: NSFont? = nil,
         width: CGFloat,
         tokens: [SyntaxToken],
         rtl: Bool,
@@ -56,6 +59,21 @@ final class LineLayout {
         showSequences: Bool = false
     ) {
         self.range = range
+        let ending = range.isEmpty ? range.lower : range.upper - 1
+        if let token = tokens.first(where: {
+            $0.range.lower <= ending && $0.range.upper > ending
+        }) {
+            virtualFont = SyntaxPresentation.resolvedFont(
+                name: token.fontName,
+                size: token.fontSize,
+                style: token.fontStyle,
+                base: font,
+                adjustment: fontZoomAdjustment
+            )
+        }
+        else {
+            virtualFont = virtualSpaceFont ?? font
+        }
         horizontallyOrderedASCII = !rtl && snapshot.text.isPrintableASCII(in: range)
         let origin = snapshot.text.utf16Offset(byte: range.lower) ?? 0
         originUTF16 = origin
@@ -176,6 +194,30 @@ final class LineLayout {
                 return false
             }
         }
+    }
+
+    /// 业务作用：行末虚拟空间采用最后正文字形的字体，空行采用其结束符或文件末默认样式。
+    /// 参数说明: 无。
+    /// 返回：当前行至少一个像素的原生空格宽度，不从基础编辑器字体猜测资源字号。
+    var virtualColumnWidth: Double {
+        max(1, Double((" " as NSString).size(withAttributes: [.font: virtualFont]).width))
+    }
+
+    /// 业务作用：部分 Tab 的空格列数采用该 Tab 的实际字体，不能以另一行或基础字号展开其像素范围。
+    /// 参数说明:
+    /// - local: 当前完整逻辑行内的 UTF-16 位置。
+    /// 返回：该位置原生字体的空格宽度；安全 ASCII 窗口及行尾采用已固定的行末字体。
+    func columnWidth(at local: Int) -> Double {
+        let actual: NSFont
+        if ascii == nil, local >= 0, local < content.rendered.length,
+            let font = content.rendered.attribute(.font, at: local, effectiveRange: nil) as? NSFont
+        {
+            actual = font
+        }
+        else {
+            actual = virtualFont
+        }
+        return max(1, Double((" " as NSString).size(withAttributes: [.font: actual]).width))
     }
 
     /// 业务作用：通过原生字形映射像素到 UTF-16，避免按字符宽度猜测中文和 Emoji。

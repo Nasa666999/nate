@@ -79,7 +79,10 @@ extension EditorView {
             headRow = projection.adjacentLine(to: headRow, direction: vertical)
         }
         else {
-            activeX = max(0, activeX + Double(horizontal) * rectangleColumnWidth)
+            activeX = max(
+                0,
+                activeX + Double(horizontal) * rectangleColumnWidth(at: active.selection.head)
+            )
         }
         guard setVisualRectangle(anchorRow: anchorRow, headRow: headRow, anchorX: fixedX, headX: activeX)
         else {
