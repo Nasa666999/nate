@@ -40,7 +40,9 @@ extension RecoveryStore {
         )
         try checkRecoveryBudget(deadline, permit: permit)
         // 目录资格先于统计取得，所有合作写入共用同一容量来源，不能分别消费相同余额。
+        progress(.waitingForStorage)
         let lease = try RecoveryStorageLease(directory: directory, deadline: deadline, permit: permit)
+        progress(.measuringStorage)
         let inventory = try storageInventory(deadline: deadline, permit: permit)
         let budget = RecoveryWriteBudget(
             inventory: inventory,
@@ -101,8 +103,13 @@ extension RecoveryStore {
                 data,
                 to: url,
                 expected: expected,
+                resolvingDirectoryLinks: false,
                 permit: {
                     permit() && budget.allowed
+                },
+                observe: {
+                    stage in
+                    progress(.fileStage(target: url.path, stage: stage))
                 }
             )
             // 原子替换与适用同步确认后才释放旧文件占用，失败阶段不能提前归还容量。

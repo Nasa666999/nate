@@ -122,6 +122,7 @@ extension RecoveryStore {
                 try store.publishSidebars(state, expected: expected, rebuilding: rebuilding, permit: allowed)
             }
         }
+        progress(.verifyingSidebars)
         let data = try SidebarRecoveryArchive.encode(state)
         // 创建目录也属于外部副作用，根或祖先已经改向时必须先拒绝，不能在新目标创建恢复材料。
         _ = try recoveryParent(directory.appendingPathComponent("sidebars.plist"))
@@ -148,6 +149,10 @@ extension RecoveryStore {
                 throw NateError.message("当前侧栏入口缺失，上一份保留；请明确重新保存侧栏恢复状态。")
             }
             if let current, current.data == data {
+                // 先前目录同步可能尚未确认，相同正文只能省去替换，不能省去对持久化容器的确认。
+                try synchronizeRecoveryDirectories(includingChunks: false, deadline: deadline)
+                try storageBudget?.verifyContainers(store: self)
+                progress(.sidebarsConfirmed)
                 return current.baseline
             }
         }
@@ -167,12 +172,14 @@ extension RecoveryStore {
             )
         }
         // 文件发布仍复验相同原基线，轮换期间外部修改也不能取得覆盖许可。
-        return try saveRecoveryData(
+        let saved = try saveRecoveryData(
             data,
             to: directory.appendingPathComponent("sidebars.plist"),
             expected: expected,
             permit: allowed
         )
+        progress(.sidebarsConfirmed)
+        return saved
     }
 
     /// 业务作用：显式重建前取得当前侧栏入口的原字节证据，仍拒绝链接、超限或目录改向。

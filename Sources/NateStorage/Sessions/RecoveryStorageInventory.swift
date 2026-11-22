@@ -54,7 +54,7 @@ extension RecoveryStore {
                         throw NateError.message("恢复目录含未知子目录，容量无法完整确认，未写入新内容。")
                     }
                     inventory.directories[key] = RecoveryStorageIdentity(
-                        device: UInt64(metadata.st_dev),
+                        device: UInt64(UInt32(bitPattern: metadata.st_dev)),
                         inode: UInt64(metadata.st_ino)
                     )
                     pending.append(url)
@@ -100,7 +100,7 @@ extension RecoveryStore {
             throw NateError.message("恢复容量涉及的目录不是原有无链接容器，未写入新内容。")
         }
         return RecoveryStorageIdentity(
-            device: UInt64(metadata.st_dev),
+            device: UInt64(UInt32(bitPattern: metadata.st_dev)),
             inode: UInt64(metadata.st_ino)
         )
     }

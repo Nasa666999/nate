@@ -74,30 +74,7 @@ final class RecoveryWriteBudget: Sendable {
             guard !current.closed, !current.invalid, bytes >= 0 else {
                 throw NateError.message("恢复容量动作已结束或存在未确认写入，未发布新内容。")
             }
-            var refresh = false
-            for directory in [store.directory, store.chunksDirectory] {
-                let key = Data(directory.path.utf8)
-                let observed = try store.storageDirectoryIdentity(directory)
-                if let expected = current.inventory.directories[key] {
-                    guard observed == expected else {
-                        throw NateError.message("恢复目录身份已经变化，旧容量资格不能用于新容器。")
-                    }
-                }
-                else if observed != nil {
-                    refresh = true
-                }
-            }
-            if refresh {
-                guard current.reservations.isEmpty else {
-                    throw RecoveryStorageBusy()
-                }
-                // 缺失目录由合法恢复动作建立后，首次写入重新统计，不能沿空目录的旧估计授权容量。
-                current.inventory = try store.storageInventory(deadline: deadline, permit: permit)
-                current.used = current.inventory.bytes
-            }
-            guard current.inventory.directories[Data(store.directory.path.utf8)] != nil else {
-                throw NateError.message("恢复写入缺少已经建立并确认的目录，未发布新内容。")
-            }
+            try qualify(&current, store: store, permit: permit)
             let key = Data(url.path.utf8)
             guard !current.targets.contains(key) else {
                 throw RecoveryStorageBusy()
@@ -119,6 +96,62 @@ final class RecoveryWriteBudget: Sendable {
                 newBytes: bytes
             )
             return token
+        }
+    }
+
+    /// 业务作用：相同字节复用和目录同步也必须属于原容量容器，不能只在新文件写入时检查身份。
+    /// 参数说明:
+    /// - store: 本动作固定的恢复容器。
+    /// 返回：当前动作仍有效且目录身份一致；新建目录完整重估后可用，变更或失权时拒绝入口确认。
+    func verifyContainers(store: RecoveryStore) throws {
+        let deadline = self.deadline
+        let permit: @Sendable () -> Bool = {
+            !Task.isCancelled && .now < deadline
+        }
+        try store.checkRecoveryBudget(deadline, permit: permit)
+        try state.withLock {
+            current in
+            guard !current.closed, !current.invalid else {
+                throw NateError.message("恢复动作已结束或存在未确认写入，不能确认新的恢复入口。")
+            }
+            try qualify(&current, store: store, permit: permit)
+        }
+    }
+
+    /// 业务作用：锁内统一确认恢复根与分块容器，合法新建目录只在没有在途预留时重新统计。
+    /// 参数说明:
+    /// - current: 当前动作的锁内预算状态。
+    /// - store: 当前固定恢复目录。
+    /// - permit: 不反向读取本预算锁的独立请求资格。
+    /// 返回：原容器保持一致，或新建容器完成实际占用重估；其它变化不改变原身份授权。
+    private func qualify(
+        _ current: inout RecoveryWriteBudgetState,
+        store: RecoveryStore,
+        permit: @Sendable () -> Bool
+    ) throws {
+        var refresh = false
+        for directory in [store.directory, store.chunksDirectory] {
+            let key = Data(directory.path.utf8)
+            let observed = try store.storageDirectoryIdentity(directory)
+            if let expected = current.inventory.directories[key] {
+                guard observed == expected else {
+                    throw NateError.message("恢复目录身份已经变化，旧容量资格不能用于新容器。")
+                }
+            }
+            else if observed != nil {
+                refresh = true
+            }
+        }
+        if refresh {
+            guard current.reservations.isEmpty else {
+                throw RecoveryStorageBusy()
+            }
+            // 缺失目录由合法恢复动作建立后，首次使用重新统计，不能沿空目录的旧估计授权容量。
+            current.inventory = try store.storageInventory(deadline: deadline, permit: permit)
+            current.used = current.inventory.bytes
+        }
+        guard current.inventory.directories[Data(store.directory.path.utf8)] != nil else {
+            throw NateError.message("恢复动作缺少已经建立并确认的目录，未发布新内容。")
         }
     }
 

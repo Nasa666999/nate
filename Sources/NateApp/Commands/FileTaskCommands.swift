@@ -20,6 +20,7 @@ extension ApplicationController {
             window.onClearCompleted = {
                 [weak self] in
                 self?.fileOperations.clearCompleted()
+                self?.recoveryProgress.clearCompleted()
             }
             fileTasksWindow = window
         }
@@ -48,44 +49,43 @@ extension ApplicationController {
                     + (value.quarantined ? "（暂停新请求）" : "")
             }.joined(separator: "；")
         )
-        fileTasksWindow?.update(
-            fileOperations.snapshots.map {
-                operation in
-                let end = operation.finished ?? .now
-                let elapsed = operation.started.duration(to: end)
-                let seconds =
-                    Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-                var details = "任务：" + operation.id.uuidString
-                if let revision = operation.revision {
-                    details += " · 正文修订 \(revision)"
-                }
-                if let generation = operation.targetGeneration {
-                    details += " · 目标绑定代次 \(generation)"
-                }
-                if case .failed(let reason) = operation.result {
-                    details += "\n" + reason
-                }
-                let failed: Bool
-                if case .failed = operation.result {
-                    failed = true
-                }
-                else {
-                    failed = false
-                }
-                return FileTaskPresentation(
-                    id: operation.id,
-                    title: operation.title,
-                    target: operation.target.path,
-                    stage: fileTaskStage(operation.stage),
-                    status: fileTaskStatus(operation),
-                    elapsed: String(format: "%.1f 秒", seconds),
-                    detail: details,
-                    cancellable: operation.canCancel,
-                    finished: operation.finished != nil,
-                    failed: failed
-                )
+        let original = fileOperations.snapshots.map {
+            operation in
+            let end = operation.finished ?? .now
+            let elapsed = operation.started.duration(to: end)
+            let seconds =
+                Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            var details = "任务：" + operation.id.uuidString
+            if let revision = operation.revision {
+                details += " · 正文修订 \(revision)"
             }
-        )
+            if let generation = operation.targetGeneration {
+                details += " · 目标绑定代次 \(generation)"
+            }
+            if case .failed(let reason) = operation.result {
+                details += "\n" + reason
+            }
+            let failed: Bool
+            if case .failed = operation.result {
+                failed = true
+            }
+            else {
+                failed = false
+            }
+            return FileTaskPresentation(
+                id: operation.id,
+                title: operation.title,
+                target: operation.target.path,
+                stage: fileTaskStage(operation.stage),
+                status: fileTaskStatus(operation),
+                elapsed: String(format: "%.1f 秒", seconds),
+                detail: details,
+                cancellable: operation.canCancel,
+                finished: operation.finished != nil,
+                failed: failed
+            )
+        }
+        fileTasksWindow?.update(original + recoveryTaskPresentations())
     }
 
     /// 业务作用：动作时重新检查任务身份，撤销本次发布后暂缓自动重试以便用户查看状态。

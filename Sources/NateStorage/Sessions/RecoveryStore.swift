@@ -176,6 +176,9 @@ public struct RecoveryStore: Sendable {
     let chunkCache = RecoveryChunkCache()
     var storagePolicy: RecoveryStoragePolicy
     var storageBudget: RecoveryWriteBudget?
+    var progress: RecoveryProgressObservation = {
+        _ in
+    }
 
     /// 业务作用：将恢复内容固定到可写的用户数据目录。
     /// 参数说明:

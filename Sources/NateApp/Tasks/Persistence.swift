@@ -290,11 +290,29 @@ extension ApplicationController {
             $0.buffer.text.byteCount
         }
         let executor = recoveryIO
+        let ledger = recoveryProgress
+        let progressID = ledger.begin(
+            kind: .workspace,
+            target: store.directory.appendingPathComponent("session.json"),
+            names: Dictionary(
+                uniqueKeysWithValues: payload.map {
+                    ($0.0.id, $0.0.name)
+                }
+            ),
+            totalDocuments: captured.count,
+            totalBytes: payload.reduce(0) {
+                $0 + $1.1.byteCount
+            }
+        )
+        let observed = store.observingProgress {
+            ledger.observe($0, id: progressID)
+        }
         initialRecoveryConfirmation = false
         lastRecoverySucceeded = false
         recoveryTask = Task {
             [weak self] in
             guard let self else {
+                ledger.finish(progressID, failure: "所属工作区已结束，本次恢复动作未开始。")
                 return false
             }
             defer {
@@ -316,7 +334,7 @@ extension ApplicationController {
                         bytes += count
                     }
                     let deadline = ContinuousClock.now.advanced(by: RecoveryLimits.processingTime)
-                    return try store.withStorageWrite(deadline: deadline) {
+                    return try observed.withStorageWrite(deadline: deadline) {
                         store in
                         var references = Dictionary(
                             uniqueKeysWithValues: oldReferences.map {
@@ -374,7 +392,7 @@ extension ApplicationController {
                     self.nextRecoveryCollection = .now.advanced(by: .seconds(60))
                     do {
                         try await executor.run {
-                            try store.collect(retention: 0)
+                            try observed.collect(retention: 0)
                         }
                     }
                     catch {
@@ -384,12 +402,19 @@ extension ApplicationController {
                         for document in captured {
                             document.recoveryError = "恢复索引已写出，后续依赖核验或清理未完成：" + error.localizedDescription
                         }
+                        ledger.finish(progressID, failure: "恢复入口已确认，后续清理未完成：" + error.localizedDescription)
                         return false
                     }
                 }
+                ledger.finish(progressID)
                 return true
             }
             catch {
+                ledger.finish(
+                    progressID,
+                    failure: error.localizedDescription,
+                    retry: error is RecoveryStorageBusy
+                )
                 self.recoveryFailureCount = min(6, self.recoveryFailureCount + 1)
                 self.nextRecoveryRetry = .now.advanced(by: .seconds(1 << self.recoveryFailureCount))
                 for document in captured {

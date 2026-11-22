@@ -16,6 +16,7 @@ extension RecoveryStore {
         }
         try FileStorage.validateFileURL(directory)
         let deadline = storageBudget?.deadline ?? .now.advanced(by: RecoveryLimits.processingTime)
+        progress(.verifyingIndex(documents: references.count))
         let hasCompleteSelections = try validateReferences(references, deadline: deadline)
         guard
             active == nil
@@ -39,6 +40,8 @@ extension RecoveryStore {
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+        // 分块与清单的名字必须先具备目录持久化证据，才允许发布或复用工作区入口。
+        try synchronizeRecoveryDirectories(includingChunks: true, deadline: deadline)
         let target = directory.appendingPathComponent("session.json")
         let previous = directory.appendingPathComponent("session.previous.json")
         var expected: DiskBaseline?
@@ -46,7 +49,9 @@ extension RecoveryStore {
             let current = try readRecoveryIndex(target)
             expected = current.bytes.baseline
             if current.bytes.data == data {
-                // 内容与活动标签均未变化时只复验现有入口，不能因为强制检查重复替换相同索引。
+                // 内容与活动标签均未变化时保留原索引文件，依赖目录已经另外确认，不重复替换相同字节。
+                try storageBudget?.verifyContainers(store: self)
+                progress(.indexConfirmed)
                 return
             }
             var fallback = current.index
@@ -70,6 +75,7 @@ extension RecoveryStore {
                 _ = try validateReferences(existing.index.documents, deadline: deadline)
                 old = existing.bytes.baseline
             }
+            progress(.retainingPreviousIndex)
             _ = try saveRecoveryData(previousData, to: previous, expected: old)
         }
         try checkRecoveryBudget(
@@ -79,7 +85,9 @@ extension RecoveryStore {
             }
         )
         // 全部正文分块与独立清单已经确认，最后才发布当前工作区的可恢复入口。
+        progress(.publishingIndex)
         _ = try saveRecoveryData(data, to: target, expected: expected)
+        progress(.indexConfirmed)
     }
 
     /// 业务作用：发布前有界复验所有引用和内容，分块共享只减少写入而不取消磁盘完整性检查。

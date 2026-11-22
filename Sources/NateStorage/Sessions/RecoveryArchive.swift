@@ -18,6 +18,7 @@ extension RecoveryStore {
                 try store.archive(reference)
             }
         }
+        progress(.archivingDocument(id: reference.id))
         _ = try validateReferences(
             [reference],
             deadline: storageBudget?.deadline ?? .now.advanced(by: RecoveryLimits.processingTime)
@@ -40,11 +41,17 @@ extension RecoveryStore {
         guard data.count <= 1_048_576 else {
             throw NateError.message("恢复保留索引超过 1 MB 预算，现有清单保持原状。")
         }
+        // 关闭保留入口同样不能依赖尚未确认的分块目录名，先确认完整容器再发布归档索引。
+        try synchronizeRecoveryDirectories(
+            includingChunks: true,
+            deadline: storageBudget?.deadline ?? .now.advanced(by: RecoveryLimits.processingTime)
+        )
         _ = try saveRecoveryData(
             data,
             to: url,
             expected: expected
         )
+        progress(.archiveConfirmed(id: reference.id))
     }
 
     /// 业务作用：只读取恢复保留清单的轻量元数据，不同时载入大量已关闭正文。

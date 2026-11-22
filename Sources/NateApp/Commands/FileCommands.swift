@@ -459,9 +459,7 @@ extension ApplicationController {
                 return
             }
             do {
-                try await recoveryIO.run {
-                    try store.archive(reference)
-                }
+                try await archiveRecoveryReference(reference, using: store)
             }
             catch {
                 SystemIntegration.alert("关闭未完成", error.localizedDescription)

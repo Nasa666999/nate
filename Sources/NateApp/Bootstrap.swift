@@ -79,6 +79,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var lastExternalOutput: String?
     var recovery: RecoveryStore?
     let recoveryStorage = RecoveryStorageRuntime()
+    let recoveryProgress = RecoveryProgressLedger()
     var saveBackupStore: SaveBackupStore?
     var saveBackupPolicy = SaveBackupPolicy()
     var saveBackupSettingsError: String?

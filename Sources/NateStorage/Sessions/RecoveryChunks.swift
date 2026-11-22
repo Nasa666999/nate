@@ -115,16 +115,54 @@ extension RecoveryStore {
                 try store.checkpoint(metadata: metadata, text: text, deadline: deadline, permit: permit)
             }
         }
+        var count = 0
+        try text.forEachChunk {
+            _ in
+            try checkRecoveryBudget(deadline, permit: permit)
+            guard count < RecoveryLimits.chunksPerDocument else {
+                throw NateError.message("正文分块数量超过恢复清单预算，未写入新的分块。")
+            }
+            count += 1
+        }
+        progress(
+            .preparingDocument(
+                id: metadata.id,
+                revision: metadata.revision,
+                bytes: text.byteCount,
+                chunks: count
+            )
+        )
         try prepareRecoveryDirectory()
         var chunks: [RecoveryChunkReference] = []
+        var completedBytes = 0
         try text.forEachChunk {
             chunk in
             try checkRecoveryBudget(deadline, permit: permit)
             guard chunks.count < RecoveryLimits.chunksPerDocument else {
                 throw NateError.message("正文分块数量超过恢复清单预算。")
             }
+            progress(
+                .verifyingChunk(
+                    id: metadata.id,
+                    completedBytes: completedBytes,
+                    totalBytes: text.byteCount,
+                    completedChunks: chunks.count,
+                    totalChunks: count
+                )
+            )
             chunks.append(try persistChunk(chunk, deadline: deadline, permit: permit))
+            completedBytes += chunk.byteCount
+            progress(
+                .chunkConfirmed(
+                    id: metadata.id,
+                    completedBytes: completedBytes,
+                    totalBytes: text.byteCount,
+                    completedChunks: chunks.count,
+                    totalChunks: count
+                )
+            )
         }
+        progress(.preparingManifest(id: metadata.id, revision: metadata.revision))
         var record = metadata
         record.text = ""
         let manifest = RecoveryManifest(
@@ -147,6 +185,7 @@ extension RecoveryStore {
         let target = directory.appendingPathComponent(filename)
         try checkRecoveryBudget(deadline, permit: permit)
         if try recoveryFileExists(target) {
+            progress(.verifyingManifest(id: record.id, revision: record.revision))
             // 索引失败后的相同快照复用原清单，但文件名中的摘要不能代替实际字节证据。
             let existing = try readRecoveryFile(
                 target,
@@ -160,8 +199,10 @@ extension RecoveryStore {
         }
         else {
             // 每个内容分块先完整同步；清单可靠后才把引用交给工作区索引发布入口。
+            progress(.writingManifest(id: record.id, revision: record.revision))
             _ = try saveRecoveryData(data, to: target, expected: nil, permit: permit)
         }
+        progress(.manifestConfirmed(id: record.id, revision: record.revision))
         return RecoveryReference(
             id: record.id,
             file: filename,

@@ -19,6 +19,7 @@ extension RecoveryStore {
         defer {
             lease?.release()
         }
+        progress(.collecting)
         let hasChunks = try recoveryChunksExist()
         var references = try archivedReferences()
         for name in ["session.json", "session.previous.json"] {

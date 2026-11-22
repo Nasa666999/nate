@@ -52,6 +52,18 @@ extension ApplicationController {
         while runtime.ready, let state = runtime.pending, let store = recovery {
             runtime.pending = nil
             runtime.lastAttempt = state
+            let ledger = recoveryProgress
+            let progressID = ledger.begin(
+                kind: .sidebar,
+                target: store.directory.appendingPathComponent("sidebars.plist"),
+                names: [:],
+                totalDocuments: 0,
+                totalBytes: 0
+            )
+            ledger.observe(.verifyingSidebars, id: progressID)
+            let observed = store.observingProgress {
+                ledger.observe($0, id: progressID)
+            }
             do {
                 _ = try await runtime.io.readCancellable {
                     token in
@@ -60,6 +72,7 @@ extension ApplicationController {
                 }
             }
             catch {
+                ledger.finish(progressID, failure: error.localizedDescription)
                 runtime.failure = "当前侧栏未保存，完整定义保留：" + error.localizedDescription
                 continue
             }
@@ -67,7 +80,7 @@ extension ApplicationController {
                 let expected = runtime.baseline
                 let baseline = try await runtime.io.runCancellable {
                     token in
-                    try store.publishSidebars(
+                    try observed.publishSidebars(
                         state,
                         expected: expected,
                         permit: {
@@ -79,8 +92,10 @@ extension ApplicationController {
                 runtime.baseline = baseline
                 runtime.lastSaved = state
                 runtime.failure = nil
+                ledger.finish(progressID)
             }
             catch is RecoveryStorageBusy {
+                ledger.finish(progressID, failure: "恢复目录暂时占用，候选保留并等待下一周期。", retry: true)
                 // 其它恢复动作暂时拥有容量资格不代表归档损坏，保留候选并由下一周期重新取得资格。
                 runtime.pending = runtime.pending ?? state
                 runtime.lastAttempt = nil
@@ -88,18 +103,21 @@ extension ApplicationController {
                 return
             }
             catch let error as RecoveryStorageCapacityError {
+                ledger.finish(progressID, failure: error.localizedDescription)
                 // 容量拒绝发生在当前入口写入之前，原基线仍可复验；提高上限后可以继续同一候选。
                 runtime.pending = runtime.pending ?? state
                 runtime.failure = "侧栏恢复容量不足，当前定义继续保留：" + error.localizedDescription
                 return
             }
             catch let error as RecoveryStoragePolicyFailure {
+                ledger.finish(progressID, failure: error.localizedDescription)
                 // 策略拒绝没有取得文件写入权，修正设置后仍可沿原基线确认同一侧栏候选。
                 runtime.pending = runtime.pending ?? state
                 runtime.failure = "侧栏恢复设置未应用，当前定义继续保留：" + error.localizedDescription
                 return
             }
             catch {
+                ledger.finish(progressID, failure: error.localizedDescription)
                 // 文件结果不明时旧证据不再足够，保留当前候选并等待显式重建，不能自动覆盖异常归档。
                 runtime.ready = false
                 runtime.pending = runtime.pending ?? state
@@ -138,9 +156,22 @@ extension ApplicationController {
         runtime.ready = false
         // 显式重建先撤销旧恢复读取，再取得当前磁盘证据，旧读取不能迟到重新授予覆盖权。
         runtime.generation = UUID()
+        let ledger = recoveryProgress
+        let progressID = ledger.begin(
+            kind: .sidebar,
+            target: store.directory.appendingPathComponent("sidebars.plist"),
+            names: [:],
+            totalDocuments: 0,
+            totalBytes: 0
+        )
+        ledger.observe(.verifyingSidebars, id: progressID)
+        let observed = store.observingProgress {
+            ledger.observe($0, id: progressID)
+        }
         runtime.task = Task {
             [weak self] in
             guard let self else {
+                ledger.finish(progressID, failure: "所属工作区已结束，侧栏重新保存未开始。")
                 return
             }
             defer {
@@ -156,13 +187,13 @@ extension ApplicationController {
                     token in
                     try token.check()
                     _ = try SidebarRecoveryArchive.encode(state)
-                    return try store.sidebarBaseline(permit: {
+                    return try observed.sidebarBaseline(permit: {
                         !token.isCancelled
                     })
                 }
                 let published = try await runtime.io.runCancellable {
                     token in
-                    try store.publishSidebars(
+                    try observed.publishSidebars(
                         state,
                         expected: baseline,
                         rebuilding: true,
@@ -177,9 +208,15 @@ extension ApplicationController {
                 runtime.pending = nil
                 runtime.ready = true
                 runtime.failure = nil
+                ledger.finish(progressID)
                 self.mainWindow?.status.stringValue = "当前侧栏已重新保存，周期恢复保护已启用。"
             }
             catch {
+                ledger.finish(
+                    progressID,
+                    failure: error.localizedDescription,
+                    retry: error is RecoveryStorageBusy
+                )
                 runtime.failure = "侧栏重新保存未确认，当前定义保留：" + error.localizedDescription
                 self.mainWindow?.status.stringValue = runtime.failure ?? ""
             }
