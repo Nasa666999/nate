@@ -22,8 +22,9 @@ extension ApplicationController {
         guard canApplyUserConfiguration() else {
             throw NateError.message("当前输入、搜索或历史动作尚未收束，请完成后再导入配置。")
         }
-        try UserConfigurationSchema.validate(candidate)
         let source = try configurationSource()
+        let candidate = try UserConfigurationSchema.preservingRecoveryPolicy(candidate, source: source)
+        try UserConfigurationSchema.validate(candidate)
         let runtime = userConfiguration
         runtime.preview = candidate
         runtime.previewName = name
@@ -131,6 +132,7 @@ extension ApplicationController {
         loadMultipleSelectionOptions(from: domain)
         loadSelectedTextHighlightOptions(from: domain)
         loadSaveBackupPolicy()
+        loadRecoveryStoragePolicy()
         if let window = mainWindow {
             loadEditorPreferences(into: window)
             window.structurePanel.loadSortingPreferences(from: domain)

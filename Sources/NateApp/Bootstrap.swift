@@ -78,6 +78,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var externalCommandTask: Task<Void, Never>?
     var lastExternalOutput: String?
     var recovery: RecoveryStore?
+    let recoveryStorage = RecoveryStorageRuntime()
     var saveBackupStore: SaveBackupStore?
     var saveBackupPolicy = SaveBackupPolicy()
     var saveBackupSettingsError: String?
@@ -258,6 +259,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 directory: support.appendingPathComponent("Recovery", isDirectory: true)
             )
             recovery = store
+            loadRecoveryStoragePolicy()
             codecs = try LegacyCodecCatalog(
                 directory: SystemIntegration.resourceDirectory().appendingPathComponent("encodings")
             )

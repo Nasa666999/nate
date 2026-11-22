@@ -27,9 +27,39 @@ enum UserConfigurationSchema {
         "selectedTextHighlightOptions": 65_536,
         "multipleSelectionOptions": 4096,
         "saveBackupPolicy": 8192,
+        "recoveryStoragePolicy": 4096,
         "searchUserPreferences": 65_536,
     ]
     static let keys = booleanKeys.union(dataLimits.keys).union(["completion.threshold", "fontSize"]).sorted()
+
+    /// 业务作用：未包含恢复总量的既有完整配置沿用当前限制，不能因旧归档缺字段而放宽恢复保护。
+    /// 参数说明:
+    /// - configuration: 已完成容器校验的导入候选。
+    /// - source: 本次确认期间固定的当前完整偏好来源。
+    /// 返回：当前字段集原样保留；仅缺少恢复总量的完整既有字段集补入当前值，其它遗漏或未知字段拒绝。
+    static func preservingRecoveryPolicy(
+        _ configuration: UserConfiguration,
+        source: UserConfiguration
+    ) throws -> UserConfiguration {
+        let fields = configuration.entries.map(\.key)
+        if fields == keys {
+            return configuration
+        }
+        // 只迁移一个明确缺失的字段，不能借兼容入口忽略其它未知或遗漏的业务约束。
+        guard source.entries.map(\.key) == keys,
+            fields
+                == keys.filter({
+                    $0 != "recoveryStoragePolicy"
+                }),
+            let retained = source.entries.first(where: {
+                $0.key == "recoveryStoragePolicy"
+            })
+        else {
+            throw NateError.message("用户配置字段集合不受支持，未采用部分设置。")
+        }
+        try validate(retained)
+        return try UserConfiguration(entries: configuration.entries + [retained])
+    }
 
     /// 业务作用：应用只接受完整且明确的配置字段集合，未知或遗漏字段不能产生部分导入。
     /// 参数说明:
@@ -141,6 +171,8 @@ enum UserConfigurationSchema {
             _ = try JSONDecoder().decode(MultipleSelectionOptions.self, from: data)
         case "saveBackupPolicy":
             try payload(SaveBackupPolicy.self, from: data, field: "policy").validate()
+        case "recoveryStoragePolicy":
+            try payload(RecoveryStoragePolicy.self, from: data, field: "policy").validate()
         case "searchUserPreferences":
             _ = try SearchUserPreferences.decode(data)
         default:

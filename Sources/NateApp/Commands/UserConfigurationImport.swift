@@ -65,11 +65,15 @@ extension ApplicationController {
                             !token.isCancelled
                         }
                     ).data
-                    let configuration = try UserConfigurationArchive.decode(
+                    let decoded = try UserConfigurationArchive.decode(
                         bytes,
                         permit: {
                             !token.isCancelled
                         }
+                    )
+                    let configuration = try UserConfigurationSchema.preservingRecoveryPolicy(
+                        decoded,
+                        source: source
                     )
                     try UserConfigurationSchema.validate(
                         configuration,

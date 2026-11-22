@@ -91,6 +91,7 @@ private enum UserConfigurationLabels {
         "pairInsertionSettings": "括号与引号配对",
         "printSettings": "打印设置",
         "saveBackupPolicy": "保存前备份",
+        "recoveryStoragePolicy": "恢复存储总量",
         "searchUserPreferences": "搜索行为、输入字体与结果呈现",
         "selectedTextHighlightOptions": "选中文字智能高亮",
         "showSymbols": "既有符号显示偏好",

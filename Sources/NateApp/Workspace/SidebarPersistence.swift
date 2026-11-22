@@ -7,8 +7,16 @@ extension ApplicationController {
     /// - force: 是否重新确认未变化的现有归档，退出收尾使用此值。
     /// 返回：已初始化且有覆盖资格时保持一个排空任务；归档异常时记录最新候选但不自动重建。
     func scheduleSidebarRecovery(force: Bool = false) {
+        if !recoveryStorage.loaded {
+            loadRecoveryStoragePolicy()
+        }
         let runtime = sidebarRecovery
         guard !runtime.loading, let state = captureSidebarState(discardingDrafts: closing) else {
+            return
+        }
+        if let failure = recoveryStorage.failure {
+            runtime.pending = state
+            runtime.failure = "恢复存储设置未能解释，当前侧栏保留：" + failure
             return
         }
         if !force && state == runtime.lastSaved {
@@ -71,6 +79,25 @@ extension ApplicationController {
                 runtime.baseline = baseline
                 runtime.lastSaved = state
                 runtime.failure = nil
+            }
+            catch is RecoveryStorageBusy {
+                // 其它恢复动作暂时拥有容量资格不代表归档损坏，保留候选并由下一周期重新取得资格。
+                runtime.pending = runtime.pending ?? state
+                runtime.lastAttempt = nil
+                runtime.failure = nil
+                return
+            }
+            catch let error as RecoveryStorageCapacityError {
+                // 容量拒绝发生在当前入口写入之前，原基线仍可复验；提高上限后可以继续同一候选。
+                runtime.pending = runtime.pending ?? state
+                runtime.failure = "侧栏恢复容量不足，当前定义继续保留：" + error.localizedDescription
+                return
+            }
+            catch let error as RecoveryStoragePolicyFailure {
+                // 策略拒绝没有取得文件写入权，修正设置后仍可沿原基线确认同一侧栏候选。
+                runtime.pending = runtime.pending ?? state
+                runtime.failure = "侧栏恢复设置未应用，当前定义继续保留：" + error.localizedDescription
+                return
             }
             catch {
                 // 文件结果不明时旧证据不再足够，保留当前候选并等待显式重建，不能自动覆盖异常归档。

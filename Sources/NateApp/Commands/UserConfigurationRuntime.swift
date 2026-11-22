@@ -42,6 +42,8 @@ extension ApplicationController {
     func connectConfigurationDefaults(_ domain: UserDefaults) {
         userConfiguration.generation = UUID()
         userConfiguration.defaults = domain
+        recoveryStorage.loaded = false
+        recoveryStorage.generation = UUID()
         displayPreferences.defaults = domain
         tabPreferences.defaults = domain
         indentationPreferences.defaults = domain
@@ -67,7 +69,7 @@ extension ApplicationController {
             displayPreferences.generation, tabPreferences.generation, indentationPreferences.generation,
             pairPreferences.generation, wordPreferences.generation, delimiterPreferences.generation,
             dateTimePreferences.generation, fileOpeningPreferences.generation, webSearch.generation,
-            printing.generation, selectedTextPreferences.generation,
+            printing.generation, selectedTextPreferences.generation, recoveryStorage.generation,
         ]
         if let findWindow {
             values.append(findWindow.configurationIdentity)

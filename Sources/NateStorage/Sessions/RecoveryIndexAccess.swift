@@ -8,8 +8,14 @@ extension RecoveryStore {
     /// - active: 活动文档身份，可为空。
     /// 返回：新索引已同步或既有相同字节已复验；未知格式和损坏依赖不会被自动覆盖。
     public func publish(_ references: [RecoveryReference], active: UUID?) throws {
+        if storageBudget == nil {
+            return try withStorageWrite {
+                store in
+                try store.publish(references, active: active)
+            }
+        }
         try FileStorage.validateFileURL(directory)
-        let deadline = ContinuousClock.now.advanced(by: RecoveryLimits.processingTime)
+        let deadline = storageBudget?.deadline ?? .now.advanced(by: RecoveryLimits.processingTime)
         let hasCompleteSelections = try validateReferences(references, deadline: deadline)
         guard
             active == nil
@@ -64,7 +70,7 @@ extension RecoveryStore {
                 _ = try validateReferences(existing.index.documents, deadline: deadline)
                 old = existing.bytes.baseline
             }
-            _ = try FileStorage.save(previousData, to: previous, expected: old)
+            _ = try saveRecoveryData(previousData, to: previous, expected: old)
         }
         try checkRecoveryBudget(
             deadline,
@@ -73,7 +79,7 @@ extension RecoveryStore {
             }
         )
         // 全部正文分块与独立清单已经确认，最后才发布当前工作区的可恢复入口。
-        _ = try FileStorage.save(data, to: target, expected: expected)
+        _ = try saveRecoveryData(data, to: target, expected: expected)
     }
 
     /// 业务作用：发布前有界复验所有引用和内容，分块共享只减少写入而不取消磁盘完整性检查。

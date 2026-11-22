@@ -7,7 +7,18 @@ extension RecoveryStore {
     /// - retention: 无索引引用的额外保留时间，单位为秒。
     /// 返回：仅本恢复目录内过期记录与分块被移除；任何依赖不可识别时停止清理。
     public func collect(retention: TimeInterval = 7 * 86_400) throws {
-        let deadline = ContinuousClock.now.advanced(by: RecoveryLimits.processingTime)
+        let deadline = storageBudget?.deadline ?? .now.advanced(by: RecoveryLimits.processingTime)
+        // 清理与准备快照共用目录资格，尚未发布的新分块不能在写入途中被误当成无引用内容删除。
+        let lease: RecoveryStorageLease?
+        if storageBudget?.allowed == true {
+            lease = nil
+        }
+        else {
+            lease = try RecoveryStorageLease(directory: directory, deadline: deadline)
+        }
+        defer {
+            lease?.release()
+        }
         let hasChunks = try recoveryChunksExist()
         var references = try archivedReferences()
         for name in ["session.json", "session.previous.json"] {

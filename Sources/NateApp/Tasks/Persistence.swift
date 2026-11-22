@@ -238,9 +238,19 @@ extension ApplicationController {
     /// - force: 是否在退出等边界重新固定视图元数据。
     /// 返回：每份正文先同步，再可靠发布有序恢复索引。
     func scheduleRecovery(force: Bool = false) {
+        if !recoveryStorage.loaded {
+            loadRecoveryStoragePolicy()
+        }
         guard recoveryReady, recoveryTask == nil, let store = recovery,
             force || ContinuousClock.now >= nextRecoveryRetry
         else {
+            return
+        }
+        if let failure = recoveryStorage.failure {
+            lastRecoverySucceeded = false
+            for document in documents {
+                document.recoveryError = "恢复存储设置未能解释，原内容保留：" + failure
+            }
             return
         }
         let captured = documents
@@ -306,23 +316,26 @@ extension ApplicationController {
                         bytes += count
                     }
                     let deadline = ContinuousClock.now.advanced(by: RecoveryLimits.processingTime)
-                    var references = Dictionary(
-                        uniqueKeysWithValues: oldReferences.map {
-                            ($0.id, $0)
-                        }
-                    )
-                    for (metadata, tree) in payload {
-                        references[metadata.id] = try store.checkpoint(
-                            metadata: metadata,
-                            text: tree,
-                            deadline: deadline
+                    return try store.withStorageWrite(deadline: deadline) {
+                        store in
+                        var references = Dictionary(
+                            uniqueKeysWithValues: oldReferences.map {
+                                ($0.id, $0)
+                            }
                         )
+                        for (metadata, tree) in payload {
+                            references[metadata.id] = try store.checkpoint(
+                                metadata: metadata,
+                                text: tree,
+                                deadline: deadline
+                            )
+                        }
+                        let ordered = ids.compactMap {
+                            references[$0]
+                        }
+                        try store.publish(ordered, active: selected)
+                        return references
                     }
-                    let ordered = ids.compactMap {
-                        references[$0]
-                    }
-                    try store.publish(ordered, active: selected)
-                    return references
                 }
                 for (metadata, _) in payload {
                     guard

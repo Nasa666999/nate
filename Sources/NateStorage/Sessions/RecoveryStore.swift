@@ -174,12 +174,16 @@ struct RecoveryIndex: Codable {
 public struct RecoveryStore: Sendable {
     public let directory: URL
     let chunkCache = RecoveryChunkCache()
+    var storagePolicy: RecoveryStoragePolicy
+    var storageBudget: RecoveryWriteBudget?
 
     /// 业务作用：将恢复内容固定到可写的用户数据目录。
     /// 参数说明:
     /// - directory: 本实例专属恢复目录。
+    /// - storagePolicy: 后续恢复写入采用的总量策略，不限制读取已有内容。
     /// 返回：不依赖应用包位置的恢复存储；无效目录保留原证据，实际访问时明确拒绝。
-    public init(directory: URL) {
+    public init(directory: URL, storagePolicy: RecoveryStoragePolicy = RecoveryStoragePolicy()) {
+        self.storagePolicy = storagePolicy
         do {
             try FileStorage.validateFileURL(directory)
             self.directory = directory.resolvingSymlinksInPath().standardizedFileURL

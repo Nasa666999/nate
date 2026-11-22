@@ -26,6 +26,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "导出用户配置…", "exportUserConfiguration")
         add(application, "取消配置读写", "cancelUserConfiguration")
         add(application, "保存时备份设置…", "saveBackupPreferences")
+        add(application, "恢复存储设置…", "recoveryStoragePreferences")
         add(application, "快捷键映射器…", "keyboardMap")
         application.addItem(.separator())
         let hide = NSMenuItem(title: "隐藏 Nate", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")

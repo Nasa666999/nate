@@ -530,6 +530,7 @@ extension ApplicationController {
         case "hexConversionSettings": showHexConversionSettings()
         case "preferences": showPreferences()
         case "saveBackupPreferences": showSaveBackupPreferences()
+        case "recoveryStoragePreferences": showRecoveryStoragePreferences()
         case "savedBackups": showSavedBackups()
         case "resetSidebarRecovery": resetSidebarRecovery()
         case "about":

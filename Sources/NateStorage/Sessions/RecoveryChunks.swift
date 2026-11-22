@@ -91,7 +91,10 @@ extension RecoveryStore {
             true
         }
     ) throws -> RecoveryReference {
-        let deadline = deadline ?? .now.advanced(by: RecoveryLimits.processingTime)
+        let deadline = min(
+            deadline ?? .now.advanced(by: RecoveryLimits.processingTime),
+            storageBudget?.deadline ?? .now.advanced(by: RecoveryLimits.processingTime)
+        )
         guard text.byteCount <= RecoveryLimits.documentBytes else {
             throw NateError.message("文档超过恢复保护的 1 GB 预算，现有恢复记录继续保留。")
         }
@@ -105,6 +108,12 @@ extension RecoveryStore {
                 throw NateError.message("恢复选择几何与完整身份不一致，原记录保留。")
             }
             _ = try state.validated(in: text, permit: permit)
+        }
+        if storageBudget == nil {
+            return try withStorageWrite(deadline: deadline, permit: permit) {
+                store in
+                try store.checkpoint(metadata: metadata, text: text, deadline: deadline, permit: permit)
+            }
         }
         try prepareRecoveryDirectory()
         var chunks: [RecoveryChunkReference] = []
@@ -151,7 +160,7 @@ extension RecoveryStore {
         }
         else {
             // 每个内容分块先完整同步；清单可靠后才把引用交给工作区索引发布入口。
-            _ = try FileStorage.save(data, to: target, expected: nil, permit: permit)
+            _ = try saveRecoveryData(data, to: target, expected: nil, permit: permit)
         }
         return RecoveryReference(
             id: record.id,
@@ -202,7 +211,7 @@ extension RecoveryStore {
         else {
             try checkRecoveryBudget(deadline, permit: permit)
             let data = bytes ?? Data(chunk.bytes())
-            _ = try FileStorage.save(data, to: target, expected: nil, permit: permit)
+            _ = try saveRecoveryData(data, to: target, expected: nil, permit: permit)
         }
         chunkCache.put(reference, for: chunk.id)
         return reference

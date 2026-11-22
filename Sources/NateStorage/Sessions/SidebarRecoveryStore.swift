@@ -106,12 +106,21 @@ extension RecoveryStore {
             true
         }
     ) throws -> DiskBaseline {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        let deadline = min(
+            .now.advanced(by: .seconds(5)),
+            storageBudget?.deadline ?? .now.advanced(by: .seconds(5))
+        )
         let allowed: @Sendable () -> Bool = {
             permit() && !Task.isCancelled && .now < deadline
         }
         guard allowed() else {
             throw CancellationError()
+        }
+        if storageBudget == nil {
+            return try withStorageWrite(deadline: deadline, permit: allowed) {
+                store in
+                try store.publishSidebars(state, expected: expected, rebuilding: rebuilding, permit: allowed)
+            }
         }
         let data = try SidebarRecoveryArchive.encode(state)
         // 创建目录也属于外部副作用，根或祖先已经改向时必须先拒绝，不能在新目标创建恢复材料。
@@ -150,7 +159,7 @@ extension RecoveryStore {
             }
         if let old = previousData {
             // 上一份先完整同步，当前入口随后发布，崩溃不会让两份都指向尚未完成的内容。
-            _ = try FileStorage.save(
+            _ = try saveRecoveryData(
                 old,
                 to: directory.appendingPathComponent("sidebars.previous.plist"),
                 expected: previous?.baseline,
@@ -158,7 +167,7 @@ extension RecoveryStore {
             )
         }
         // 文件发布仍复验相同原基线，轮换期间外部修改也不能取得覆盖许可。
-        return try FileStorage.save(
+        return try saveRecoveryData(
             data,
             to: directory.appendingPathComponent("sidebars.plist"),
             expected: expected,
