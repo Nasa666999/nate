@@ -69,6 +69,7 @@ public struct SyntaxState: Sendable, Equatable {
     var latex = LatexLexicalState()
     var lisp = LispLexicalState()
     var rust = RustLexicalState()
+    var yaml = YAMLLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -85,6 +86,7 @@ public struct SyntaxScanner: Sendable {
     let snapshot: DocumentSnapshot?
     let deadline: ContinuousClock.Instant
     let rustResource: Data?
+    let yamlRules: YAMLRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -105,15 +107,16 @@ public struct SyntaxScanner: Sendable {
         else {
             rustResource = nil
         }
+        yamlRules = language.id == "yaml" ? YAMLRules(language: language, deadline: self.deadline) : nil
         self.snapshot =
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
-                "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust",
+                "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
-        if language.id == "makefile" || language.id == "rust" {
+        if ["makefile", "rust", "yaml"].contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
             keywords = []
             secondaryKeywords = []
@@ -143,6 +146,16 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "yaml" {
+            return YAMLLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: yamlRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if language.id == "rust" {
             return RustLexing.highlight(
                 text,

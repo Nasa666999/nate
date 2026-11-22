@@ -1,0 +1,8 @@
+YAML 词法与缩进折叠规则的 Swift 适配参考 Lexilla 的 LexYAML.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexYAML.cxx
+
+Copyright 2003- by Sean O'Dell <sean@celsoft.com>
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配使用有界原字节扫描、固定正文与资源身份、块文本父级缩进及完整标量投影；
+着色和折叠不构建 YAML 对象、不展开别名、不读取外部资源，也不作为配置有效性证明。

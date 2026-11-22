@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "903a96eb8a1b9ad4909f2bc924d5688b8c74ae34d5b1e4c28de467b8813f3b3c"
+      "sha256" : "28858e1ad9578af8d8f8211d9db6ee729c50112c346baad8c4bf31e6de677ced"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
@@ -563,6 +563,10 @@
     {
       "path" : "licenses\/Unicode-LICENSE.txt",
       "sha256" : "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+    },
+    {
+      "path" : "licenses\/YAML-NOTICE.txt",
+      "sha256" : "89cea340d108209978764c4e27b77a8c0cddff91e36250455da36dcbcb0d549c"
     },
     {
       "path" : "licenses\/sources.json",

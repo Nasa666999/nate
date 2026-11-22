@@ -61155,7 +61155,67 @@
       "no",
       "true",
       "yes"
-    ]
+    ],
+    "keywordGroups": {
+      "instre1": [
+        "true",
+        "false",
+        "yes",
+        "no"
+      ]
+    },
+    "lexicalStyles": {
+      "0": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "2": {
+        "foreground": "#000080",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "1": {
+        "foreground": "#008000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "3": {
+        "foreground": "#0000FF",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "4": {
+        "foreground": "#FF8040",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "5": {
+        "foreground": "#804000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "6": {
+        "foreground": "#0000FF",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "7": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "8": {
+        "foreground": "#FF0000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "9": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      }
+    }
   },
   {
     "id": "searchResult",

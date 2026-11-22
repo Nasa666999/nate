@@ -23,7 +23,7 @@ public struct FoldIndex: Sendable {
         if let udl {
             return udl.allowFoldOfComments || UDLFoldRules(definition: udl).enabled
         }
-        return ["python", "ini", "props", "diff", "registry", "ihex", "tex", "latex"].contains(
+        return ["python", "ini", "props", "diff", "registry", "ihex", "tex", "latex", "yaml"].contains(
             language?.id ?? ""
         )
             || !openers(for: language?.id ?? "").isEmpty
@@ -50,7 +50,7 @@ public struct FoldIndex: Sendable {
         let deadline = ContinuousClock.now.advanced(
             by: [
                 "python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex", "lisp",
-                "scheme", "rust",
+                "scheme", "rust", "yaml",
             ].contains(
                 language?.id ?? ""
             ) || language?.usesSharedCLexer == true || udl != nil
@@ -59,6 +59,9 @@ public struct FoldIndex: Sendable {
         var candidates: [FoldRegion] = []
         if let udl {
             candidates = try UDLFolding.regions(snapshot: snapshot, definition: udl, deadline: deadline)
+        }
+        else if let language, language.id == "yaml" {
+            candidates = try YAMLFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, language.id == "rust" {
             candidates = try RustFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
