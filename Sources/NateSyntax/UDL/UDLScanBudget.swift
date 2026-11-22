@@ -53,20 +53,32 @@ final class UDLScanBudget {
     /// - bytes: 当前完整行原字节。
     /// - offset: 当前已确认的标量边界。
     /// - ignoreCase: 当前定义的大小写规则。
+    /// - literalOnly: 是否将引号短语交给专用匹配器，避免其内部空白标记被当作普通字面字符。
     /// 返回：最长且同长优先原顺序的实际规则，不匹配时为空。
     func longest(
         key: String,
         patterns: [String],
         bytes: [UInt8],
         offset: Int,
-        ignoreCase: Bool
+        ignoreCase: Bool,
+        literalOnly: Bool = false
     ) throws -> String? {
         let matcher: UDLLiteralMatcher
         if let existing = matchers[key] {
             matcher = existing
         }
         else {
-            matcher = try UDLLiteralMatcher(patterns: patterns, ignoreCase: ignoreCase, budget: self)
+            let selected: [String]
+            if literalOnly {
+                selected = try patterns.filter {
+                    try consume($0.utf8.count + 1)
+                    return !$0.contains("\u{B}") && !$0.contains("\u{8}")
+                }
+            }
+            else {
+                selected = patterns
+            }
+            matcher = try UDLLiteralMatcher(patterns: selected, ignoreCase: ignoreCase, budget: self)
             matchers[key] = matcher
         }
         return try matcher.longest(in: bytes, at: offset, budget: self)

@@ -87,6 +87,21 @@ public struct UDLDefinition: Sendable {
         "udl:" + name
     }
 
+    /// 业务作用：跨行短语的结果依赖后续正文，编辑后必须重新确认其来源与检查点。
+    /// 参数说明: 无。
+    /// 返回：关键字、整词运算符或整词折叠含引号短语时为真，其完整匹配与前缀后继须重新确认。
+    public var requiresSourceLookahead: Bool {
+        lists.contains {
+            key,
+            values in
+            (key.hasPrefix("Keywords") || key == "Operators2" || key.hasPrefix("Folders in code2")
+                || key.hasPrefix("Folders in comment"))
+                && values.contains {
+                    $0.contains("\u{B}") || $0.contains("\u{8}")
+                }
+        }
+    }
+
     /// 业务作用：UDL 作为独立语言进入同一识别与选择入口。
     /// 参数说明: 无。
     /// 返回：保留 UDL 关联的语言定义，高亮仍由独立 UDL 规则执行。
@@ -408,10 +423,16 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
             return
         }
         if elementName == "Keywords", let name = keywordName {
-            current?.lists[name] = UDLImporter.words(
-                keywordText,
-                preserveIndexedGroups: name == "Comments" || name == "Delimiters"
-            )
+            let backward =
+                name.hasPrefix("Keywords") || name == "Operators2"
+                || name.hasPrefix("Folders in code2") || name.hasPrefix("Folders in comment")
+            current?.lists[name] =
+                backward
+                ? UDLQuotedWords.parse(keywordText)
+                : UDLImporter.words(
+                    keywordText,
+                    preserveIndexedGroups: name == "Comments" || name == "Delimiters"
+                )
             keywordName = nil
         }
         if elementName == "UserLang", let definition = current {

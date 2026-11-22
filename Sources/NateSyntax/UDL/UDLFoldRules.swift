@@ -108,7 +108,8 @@ struct UDLFoldRules {
                 patterns: definition.lists["Operators2"] ?? [],
                 bytes: bytes,
                 offset: offset,
-                ignoreCase: definition.caseIgnored
+                ignoreCase: definition.caseIgnored,
+                literalOnly: true
             ),
             offset + op.utf8.count == bytes.count || !UDLLexer.word(bytes[offset + op.utf8.count])
         {
@@ -205,7 +206,8 @@ struct UDLFoldRules {
                 patterns: definition.lists[key] ?? [],
                 bytes: bytes,
                 offset: offset,
-                ignoreCase: definition.caseIgnored
+                ignoreCase: definition.caseIgnored,
+                literalOnly: group != 0
             ) {
                 let end = offset + marker.utf8.count
                 if group != 0 {

@@ -40,6 +40,7 @@ enum UDLFolding {
                 base: range.lower,
                 definition: definition,
                 state: &state,
+                source: snapshot,
                 deadline: deadline
             )
             if let diagnostic = state.diagnostic {
@@ -59,6 +60,8 @@ enum UDLFolding {
                         next += 1
                     case .close:
                         next = max(0, next - 1)
+                    case .continuation:
+                        break
                     }
                     guard next <= 65_536 else {
                         throw NateError.message("UDL 折叠层级超过 65536。")

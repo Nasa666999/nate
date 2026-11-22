@@ -23,6 +23,7 @@ public struct UDLState: Sendable, Equatable {
     var atLineStart = true
     var hasVisible = false
     var foldWhite = true
+    var wordContinuation: UDLWordContinuation?
     public fileprivate(set) var diagnostic: String?
 
     /// 业务作用：建立独立 UDL 行首状态，供跨行分隔符和注释传播。
@@ -38,6 +39,7 @@ public enum UDLLexer {
     /// - base: 文档内字节起点。
     /// - definition: 已校验完整 UDL。
     /// - state: 安全边界处的跨行状态。
+    /// - source: 同一固定完整正文，跨行短语需据此取得后续证据。
     /// - deadline: 所属分析的共同截止，省略时本行仍至多五秒。
     /// - permit: 整份分析继续准备的资格。
     /// 返回：完整样式与上下文一次发布；取消、容量或规则代次不符时保留原上下文并记录原因。
@@ -46,6 +48,7 @@ public enum UDLLexer {
         base: Int,
         definition: UDLDefinition,
         state: inout UDLState,
+        source: DocumentSnapshot? = nil,
         deadline: ContinuousClock.Instant? = nil,
         permit: @escaping @Sendable () -> Bool = {
             true
@@ -64,8 +67,39 @@ public enum UDLLexer {
                 throw NateError.message("UDL 行范围、嵌套容量或规则代次不一致。")
             }
             try budget.validate(definition)
+            if let source {
+                guard base <= source.text.byteCount, text.utf8.count <= source.text.byteCount - base,
+                    !definition.requiresSourceLookahead || source.text.byteCount <= 67_108_864
+                else {
+                    throw NateError.message("UDL 短语缺少完整来源范围，或正文超过 64 MiB。")
+                }
+                try budget.consume(text.utf8.count)
+                guard
+                    source.text.text(in: ByteRange(base, base + text.utf8.count)).utf8.elementsEqual(
+                        text.utf8
+                    )
+                else {
+                    throw NateError.message("UDL 片段与固定正文原字节不一致。")
+                }
+            }
+            if let pending = state.wordContinuation {
+                // 后续样式只属于取得前瞻证据的不可变正文，旧修订或非连续片段不能复用其范围。
+                guard let source, source.id == pending.documentID, source.revision == pending.revision,
+                    source.text.sourceIdentity == pending.sourceIdentity, pending.next == base,
+                    pending.end <= source.text.byteCount
+                else {
+                    throw NateError.message("UDL 短语后续状态与正文身份、修订或连续位置不一致。")
+                }
+            }
             var candidate = state
-            let tokens = try scan(text, base: base, definition: definition, state: &candidate, budget: budget)
+            let tokens = try scan(
+                text,
+                base: base,
+                definition: definition,
+                state: &candidate,
+                source: source,
+                budget: budget
+            )
             try budget.check()
             candidate.ruleGeneration = definition.generation
             state = candidate
@@ -84,6 +118,7 @@ public enum UDLLexer {
     /// - base: 原文起点。
     /// - definition: 本次固定规则代次。
     /// - state: 仅本次扫描使用的候选状态。
+    /// - source: 已确认原字节和身份的固定正文。
     /// - budget: 规则索引、匹配及输出共用的预算。
     /// 返回：全部范围和上下文完整时返回样式，否则抛错并由入口保留旧状态。
     private static func scan(
@@ -91,6 +126,7 @@ public enum UDLLexer {
         base: Int,
         definition: UDLDefinition,
         state: inout UDLState,
+        source: DocumentSnapshot?,
         budget: UDLScanBudget
     ) throws -> [SyntaxToken] {
         let bytes = Array(text.utf8)
@@ -100,6 +136,12 @@ public enum UDLLexer {
         let delimiterRules = try UDLForwardRules(words: definition.lists["Delimiters"] ?? [], budget: budget)
         let comments = commentRules.flattened
         let delimiters = delimiterRules.flattened
+        let quoted = try UDLQuotedRules(
+            definition: definition,
+            comments: comments,
+            delimiters: delimiters,
+            budget: budget
+        )
         let numbers = try UDLNumberRules(definition: definition, budget: budget)
         var folders = UDLFoldRules(definition: definition)
         var numberEnds: [String: Set<UInt8>] = [:]
@@ -131,6 +173,16 @@ public enum UDLLexer {
                         state.foldWhite = false
                     }
                 }
+            }
+            if consumeContinuation(
+                bytes: bytes,
+                base: base,
+                position: &i,
+                state: &state,
+                definition: definition,
+                tokens: &tokens
+            ) {
+                continue
             }
             let context = state.contexts.last
             let nesting =
@@ -362,6 +414,40 @@ public enum UDLLexer {
                     )
                 }
             }
+            if backwardStart,
+                let match = try quoted.match(
+                    bytes: bytes,
+                    offset: i,
+                    base: base,
+                    snapshot: source,
+                    context: context?.style,
+                    nesting: nesting,
+                    budget: budget
+                )
+            {
+                let replay = try UDLQuotedReplay.prepare(
+                    bytes: bytes,
+                    offset: i,
+                    state: state,
+                    nesting: nesting,
+                    comments: commentRules,
+                    delimiters: delimiterRules,
+                    definition: definition,
+                    budget: budget
+                )
+                consumeQuoted(
+                    match,
+                    bytes: bytes,
+                    base: base,
+                    position: &i,
+                    state: &state,
+                    source: source,
+                    replay: replay,
+                    definition: definition,
+                    tokens: &tokens
+                )
+                continue
+            }
             var matched = false
             if let folder = try folders.match(
                 bytes: bytes,
@@ -398,7 +484,8 @@ public enum UDLLexer {
                         patterns: definition.lists["Keywords\(group)"] ?? [],
                         bytes: bytes,
                         offset: i,
-                        ignoreCase: definition.caseIgnored
+                        ignoreCase: definition.caseIgnored,
+                        literalOnly: true
                     )
                 {
                     let end = i + keyword.utf8.count
@@ -425,7 +512,8 @@ public enum UDLLexer {
                     patterns: definition.lists["Operators\(group)"] ?? [],
                     bytes: bytes,
                     offset: i,
-                    ignoreCase: definition.caseIgnored
+                    ignoreCase: definition.caseIgnored,
+                    literalOnly: group == 2
                 ) {
                     let end = i + op.utf8.count
                     if group == 1
@@ -467,63 +555,4 @@ public enum UDLLexer {
         return tokens
     }
 
-    /// 业务作用：连续相同样式合并输出，避免按字节生成大量呈现对象。
-    /// 参数说明:
-    /// - tokens: 已生成范围。
-    /// - start: 新片段起点。
-    /// - end: 新片段结束。
-    /// - style: 资源样式名。
-    /// - definition: 完整 UDL。
-    /// - merge: 是否合并相邻相同样式，折叠标记须保留各自独立的完整边界。
-    /// - foldMarker: 当前独立标记的明确结构身份。
-    /// 返回：追加或合并呈现，不改正文。
-    static func emit(
-        _ tokens: inout [SyntaxToken],
-        start: Int,
-        end: Int,
-        style: String,
-        definition: UDLDefinition,
-        merge: Bool = true,
-        foldMarker: SyntaxFoldMarker? = nil
-    ) {
-        let rule = definition.styles[style]
-        let lexicalStyle = "udl:" + style
-        let kind: SyntaxKind =
-            style == "DEFAULT"
-            ? .text
-            : style.contains("COMMENT")
-                ? .comment
-                : style.contains("DELIMITER")
-                    ? .string
-                    : style == "NUMBERS" ? .number : style.hasPrefix("KEYWORDS") ? .keyword : .punctuation
-        var start = start
-        if merge, let previous = tokens.last, previous.range.upper == start, previous.kind == kind,
-            previous.lexicalStyle == lexicalStyle,
-            previous.foreground == rule?.foreground, previous.background == rule?.background,
-            previous.fontStyle == rule?.fontStyle ?? 0
-        {
-            start = previous.range.lower
-            tokens.removeLast()
-        }
-        tokens.append(
-            SyntaxToken(
-                range: ByteRange(start, end),
-                kind: kind,
-                foreground: rule?.foreground,
-                background: rule?.background,
-                fontStyle: rule?.fontStyle ?? 0,
-                lexicalStyle: lexicalStyle,
-                foldMarker: foldMarker
-            )
-        )
-    }
-
-    /// 业务作用：规则边界按标识符字节判断，不切开 UTF-8。
-    /// 参数说明:
-    /// - byte: 邻接字节。
-    /// 返回：可构成词的字节。
-    static func word(_ byte: UInt8) -> Bool {
-        (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte) || byte == 95
-            || byte >= 128
-    }
 }

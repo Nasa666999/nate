@@ -65,6 +65,7 @@ public struct SyntaxAnalysis: Sendable {
                         base: range.lower,
                         definition: $0,
                         state: &user,
+                        source: snapshot,
                         deadline: deadline
                     )
                 } ?? scanner.highlight(text, base: range.lower, state: &native)
