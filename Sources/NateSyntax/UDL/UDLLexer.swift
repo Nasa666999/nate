@@ -6,11 +6,14 @@ public struct UDLContext: Sendable, Equatable {
     var ends: [String]
     var escapes: [String]
     var lineOnly: Bool
+    var continues: [String] = []
 }
 
 public struct UDLState: Sendable, Equatable {
     var contexts: [UDLContext] = []
     var ruleGeneration: UUID?
+    var atLineStart = true
+    var hasVisible = false
     public fileprivate(set) var diagnostic: String?
 
     /// 业务作用：建立独立 UDL 行首状态，供跨行分隔符和注释传播。
@@ -82,6 +85,7 @@ public enum UDLLexer {
         budget: UDLScanBudget
     ) throws -> [SyntaxToken] {
         let bytes = Array(text.utf8)
+        try budget.consume(bytes.count)
         let comments = indexed(definition.lists["Comments"] ?? [])
         let delimiters = indexed(definition.lists["Delimiters"] ?? [])
         let numbers = try UDLNumberRules(definition: definition, budget: budget)
@@ -95,6 +99,9 @@ public enum UDLLexer {
                 throw NateError.message("UDL 单行词法片段超过 65536 个。")
             }
             let start = i
+            defer {
+                UDLPhysicalLine.advance(bytes[start..<i], state: &state)
+            }
             let context = state.contexts.last
             let nesting =
                 context.flatMap {
@@ -146,8 +153,31 @@ public enum UDLLexer {
                 continue
             }
             if let context, context.lineOnly, bytes[i] == 10 || bytes[i] == 13 {
-                state.contexts.removeLast()
-                continue
+                if context.style == "LINE COMMENTS" {
+                    let continued = try UDLPhysicalLine.continues(
+                        bytes: bytes,
+                        before: i,
+                        patterns: context.continues,
+                        ignoreCase: definition.caseIgnored,
+                        budget: budget
+                    )
+                    if !continued {
+                        state.contexts.removeLast()
+                    }
+                    i += bytes[i] == 13 && i + 1 < bytes.count && bytes[i + 1] == 10 ? 2 : 1
+                    emit(
+                        &tokens,
+                        start: base + start,
+                        end: base + i,
+                        style: context.style,
+                        definition: definition
+                    )
+                    continue
+                }
+                else {
+                    state.contexts.removeLast()
+                    continue
+                }
             }
             var entered = false
             if nesting & 0x100 != 0,
@@ -160,12 +190,22 @@ public enum UDLLexer {
                 )
             {
                 state.contexts.append(
-                    UDLContext(style: "COMMENTS", ends: comments[4] ?? [], escapes: [], lineOnly: false)
+                    UDLContext(
+                        style: "COMMENTS",
+                        ends: comments[4] ?? [],
+                        escapes: [],
+                        lineOnly: false
+                    )
                 )
                 i += opener.utf8.count
                 entered = true
             }
             else if nesting & 0x200 != 0,
+                UDLPhysicalLine.permits(
+                    definition.lineCommentPosition,
+                    atLineStart: state.atLineStart,
+                    hasVisible: state.hasVisible
+                ),
                 let opener = try budget.longest(
                     key: "Comments0",
                     patterns: comments[0] ?? [],
@@ -180,8 +220,9 @@ public enum UDLLexer {
                         ends: (comments[2] ?? []).filter {
                             $0 != "EOL" && $0 != "((EOL))"
                         },
-                        escapes: comments[1] ?? [],
-                        lineOnly: true
+                        escapes: [],
+                        lineOnly: true,
+                        continues: comments[1] ?? []
                     )
                 )
                 i += opener.utf8.count
@@ -338,9 +379,6 @@ public enum UDLLexer {
                 style: context?.style ?? "DEFAULT",
                 definition: definition
             )
-        }
-        state.contexts.removeAll {
-            $0.lineOnly
         }
         guard tokens.count <= 65_536 else {
             throw NateError.message("UDL 单行词法片段超过 65536 个。")

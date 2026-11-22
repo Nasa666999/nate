@@ -7,6 +7,12 @@ public enum UDLDecimalSeparator: Int, Sendable {
     case both = 2
 }
 
+public enum UDLLineCommentPosition: Int, Sendable {
+    case anywhere = 0
+    case lineStart = 1
+    case leadingWhitespace = 2
+}
+
 public struct UDLStyle: Sendable {
     public var name: String
     public var foreground: String?
@@ -33,6 +39,11 @@ public struct UDLDefinition: Sendable {
         }
     }
     public var decimalSeparator: UDLDecimalSeparator = .dot {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var lineCommentPosition: UDLLineCommentPosition = .anywhere {
         didSet {
             generation = UUID()
         }
@@ -232,6 +243,14 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
                     return
                 }
                 current?.decimalSeparator = separator
+            }
+            if let value = attributeDict["forcePureLC"] {
+                guard let raw = Int(value), let position = UDLLineCommentPosition(rawValue: raw) else {
+                    failure = .message("UDL 行注释位置必须为任意位置、严格行首或仅前导空白。")
+                    parser.abortParsing()
+                    return
+                }
+                current?.lineCommentPosition = position
             }
         case "Prefix":
             for group in 1...8 where attributeDict["Keywords\(group)"] == "yes" {
