@@ -12,6 +12,7 @@ enum UDLResourceIdentity {
         append("UDLEffectiveRules", hash: &hash)
         append(definition.name, hash: &hash)
         append(definition.caseIgnored ? "yes" : "no", hash: &hash)
+        append(String(definition.decimalSeparator.rawValue), hash: &hash)
         append(String(definition.extensions.count), hash: &hash)
         for value in definition.extensions {
             append(value, hash: &hash)

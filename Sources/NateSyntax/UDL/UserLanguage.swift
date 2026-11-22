@@ -1,6 +1,12 @@
 import Foundation
 import NateCore
 
+public enum UDLDecimalSeparator: Int, Sendable {
+    case dot = 0
+    case comma = 1
+    case both = 2
+}
+
 public struct UDLStyle: Sendable {
     public var name: String
     public var foreground: String?
@@ -22,6 +28,11 @@ public struct UDLDefinition: Sendable {
         }
     }
     public var caseIgnored: Bool {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var decimalSeparator: UDLDecimalSeparator = .dot {
         didSet {
             generation = UUID()
         }
@@ -212,7 +223,16 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
             if let version = attributeDict["udlVersion"], version != "2.1" && version != "2.0" {
                 current?.diagnostics.append("UDL 格式 \(version) 可能包含尚未识别的规则；原定义完整保留。")
             }
-        case "Global": current?.caseIgnored = attributeDict["caseIgnored"] == "yes"
+        case "Global":
+            current?.caseIgnored = attributeDict["caseIgnored"] == "yes"
+            if let value = attributeDict["decimalSeparator"] {
+                guard let raw = Int(value), let separator = UDLDecimalSeparator(rawValue: raw) else {
+                    failure = .message("UDL 小数分隔符必须为点号、逗号或同时允许两者。")
+                    parser.abortParsing()
+                    return
+                }
+                current?.decimalSeparator = separator
+            }
         case "Prefix":
             for group in 1...8 where attributeDict["Keywords\(group)"] == "yes" {
                 current?.prefix.insert(group)

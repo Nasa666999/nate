@@ -84,6 +84,9 @@ public enum UDLLexer {
         let bytes = Array(text.utf8)
         let comments = indexed(definition.lists["Comments"] ?? [])
         let delimiters = indexed(definition.lists["Delimiters"] ?? [])
+        let numbers = try UDLNumberRules(definition: definition, budget: budget)
+        var numberEnds: [String: Set<UInt8>] = [:]
+        var numberBlocked: [String: Int] = [:]
         var tokens: [SyntaxToken] = []
         var i = 0
         while i < bytes.count {
@@ -223,6 +226,50 @@ public enum UDLLexer {
                 )
                 continue
             }
+            if nesting & 0x4000000 != 0, i == 0 || !word(bytes[i - 1]) {
+                let key = context?.style ?? "DEFAULT"
+                let ends: Set<UInt8>
+                if let existing = numberEnds[key] {
+                    ends = existing
+                }
+                else {
+                    ends = try numbers.terminators(
+                        definition: definition,
+                        comments: comments,
+                        delimiters: delimiters,
+                        nesting: nesting,
+                        contextEnds: context?.ends ?? [],
+                        budget: budget
+                    )
+                    numberEnds[key] = ends
+                }
+                if i >= numberBlocked[key, default: 0] {
+                    let candidate = UDLNumberScanner(
+                        rules: numbers,
+                        bytes: bytes,
+                        start: i,
+                        ends: ends,
+                        budget: budget
+                    )
+                    if let length = try candidate.length() {
+                        i += length
+                        emit(
+                            &tokens,
+                            start: base + start,
+                            end: base + i,
+                            style: "NUMBERS",
+                            definition: definition
+                        )
+                        continue
+                    }
+                    numberBlocked[key] = try UDLNumberRules.failedEnd(
+                        in: bytes,
+                        from: i,
+                        ends: ends,
+                        budget: budget
+                    )
+                }
+            }
             var matched = false
             for group in 1...8 where nesting & (1 << (group + 9)) != 0 {
                 if i == 0 || !word(bytes[i - 1]),
@@ -278,15 +325,6 @@ public enum UDLLexer {
                 }
             }
             if matched {
-                continue
-            }
-            if nesting & 0x4000000 != 0, (48...57).contains(bytes[i]), i == 0 || !word(bytes[i - 1]) {
-                i += 1
-                while i < bytes.count && ((48...57).contains(bytes[i]) || [46, 44, 95].contains(bytes[i])) {
-                    try budget.consume()
-                    i += 1
-                }
-                emit(&tokens, start: base + start, end: base + i, style: "NUMBERS", definition: definition)
                 continue
             }
             i += 1

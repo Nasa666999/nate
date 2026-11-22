@@ -553,6 +553,10 @@
       "sha256" : "599826df92bfdcd2702eac691072498bb096c55af04ee984cf90f70ed77b5a70"
     },
     {
+      "path" : "licenses\/UDL-NOTICE.txt",
+      "sha256" : "4c9e56563008cd6ea763e427b9b32dc88dc5f17db31484258a0e0606a20ac3b3"
+    },
+    {
       "path" : "licenses\/Unicode-LICENSE.txt",
       "sha256" : "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
     },

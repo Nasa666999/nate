@@ -1,0 +1,11 @@
+UDL 数字规则的 Swift 适配依据 Notepad++ 的 LexUser.cxx 数字判定。
+
+原始代码版权：Copyright (C) 2003 Don HO <donho@altern.org>
+原始代码许可：GNU General Public License version 2 or, at your option, any later version。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexUser.cxx
+
+Nate 采用 GNU General Public License version 3 or later。
+原许可全文见同目录的 NotepadPlusPlus-GPL.txt，Nate 许可全文位于根 LICENSE。
+
+Swift 适配采用有界原字节扫描、明确小数分隔符配置、当前嵌套上下文及原子样式发布；
+不调用 Windows 或 Scintilla 运行时，也不作为数值有效性或可计算性的证明。
