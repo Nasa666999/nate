@@ -538,7 +538,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "9ec94b161f3312aea73b9b0338180c27175bec524522ab281c133a68dbcbe600"
+      "sha256" : "882eb05efaa62769fd0b0f6a379a12488ca96ebba2ca99b74aa3756d5930d385"
     },
     {
       "path" : "licenses\/Batch-NOTICE.txt",
@@ -547,6 +547,10 @@
     {
       "path" : "licenses\/Boost-LICENSE.txt",
       "sha256" : "2aa0c9c2f81c640306d8394b826e483630e3608e9545a21059b78bfc91c6826f"
+    },
+    {
+      "path" : "licenses\/CMake-NOTICE.txt",
+      "sha256" : "8d6a7e2b5b4ef13232d7427b5a6051c0a0a04f325da308f37b20cc5887232b6e"
     },
     {
       "path" : "licenses\/CSS-NOTICE.txt",

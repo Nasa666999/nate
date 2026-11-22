@@ -1,0 +1,9 @@
+CMake 词法与折叠适配参考 Lexilla 的 LexCmake.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexCmake.cxx
+
+Copyright 2007 by Cristian Adam <cristian [dot] adam [at] gmx [dot] net>
+based on the NSIS lexer
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留三组词表、引号与变量状态和原文首词控制折叠，使用固定来源、
+有界原字节分类及完整样式；不执行构建命令、不展开变量或载入外部文件。
