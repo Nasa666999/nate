@@ -140,6 +140,12 @@ extension EditorView {
                     _ = submitPairInput(command)
                     return
                 }
+                if indentationSettings.automatic == .language,
+                    let command = EditorCommand.allCases.first(where: { $0.structuralCharacter == value })
+                {
+                    _ = performEditorCommand(command)
+                    return
+                }
             }
             catch {
                 onStatus?(error.localizedDescription)

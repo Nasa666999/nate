@@ -1,5 +1,6 @@
 import AppKit
 import NateCore
+import NateSyntax
 
 extension EditorView {
     /// 业务作用：直接配对输入与语义宏沿同一完整事务提交，插入内部光标不制造第二次正文操作。
@@ -16,7 +17,7 @@ extension EditorView {
             return false
         }
         do {
-            let prepared = try PreparedPairInsertion(snapshot: document.snapshot, command: command)
+            let prepared = try preparePairInput(command, completeOpening: true)
             let changed = try document.commit(prepared.transaction)
             if let state = document.selectionState {
                 adoptViewSelectionState(state)
@@ -36,5 +37,86 @@ extension EditorView {
             onStatus?(error.localizedDescription)
             return false
         }
+    }
+
+    /// 业务作用：自动配对关闭时仍允许结构对齐，实际字符与前导空白作为一个语义输入提交。
+    /// 参数说明:
+    /// - command: 明确保存一个花括号或方括号的输入动作。
+    /// 返回：全部目标一次成功提交时为真；候选、权限或准备失败保留原状态且不记录输入。
+    func insertStructuralCharacter(_ command: EditorCommand) -> Bool {
+        guard let value = command.structuralCharacter, composition == nil,
+            !document.isReadOnly, !document.isEditingSuspended, synchronizeDocumentSelectionState()
+        else {
+            onStatus?("当前候选或编辑权限不允许结构字符输入。")
+            return false
+        }
+        do {
+            let brace = value == "{" || value == "}"
+            let pair = try AutomaticPair(
+                opening: brace ? "{" : "[",
+                closing: brace ? "}" : "]"
+            )
+            let input = try PairInputCommand(
+                pair: pair,
+                input: value,
+                skipExisting: false
+            )
+            let prepared = try preparePairInput(input, completeOpening: false)
+            try commitPreparedEditorInput(prepared.transaction)
+            return true
+        }
+        catch {
+            onStatus?(error.localizedDescription)
+            return false
+        }
+    }
+
+    /// 业务作用：配对及独立字符共享同一快照和截止，结构判断不能生成第二次缩进事务。
+    /// 参数说明:
+    /// - command: 固定两端定义、实际输入和越过策略。
+    /// - completeOpening: 是否为开端生成完整一对。
+    /// 返回：全部目标及其前缀已经验证的唯一输入事务，任一准备失败则抛错。
+    private func preparePairInput(_ command: PairInputCommand, completeOpening: Bool) throws
+        -> PreparedPairInsertion
+    {
+        let snapshot = document.snapshot
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        let permit: @Sendable () -> Bool = {
+            ContinuousClock.now < deadline
+        }
+        let structure: StructuralCharacterIndentationPlan?
+        if indentationSettings.automatic == .language,
+            ["{", "}", "[", "]"].contains(command.input)
+        {
+            structure = try StructuralCharacterIndentationPlan(
+                snapshot: snapshot,
+                input: command.input,
+                language: language,
+                udl: userLanguage,
+                settings: tabSettings,
+                deadline: deadline,
+                permit: permit
+            )
+        }
+        else {
+            structure = nil
+        }
+        let resolver: (@Sendable (SelectionEntry) throws -> String?)?
+        if let structure {
+            resolver = {
+                try structure.prefix(for: $0, snapshot: snapshot)
+            }
+        }
+        else {
+            resolver = nil
+        }
+        return try PreparedPairInsertion(
+            snapshot: snapshot,
+            command: command,
+            completeOpening: completeOpening,
+            tabSettings: tabSettings,
+            indentation: resolver,
+            permit: permit
+        )
     }
 }

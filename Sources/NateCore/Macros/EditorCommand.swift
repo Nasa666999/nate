@@ -5,10 +5,24 @@ public enum EditorCommand: String, CaseIterable, Codable, Sendable {
     case insertTab
     case insertNewline
     case insertMarkupTagEnd
+    case insertOpeningBrace, insertClosingBrace, insertOpeningBracket, insertClosingBracket
     case moveLeft, moveRight, moveUp, moveDown
     case extendLeft, extendRight, extendUp, extendDown
     case lineStart, lineEnd, extendLineStart, extendLineEnd
     case documentStart, documentEnd, extendDocumentStart, extendDocumentEnd
     case wordLeft, wordRight, extendWordLeft, extendWordRight
     case selectAll, collapseSelection
+
+    /// 业务作用：独立结构字符的宏保存输入意图，播放时采用目标正文当前语言的缩进规则。
+    /// 参数说明: 无。
+    /// 返回：四种受支持的字面字符，其它编辑动作没有结构字符载荷。
+    public var structuralCharacter: String? {
+        switch self {
+        case .insertOpeningBrace: return "{"
+        case .insertClosingBrace: return "}"
+        case .insertOpeningBracket: return "["
+        case .insertClosingBracket: return "]"
+        default: return nil
+        }
+    }
 }

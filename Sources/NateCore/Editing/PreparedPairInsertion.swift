@@ -7,11 +7,17 @@ public struct PreparedPairInsertion: Sendable {
     /// 参数说明:
     /// - snapshot: 带完整源选择及控制代次的固定正文。
     /// - command: 本次固定配对定义、真实输入与越过选项。
+    /// - completeOpening: 开端是否生成完整一对；独立结构字符输入关闭此项以保留字面字符。
+    /// - tabSettings: 结构前缀采用的实际 Tab 停靠规则。
+    /// - indentation: 逐目标的已确认前导空白，为空时保留原行；只允许改动普通空光标之前的空白。
     /// - permit: 范围、源字节与事务构建共用的继续资格。
     /// 返回：全部目标完整准备时提供事务；矩形、边界、容量或资格失效时拒绝全部动作。
     public init(
         snapshot: DocumentSnapshot,
         command: PairInputCommand,
+        completeOpening: Bool = true,
+        tabSettings: TabSettings = TabSettings(),
+        indentation: (@Sendable (SelectionEntry) throws -> String?)? = nil,
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -52,13 +58,26 @@ public struct PreparedPairInsertion: Sendable {
                 // 相同原字节替换只推进选择，保留正文修订及重做历史；混合目标仍由同一事务统一发布。
                 range = ByteRange(range.lower, range.lower + command.pair.closing.utf8.count)
             }
-            else if opening {
+            else if opening && completeOpening {
                 let symmetric = command.pair.opening.utf8.elementsEqual(command.pair.closing.utf8)
                 let word = symmetric && Self.previousIsWord(in: snapshot.text, before: range.lower)
                 if !escaped && !word {
                     value = command.pair.opening + command.pair.closing
                     caret = command.pair.opening.utf8.count
                 }
+            }
+            if let prefix = try indentation?(entry) {
+                let adjusted = try PairIndentationPrefix.prepare(
+                    prefix: prefix,
+                    entry: entry,
+                    text: snapshot.text,
+                    settings: tabSettings,
+                    remaining: &remaining,
+                    budget: budget
+                )
+                range = ByteRange(adjusted, range.upper)
+                value = prefix + value
+                caret += prefix.utf8.count
             }
             return SelectionInsertionTarget(
                 id: entry.id,
