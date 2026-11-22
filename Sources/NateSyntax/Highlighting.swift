@@ -80,6 +80,8 @@ public struct SyntaxState: Sendable, Equatable {
     var scriptCache = ScriptLexicalCache()
     var mssql = MSSQLLexicalState()
     var mssqlCache = MSSQLLexicalCache()
+    var sql = SQLLexicalState()
+    var sqlCache = SQLLexicalCache()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -103,6 +105,7 @@ public struct SyntaxScanner: Sendable {
     let luaRules: LuaRules?
     let scriptRules: ScriptRules?
     let mssqlRules: MSSQLRules?
+    let sqlRules: SQLRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -131,6 +134,7 @@ public struct SyntaxScanner: Sendable {
         rRules = language.id == "r" ? RRules(language: language, deadline: self.deadline) : nil
         luaRules = language.id == "lua" ? LuaRules(language: language, deadline: self.deadline) : nil
         mssqlRules = language.id == "mssql" ? MSSQLRules(language: language, deadline: self.deadline) : nil
+        sqlRules = language.id == "sql" ? SQLRules(language: language, deadline: self.deadline) : nil
         scriptRules =
             ["javascript.js", "typescript"].contains(language.id)
             ? ScriptRules(language: language, deadline: self.deadline) : nil
@@ -138,14 +142,14 @@ public struct SyntaxScanner: Sendable {
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
-                "objc", "r", "lua", "mssql",
+                "objc", "r", "lua", "mssql", "sql",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
         if [
             "makefile", "rust", "yaml", "powershell", "objc", "r", "lua", "javascript.js", "typescript",
-            "mssql",
+            "mssql", "sql",
         ]
         .contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
@@ -177,6 +181,21 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        // SQL 的引号和物理分类缓存属于自己的规则，切换语言必须显式重建连续状态。
+        guard state.sql.resource == nil || language.id == "sql" else {
+            state.diagnostic = "词法语言已改变，不能继续 SQL 的原状态。"
+            return []
+        }
+        if language.id == "sql" {
+            return SQLLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: sqlRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         // T-SQL 前向证据属于自己的语言规则，切换语言必须从中性状态开始，不能继续旧缓存。
         guard state.mssql.resource == nil || language.id == "mssql" else {
             state.diagnostic = "词法语言已改变，不能继续 T-SQL 的原状态。"

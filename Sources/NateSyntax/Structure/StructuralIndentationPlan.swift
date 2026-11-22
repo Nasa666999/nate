@@ -55,7 +55,7 @@ public struct StructuralIndentationPlan: Sendable {
         ]
         usesLanguageRules =
             udl == nil
-            && (identifier == "python" || identifier == "lua" || identifier == "mssql"
+            && (identifier == "python" || identifier == "lua" || identifier == "mssql" || identifier == "sql"
                 || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
@@ -80,7 +80,7 @@ public struct StructuralIndentationPlan: Sendable {
         let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
         let supportsControlLines =
             identifier != "python"
-            && !["perl", "rust", "powershell", "json", "json5", "lua"].contains(identifier)
+            && !["perl", "rust", "powershell", "json", "json5", "lua", "sql"].contains(identifier)
         var state = SyntaxState()
         var output: [ByteRange: NewlineIndentationAction] = [:]
         var consumed = 0
@@ -98,7 +98,7 @@ public struct StructuralIndentationPlan: Sendable {
                 !state.blockEnd.isEmpty || state.json.blockComment || state.c.blockComment
                 || state.rust.depth > 0 || [13, 16].contains(state.powershell.mode)
                 || [1, 3, 17, 18].contains(state.objc.mode)
-                || state.lua.mode == 1 || state.mssql.mode == 1
+                || state.lua.mode == 1 || state.mssql.mode == 1 || [1, 3].contains(state.sql.mode)
             let startsInDirective = state.c.preprocessor || state.objc.mode == 9 || state.lua.mode == 9
             let tokens = scanner.highlight(source, base: row.lower, state: &state)
             guard state.diagnostic == nil else {
@@ -174,6 +174,16 @@ public struct StructuralIndentationPlan: Sendable {
             }
             previousCondition =
                 !directiveLine && (mssql?.isCondition ?? (conditions?.contains(significant.last) == true))
+            let sql =
+                identifier == "sql"
+                ? try SQLIndentationLine(
+                    code: code,
+                    tokens: tokens,
+                    base: row.lower,
+                    significant: significant,
+                    deadline: deadline,
+                    permit: permit
+                ) : nil
             let lua =
                 identifier == "lua"
                 ? try LuaIndentationLine(
@@ -211,6 +221,15 @@ public struct StructuralIndentationPlan: Sendable {
                         initial: initial,
                         scanner: scanner
                     ) : nil
+                let sqlContext =
+                    identifier == "sql"
+                    ? try SQLLexing.prefixState(
+                        source: Array(source.utf8),
+                        offset: offset,
+                        base: row.lower,
+                        initial: initial,
+                        scanner: scanner
+                    ) : nil
                 let nativeLineComment =
                     identifier == "objc"
                     && (token?.lexicalStyle == "objc:2" || token?.lexicalStyle == "objc:15")
@@ -218,6 +237,9 @@ public struct StructuralIndentationPlan: Sendable {
                     || identifier == "lua"
                         && (token?.lexicalStyle == "lua:2" || token?.lexicalStyle == "lua:3")
                     || scriptContext?.lineComment == true || mssqlContext?.mode == 2
+                    || sqlContext.map {
+                        [2, 13].contains($0.mode) && !$0.lineCommentEnded
+                    } == true
                 // 行注释中的后继闭合符没有代码资格，换行只能使用注释前已经确认的标点和条件头。
                 let following = nativeLineComment ? nil : snapshot.text.byte(at: target.upper)
                 let insideString =
@@ -260,6 +282,9 @@ public struct StructuralIndentationPlan: Sendable {
                 else if let mssqlContext {
                     insideNativeLiteral = !MSSQLLexing.isCode(mssqlContext)
                 }
+                else if let sqlContext {
+                    insideNativeLiteral = !SQLLexing.isCode(sqlContext)
+                }
                 else if ["powershell", "objc", "r", "lua", "javascript.js", "typescript"].contains(identifier)
                 {
                     insideNativeLiteral = try !StructuralInsertionContext.isCode(
@@ -285,6 +310,13 @@ public struct StructuralIndentationPlan: Sendable {
                         offset: offset,
                         end: target.upper - row.lower,
                         last: last,
+                        allowFollowing: !nativeLineComment
+                    )
+                }
+                else if let sql {
+                    output[target] = sql.action(
+                        offset: offset,
+                        end: target.upper - row.lower,
                         allowFollowing: !nativeLineComment
                     )
                 }

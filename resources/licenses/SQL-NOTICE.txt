@@ -1,0 +1,9 @@
+SQL、PL/SQL 与 SQL*Plus 词法及折叠适配参考 Lexilla 的 LexSQL.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexSQL.cxx
+
+Copyright 1998-2012 by Neil Hodgson <neilh@scintilla.org>
+Improved by Jérôme LAFORGE from 2010 to 2012.
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留独立名称与文档命令、SQL*Plus 缩写、普通和 Q 引号、原字节类别及语句折叠状态，
+使用固定正文与资源身份、有界完整物理分类和原生样式属性；不连接数据库或执行 SQL。

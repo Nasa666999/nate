@@ -19,6 +19,17 @@ enum StructuralInsertionContext {
         scanner: SyntaxScanner,
         language: LanguageDefinition
     ) throws -> Bool {
+        if language.id == "sql" {
+            return try SQLLexing.isCode(
+                SQLLexing.prefixState(
+                    source: source,
+                    offset: offset,
+                    base: base,
+                    initial: initial,
+                    scanner: scanner
+                )
+            )
+        }
         if language.id == "mssql" {
             return try MSSQLLexing.isCode(
                 MSSQLLexing.prefixState(
