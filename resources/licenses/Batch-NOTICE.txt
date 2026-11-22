@@ -1,0 +1,8 @@
+Batch 词法适配参考 Lexilla 的 LexBatch.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexBatch.cxx
+
+Copyright 1998-2001 by Neil Hodgson <neilh@scintilla.org>
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留内部与外部命令、标签、变量及扩展、操作符、引用和 caret 续行规则，
+使用固定正文与资源身份、有界物理分类和原生样式；不执行命令或展开变量。

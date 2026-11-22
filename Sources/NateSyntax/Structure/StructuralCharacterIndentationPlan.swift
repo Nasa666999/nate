@@ -95,6 +95,7 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                 || [1, 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 17, 18].contains(lexical.objc.mode)
                 || [1, 6, 7, 10, 11, 12, 13, 14, 15].contains(lexical.r.mode)
                 || [1, 2, 3, 6, 7, 8, 9, 12].contains(lexical.lua.mode)
+                || [9, 13, 14, 16].contains(lexical.css.mode)
             let tokens = scanner.highlight(
                 String(decoding: source, as: UTF8.self),
                 base: range.lower,
@@ -104,12 +105,16 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                 throw NateError.message(lexical.diagnostic ?? "结构字符缺少完整词法证据。")
             }
             var code = source
-            for token in tokens where token.isStructureOpaque {
+            for token in tokens
+            where token.isStructureOpaque || identifier == "css" && token.lexicalStyle != "css:5" {
                 for position in (token.range.lower - range.lower)..<(token.range.upper - range.lower) {
                     if position & 255 == 0 {
                         try Self.check(deadline: deadline, permit: permit)
                     }
-                    code[position] = 32
+                    // CSS 属性及未引用值保留文字资格，只有操作符类别的花括号才能进入代码栈。
+                    if token.isStructureOpaque || code[position] == 123 || code[position] == 125 {
+                        code[position] = 32
+                    }
                 }
             }
             let targets = (byLine[line] ?? []).sorted {

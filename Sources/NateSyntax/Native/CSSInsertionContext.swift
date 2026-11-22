@@ -60,11 +60,11 @@ extension CSSLexing {
         return try replay.scan().state
     }
 
-    /// 业务作用：CSS 只在实际非注释、非引号字面的前缀准备结构输入。
+    /// 业务作用：CSS 只在实际非注释、非属性内容及非引号字面的前缀准备结构输入。
     /// 参数说明:
     /// - state: 已完整确认的实际光标前缀状态。
-    /// 返回：注释与单双引号字面为假，其它原生类别保持代码输入资格。
+    /// 返回：注释、属性内容与单双引号字面为假，其它原生类别保持代码输入资格。
     static func isCode(_ state: CSSLexicalState) -> Bool {
-        ![9, 13, 14].contains(state.mode)
+        ![9, 13, 14, 16].contains(state.mode)
     }
 }

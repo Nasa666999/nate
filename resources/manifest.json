@@ -538,7 +538,11 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "1679d06fc0fb9d7b88a5822b44ef828437c2711432b98c109313078d5788a53a"
+      "sha256" : "6b38955fb6cd92d6180da315cefe1ae5ca7e00b2f297be0190f765228f330eba"
+    },
+    {
+      "path" : "licenses\/Batch-NOTICE.txt",
+      "sha256" : "59eca55fd32e747aa71efa82c0f7bb9051b2a70982ba9b6961326bc152f46792"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",

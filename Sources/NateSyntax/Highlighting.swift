@@ -84,6 +84,8 @@ public struct SyntaxState: Sendable, Equatable {
     var sqlCache = SQLLexicalCache()
     var css = CSSLexicalState()
     var cssCache = CSSLexicalCache()
+    var batch = BatchLexicalState()
+    var batchCache = BatchLexicalCache()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -109,6 +111,7 @@ public struct SyntaxScanner: Sendable {
     let mssqlRules: MSSQLRules?
     let sqlRules: SQLRules?
     let cssRules: CSSRules?
+    let batchRules: BatchRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -139,6 +142,7 @@ public struct SyntaxScanner: Sendable {
         mssqlRules = language.id == "mssql" ? MSSQLRules(language: language, deadline: self.deadline) : nil
         sqlRules = language.id == "sql" ? SQLRules(language: language, deadline: self.deadline) : nil
         cssRules = language.id == "css" ? CSSRules(language: language, deadline: self.deadline) : nil
+        batchRules = language.id == "batch" ? BatchRules(language: language, deadline: self.deadline) : nil
         scriptRules =
             ["javascript.js", "typescript"].contains(language.id)
             ? ScriptRules(language: language, deadline: self.deadline) : nil
@@ -146,14 +150,14 @@ public struct SyntaxScanner: Sendable {
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
-                "objc", "r", "lua", "mssql", "sql", "css",
+                "objc", "r", "lua", "mssql", "sql", "css", "batch",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
         if [
             "makefile", "rust", "yaml", "powershell", "objc", "r", "lua", "javascript.js", "typescript",
-            "mssql", "sql", "css",
+            "mssql", "sql", "css", "batch",
         ]
         .contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
@@ -185,6 +189,21 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        // Batch 文本命令资格属于完整物理行，语言变化必须重建连续证据。
+        guard state.batch.resource == nil || language.id == "batch" else {
+            state.diagnostic = "词法语言已改变，不能继续 Batch 的原状态。"
+            return []
+        }
+        if language.id == "batch" {
+            return BatchLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: batchRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         // CSS 未决段可以影响此前物理行，语言切换必须重建该语言自己的连续证据。
         guard state.css.resource == nil || language.id == "css" else {
             state.diagnostic = "词法语言已改变，不能继续 CSS 的原状态。"
