@@ -96,8 +96,9 @@ extension ApplicationController {
     /// 参数说明:
     /// - data: 完整 XML 定义。
     /// - replacing: 已有用户资源，预装资源不能原地修改。
-    /// 返回：文件可靠保存后才发布规则及关联；失败保留旧配置。
-    func persistUDL(_ data: Data, replacing: URL?) async throws {
+    /// 返回：文件可靠保存后发布并返回同一组已验证定义，供兼容说明使用；失败保留旧配置。
+    @discardableResult
+    func persistUDL(_ data: Data, replacing: URL?) async throws -> [UDLDefinition] {
         guard !publishingResources else {
             throw NateError.message("另一份语言资源正在发布，请稍后重试。")
         }
@@ -153,6 +154,7 @@ extension ApplicationController {
         buildMenus()
         refreshUI()
         mainWindow?.editor.invalidateSyntax()
+        return definitions
     }
 
     /// 业务作用：通过界面导入完整 UDL，未知字段保留在原始 XML 中。
@@ -175,12 +177,8 @@ extension ApplicationController {
                     )
                     .data
                 }
-                try await persistUDL(data, replacing: nil)
-                let messages = try UDLImporter.parse(data).flatMap(\.diagnostics)
-                SystemIntegration.alert(
-                    "UDL 已导入",
-                    messages.isEmpty ? "规则已加入语言菜单。原 XML 可完整导出。" : messages.joined(separator: "\n")
-                )
+                let definitions = try await persistUDL(data, replacing: nil)
+                showUDLImportReport(definitions)
             }
             catch {
                 SystemIntegration.alert("UDL 导入失败", error.localizedDescription)
@@ -239,9 +237,9 @@ extension ApplicationController {
                 <KeywordLists><Keywords name="Comments">00// 03/* 04*/</Keywords>
                 <Keywords name="Keywords1">if else return</Keywords><Keywords name="Operators1">+ - =</Keywords>
                 <Keywords name="Delimiters">00&quot; 01\\ 02&quot;</Keywords></KeywordLists>
-                <Styles><WordsStyle name="KEYWORDS1" fgColor="8250DF" colorStyle="1" fontStyle="1" nesting="0"/>
-                <WordsStyle name="COMMENTS" fgColor="718096" colorStyle="1" fontStyle="0" nesting="0"/>
-                <WordsStyle name="DELIMITERS1" fgColor="138A55" colorStyle="1" fontStyle="0" nesting="0"/></Styles>
+                <Styles><WordsStyle name="KEYWORDS1" colorStyle="0" fontStyle="0" nesting="0"/>
+                <WordsStyle name="COMMENTS" colorStyle="0" fontStyle="0" nesting="0"/>
+                <WordsStyle name="DELIMITERS1" colorStyle="0" fontStyle="0" nesting="0"/></Styles>
                 </UserLang></NotepadPlus>
                 """
         }
@@ -252,15 +250,27 @@ extension ApplicationController {
                 userLanguageSources[$0.id]
             }
         let editor = ResourceEditor(title: "UDL 完整定义 · 修改 name 可重命名；预装定义另存为新名称", source: source)
+        editor.setDiagnostics(creating ? [] : definition?.diagnostics ?? [])
         editor.onSave = {
             [weak self, weak editor] source in
             Task {
+                guard let self else {
+                    return
+                }
                 do {
-                    try await self?.persistUDL(Data(source.utf8), replacing: destination)
-                    editor?.message.stringValue = "定义已可靠保存并发布。"
+                    let definitions = try await self.persistUDL(Data(source.utf8), replacing: destination)
+                    editor?.applyValidation(
+                        for: source,
+                        diagnostics: self.udlCompatibilityMessages(definitions),
+                        status: "定义已可靠保存并发布。"
+                    )
                 }
                 catch {
-                    editor?.message.stringValue = error.localizedDescription
+                    editor?.applyValidation(
+                        for: source,
+                        diagnostics: [error.localizedDescription],
+                        status: "定义未发布，请查看说明。"
+                    )
                 }
             }
         }
