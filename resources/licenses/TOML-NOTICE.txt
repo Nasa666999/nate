@@ -1,0 +1,9 @@
+TOML 词法与折叠适配参考 Lexilla 的 LexTOML.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexTOML.cxx
+
+Based on Zufu Liu's Notepad4 TOML lexer.
+Modified for Scintilla by Jiri Techet, 2024.
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留键、表头、值和原生行元数据及折叠规则，使用固定正文与资源身份、
+有界原字节分类和完整样式；不展开配置、不执行表达式或载入外部资源。

@@ -538,7 +538,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "6b38955fb6cd92d6180da315cefe1ae5ca7e00b2f297be0190f765228f330eba"
+      "sha256" : "9ec94b161f3312aea73b9b0338180c27175bec524522ab281c133a68dbcbe600"
     },
     {
       "path" : "licenses\/Batch-NOTICE.txt",
@@ -595,6 +595,10 @@
     {
       "path" : "licenses\/Script-NOTICE.txt",
       "sha256" : "a12cd16a77f122f7203ec28bd967046cf797a56449c8d9e97879d07f1ee37825"
+    },
+    {
+      "path" : "licenses\/TOML-NOTICE.txt",
+      "sha256" : "9d2609648599a8e390e0f62a9795c8d173fa2f4622cc20f081b35888d57df0e1"
     },
     {
       "path" : "licenses\/UDL-NOTICE.txt",

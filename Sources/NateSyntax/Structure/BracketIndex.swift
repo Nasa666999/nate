@@ -128,6 +128,10 @@ public struct BracketIndex: Sendable {
                 if udl == nil, language?.id == "css", opener == 123, style != "css:5" {
                     opaque = true
                 }
+                // TOML 表头和键名保留各自的字面匹配，只有操作符类别的括号具有结构资格。
+                if udl == nil, language?.id == "toml", style != "toml:8" {
+                    opaque = true
+                }
                 let key = BracketClass(
                     opener: opener,
                     style: style

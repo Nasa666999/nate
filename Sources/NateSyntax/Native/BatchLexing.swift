@@ -83,7 +83,9 @@ enum BatchLexing {
                     styles: Array(repeating: 0, count: raw.count)
                 )
                 let (styles, ending) = try scanner.scan(
-                    hasFollowing: snapshot.map { physical.upper < $0.text.byteCount } ?? false
+                    hasFollowing: snapshot.map {
+                        physical.upper < $0.text.byteCount
+                    } ?? false
                 )
                 budget = scanner.budget
                 local.batch = ending
