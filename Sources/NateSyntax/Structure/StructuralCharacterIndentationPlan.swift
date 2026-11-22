@@ -89,6 +89,8 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                 || lexical.c.quote != nil || lexical.c.regex || lexical.c.header
                 || !lexical.c.rawEnding.isEmpty || lexical.c.preprocessor
                 || lexical.json.blockComment || lexical.json.quote != nil
+                || lexical.rust.depth > 0 || lexical.rust.lineComment
+                || [13, 14, 21, 22, 24, 25].contains(lexical.rust.style)
             let tokens = scanner.highlight(
                 String(decoding: source, as: UTF8.self),
                 base: range.lower,

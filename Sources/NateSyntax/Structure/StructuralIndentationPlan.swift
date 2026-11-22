@@ -92,6 +92,7 @@ public struct StructuralIndentationPlan: Sendable {
             let source = snapshot.text.text(in: row)
             let startsInBlockComment =
                 !state.blockEnd.isEmpty || state.json.blockComment || state.c.blockComment
+                || state.rust.depth > 0
             let startsInDirective = state.c.preprocessor
             let tokens = scanner.highlight(source, base: row.lower, state: &state)
             guard state.diagnostic == nil else {

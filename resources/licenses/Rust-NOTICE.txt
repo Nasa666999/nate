@@ -1,0 +1,11 @@
+Rust 词法与折叠规则的 Swift 适配参考 Lexilla 的 LexRust.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexRust.cxx
+
+Copyright (c) 2013 by SiegeLord <slabode@aim.com>
+Converted to lexer object and added further folding features/properties by
+"Udo Lechner" <dlchnr(at)gmx(dot)net>
+Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>
+
+完整许可见同目录 Lexilla-LICENSE.txt。
+Swift 适配使用有界原字节扫描、固定正文与资源身份、完整标量投影和明确的整份失败语义；
+不调用 Scintilla 或 Lexilla 运行时，不执行 Rust 代码，也不作为编译或类型有效性证明。

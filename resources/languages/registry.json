@@ -56318,7 +56318,229 @@
       "where",
       "while",
       "yield"
-    ]
+    ],
+    "keywordGroups": {
+      "instre1": [
+        "abstract",
+        "as",
+        "async",
+        "await",
+        "become",
+        "box",
+        "break",
+        "const",
+        "continue",
+        "crate",
+        "do",
+        "dyn",
+        "else",
+        "enum",
+        "extern",
+        "false",
+        "final",
+        "fn",
+        "for",
+        "gen",
+        "if",
+        "impl",
+        "in",
+        "let",
+        "loop",
+        "macro",
+        "macro_rules",
+        "match",
+        "mod",
+        "move",
+        "mut",
+        "override",
+        "priv",
+        "pub",
+        "raw",
+        "ref",
+        "return",
+        "safe",
+        "self",
+        "static",
+        "struct",
+        "super",
+        "trait",
+        "true",
+        "try",
+        "type",
+        "typeof",
+        "union",
+        "unsafe",
+        "unsized",
+        "use",
+        "virtual",
+        "where",
+        "while",
+        "yield"
+      ],
+      "instre2": [
+        "bool",
+        "char",
+        "f32",
+        "f64",
+        "i128",
+        "i16",
+        "i32",
+        "i64",
+        "i8",
+        "isize",
+        "str",
+        "u128",
+        "u16",
+        "u32",
+        "u64",
+        "u8",
+        "usize"
+      ],
+      "type1": [
+        "Self"
+      ],
+      "type2": [],
+      "type3": [],
+      "type4": [],
+      "type5": []
+    },
+    "lexicalStyles": {
+      "32": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "0": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "1": {
+        "foreground": "#007F00",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "2": {
+        "foreground": "#007F00",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "3": {
+        "foreground": "#3F703F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "4": {
+        "foreground": "#3F703F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "5": {
+        "foreground": "#007F7F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "6": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "7": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "8": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "9": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "10": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "11": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "12": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "13": {
+        "foreground": "#7F007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "14": {
+        "foreground": "#B090B0",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "15": {
+        "foreground": "#7F007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "16": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "17": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "18": {
+        "foreground": "#007F7F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "19": {
+        "foreground": "#7F7F00",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "20": {
+        "foreground": "#000000",
+        "background": "#E0C0E0",
+        "fontStyle": 0
+      },
+      "21": {
+        "foreground": "#7F007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "22": {
+        "foreground": "#B090B0",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "23": {
+        "foreground": "#7F007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "24": {
+        "foreground": "#7F007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "25": {
+        "foreground": "#B090B0",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      }
+    }
   },
   {
     "id": "sas",

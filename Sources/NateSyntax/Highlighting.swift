@@ -68,6 +68,7 @@ public struct SyntaxState: Sendable, Equatable {
     var registry = RegistryLexicalState()
     var latex = LatexLexicalState()
     var lisp = LispLexicalState()
+    var rust = RustLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -83,6 +84,7 @@ public struct SyntaxScanner: Sendable {
     let documentationKeywords: Set<String>
     let snapshot: DocumentSnapshot?
     let deadline: ContinuousClock.Instant
+    let rustResource: Data?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -96,17 +98,23 @@ public struct SyntaxScanner: Sendable {
         deadline: ContinuousClock.Instant? = nil
     ) {
         self.language = language
+        self.deadline = min(deadline ?? .now.advanced(by: .seconds(5)), .now.advanced(by: .seconds(5)))
+        if language.id == "rust" {
+            rustResource = RustLexing.ruleIdentity(language: language, deadline: self.deadline)
+        }
+        else {
+            rustResource = nil
+        }
         self.snapshot =
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
-                "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp",
+                "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
-        self.deadline = min(deadline ?? .now.advanced(by: .seconds(5)), .now.advanced(by: .seconds(5)))
-        if language.id == "makefile" {
-            // Makefile 在行扫描入口有界复验原始词表，提前建立 String 集合会合并名称并重复占用资源。
+        if language.id == "makefile" || language.id == "rust" {
+            // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
             keywords = []
             secondaryKeywords = []
             globalClasses = []
@@ -135,6 +143,17 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "rust" {
+            return RustLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                language: language,
+                resource: rustResource,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if ["lisp", "scheme"].contains(language.id) {
             return LispLexing.highlight(
                 text,

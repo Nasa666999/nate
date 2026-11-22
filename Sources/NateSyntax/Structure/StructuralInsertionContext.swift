@@ -19,6 +19,15 @@ enum StructuralInsertionContext {
         scanner: SyntaxScanner,
         language: LanguageDefinition
     ) throws -> Bool {
+        if language.id == "rust" {
+            return try RustLexing.isCode(
+                source: source,
+                offset: offset,
+                base: base,
+                initial: initial,
+                scanner: scanner
+            )
+        }
         var state = initial
         let prefix = String(decoding: source[..<offset], as: UTF8.self)
         let tokens = scanner.highlight(prefix, base: base, state: &state)

@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "dde1249738451469211e45f464b225877604b5bc169497c444415bf35e43834f"
+      "sha256" : "903a96eb8a1b9ad4909f2bc924d5688b8c74ae34d5b1e4c28de467b8813f3b3c"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
@@ -551,6 +551,10 @@
     {
       "path" : "licenses\/Python-LICENSE.txt",
       "sha256" : "599826df92bfdcd2702eac691072498bb096c55af04ee984cf90f70ed77b5a70"
+    },
+    {
+      "path" : "licenses\/Rust-NOTICE.txt",
+      "sha256" : "572e637c1211a989ac2300b9d85536925e56ddaea2190ccfa35b5364615f6b57"
     },
     {
       "path" : "licenses\/UDL-NOTICE.txt",
