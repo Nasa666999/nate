@@ -12,13 +12,12 @@ public enum SyntaxPresentation {
     public static func attributes(token: SyntaxToken, font: NSFont, appearance: NSAppearance)
         -> [NSAttributedString.Key: Any]
     {
-        var styled = font
-        if token.fontStyle & 1 != 0 {
-            styled = NSFontManager.shared.convert(styled, toHaveTrait: .boldFontMask)
-        }
-        if token.fontStyle & 2 != 0 {
-            styled = NSFontManager.shared.convert(styled, toHaveTrait: .italicFontMask)
-        }
+        let styled = resolvedFont(
+            name: token.fontName,
+            size: token.fontSize,
+            style: token.fontStyle,
+            base: font
+        )
         var result: [NSAttributedString.Key: Any] = [
             .font: styled,
             .foregroundColor: ThemePalette.resolved(
@@ -37,6 +36,35 @@ public enum SyntaxPresentation {
             result[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
         return result
+    }
+
+    /// 业务作用：资源字体与点数独立生效，缺失字体只回退字族而不丢弃合法字号与装饰。
+    /// 参数说明:
+    /// - name: 本机字体名称，为空或不可用时继承基础字体。
+    /// - size: 一至五百一十二点的资源字号，为空时继承基础点数。
+    /// - style: 粗体与斜体装饰位，下划线由属性通道单独呈现。
+    /// - base: 当前来源编辑器的实际字体。
+    /// 返回：有界可用的原生字体；尚未通过词法验证的非法运行时字段不扩大字体请求。
+    static func resolvedFont(name: String?, size: Int?, style: Int, base: NSFont) -> NSFont {
+        let points =
+            size.flatMap {
+                (1...512).contains($0) ? CGFloat($0) : nil
+            } ?? base.pointSize
+        var font = NSFontManager.shared.convert(base, toSize: points)
+        if let name, !name.isEmpty, name.utf8.count <= 256,
+            name.unicodeScalars.allSatisfy({
+                !CharacterSet.controlCharacters.contains($0)
+            }), let explicit = NSFont(name: name, size: points)
+        {
+            font = explicit
+        }
+        if style & 1 != 0 {
+            font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+        }
+        if style & 2 != 0 {
+            font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        }
+        return font
     }
 
     /// 业务作用：内置词法的属性、类型、转义与非法片段使用可辨颜色，不改变其原有结构作用域。

@@ -114,7 +114,11 @@ enum UDLCompatibility {
             }
             for key in ["fontName", "fontSize"] {
                 if let value = values[key], !value.isEmpty, !(key == "fontSize" && value == "0") {
-                    messages.append("\(path)/@\(key) 当前继承编辑器字体；显式值仅保留在原 XML。")
+                    messages.append(
+                        key == "fontName"
+                            ? "\(path)/@fontName 按本机字体名称解析，不可用时继承编辑器字体；原 XML 已保留。"
+                            : "\(path)/@fontSize 按资源整数点数呈现，空值、0 与 -1 继承编辑器字号；原 XML 已保留。"
+                    )
                 }
             }
             if let value = values["colorStyle"],

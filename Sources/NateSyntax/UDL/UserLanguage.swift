@@ -19,6 +19,8 @@ public struct UDLStyle: Sendable {
     public var background: String?
     public var nesting: UInt32
     public var fontStyle: Int
+    public var fontName: String? = nil
+    public var fontSize: Int? = nil
 }
 
 public struct UDLDefinition: Sendable {
@@ -376,12 +378,23 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
                 return
             }
             let colorStyle = Int(attributeDict["colorStyle"] ?? "3") ?? 3
+            let fonts: UDLFontSettings
+            do {
+                fonts = try UDLFontSettings(attributeDict)
+            }
+            catch {
+                failure = .message(error.localizedDescription)
+                parser.abortParsing()
+                return
+            }
             current?.styles[name] = UDLStyle(
                 name: name,
                 foreground: colorStyle & 1 != 0 ? attributeDict["fgColor"] : nil,
                 background: colorStyle & 2 != 0 ? attributeDict["bgColor"] : nil,
                 nesting: nesting,
-                fontStyle: style
+                fontStyle: style,
+                fontName: fonts.name,
+                fontSize: fonts.size
             )
         case "NotepadPlus", "Settings", "KeywordLists", "Styles": break
         default: break

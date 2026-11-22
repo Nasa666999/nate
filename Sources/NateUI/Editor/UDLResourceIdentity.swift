@@ -45,6 +45,9 @@ enum UDLResourceIdentity {
             append(style.background == nil ? "none" : "some", hash: &hash)
             append(style.background ?? "", hash: &hash)
             append(String(style.fontStyle), hash: &hash)
+            append(style.fontName == nil ? "none" : "some", hash: &hash)
+            append(style.fontName ?? "", hash: &hash)
+            append(style.fontSize.map(String.init) ?? "inherit", hash: &hash)
             append(String(style.nesting), hash: &hash)
         }
     }

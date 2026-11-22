@@ -96,6 +96,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             if oldValue?.generation != userLanguage?.generation {
                 // 同一 XML 的运行时规则或样式也可能改变，旧状态与视觉目标不能沿原名称继续取得权限。
                 updateRectangleStyleIdentity()
+                projection.measured.removeAll()
                 invalidateSyntax()
             }
         }
@@ -198,8 +199,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var completionPanel: CompletionPanel?
     var hiddenLines = HiddenLineRanges()
     var lineHeight: CGFloat {
-        ceil(font.ascender - font.descender + font.leading + 5)
+        fontMetrics.height(font: font, definition: userLanguage)
     }
+    private let fontMetrics = UDLFontMetrics()
     public override var isFlipped: Bool {
         true
     }

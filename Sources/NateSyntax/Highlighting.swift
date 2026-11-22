@@ -11,6 +11,8 @@ public struct SyntaxToken: Sendable {
     public let foreground: String?
     public let background: String?
     public let fontStyle: Int
+    public let fontName: String?
+    public let fontSize: Int?
     public let lexicalStyle: String
     public let foldMarker: SyntaxFoldMarker?
 
@@ -21,6 +23,8 @@ public struct SyntaxToken: Sendable {
     /// - foreground: 资源显式指定的前景色，为空时继承主题。
     /// - background: 资源显式指定的背景色，为空时继承视图底色。
     /// - fontStyle: UDL 粗体、斜体和下划线位集合。
+    /// - fontName: 资源指定的字体名称，为空时继承编辑器字体。
+    /// - fontSize: 资源指定的一至五百一十二点字号，为空时继承编辑器字号。
     /// - lexicalStyle: 原词法样式身份，为空时采用基础类别；颜色相同不代表词法作用域相同。
     /// - foldMarker: 词法过程明确确认的折叠动作及其实际上下文，没有标记时为空。
     /// 返回：独立呈现属性。
@@ -30,6 +34,8 @@ public struct SyntaxToken: Sendable {
         foreground: String? = nil,
         background: String? = nil,
         fontStyle: Int = 0,
+        fontName: String? = nil,
+        fontSize: Int? = nil,
         lexicalStyle: String? = nil,
         foldMarker: SyntaxFoldMarker? = nil
     ) {
@@ -38,6 +44,8 @@ public struct SyntaxToken: Sendable {
         self.foreground = foreground
         self.background = background
         self.fontStyle = fontStyle
+        self.fontName = fontName
+        self.fontSize = fontSize
         self.lexicalStyle = lexicalStyle ?? kind.rawValue
         self.foldMarker = foldMarker
     }

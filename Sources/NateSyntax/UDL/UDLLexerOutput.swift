@@ -35,7 +35,8 @@ extension UDLLexer {
         if merge, let previous = tokens.last, previous.range.upper == start, previous.kind == kind,
             previous.lexicalStyle == lexicalStyle,
             previous.foreground == rule?.foreground, previous.background == rule?.background,
-            previous.fontStyle == rule?.fontStyle ?? 0
+            previous.fontStyle == rule?.fontStyle ?? 0,
+            previous.fontName == rule?.fontName, previous.fontSize == rule?.fontSize
         {
             start = previous.range.lower
             tokens.removeLast()
@@ -47,6 +48,8 @@ extension UDLLexer {
                 foreground: rule?.foreground,
                 background: rule?.background,
                 fontStyle: rule?.fontStyle ?? 0,
+                fontName: rule?.fontName,
+                fontSize: rule?.fontSize,
                 lexicalStyle: lexicalStyle,
                 foldMarker: foldMarker
             )

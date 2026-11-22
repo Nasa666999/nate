@@ -31,6 +31,10 @@ final class UDLScanBudget {
         else {
             throw NateError.message("UDL 定义超过列表、样式或原 XML 容量。")
         }
+        for style in definition.styles.values {
+            try consume()
+            try UDLFontSettings.validate(name: style.fontName, size: style.fontSize)
+        }
         var count = 0, size = 0
         for list in definition.lists.values {
             for pattern in list {
