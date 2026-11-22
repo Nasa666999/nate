@@ -9,7 +9,7 @@ public struct PreparedPairInsertion: Sendable {
     /// - command: 本次固定配对定义、真实输入与越过选项。
     /// - completeOpening: 开端是否生成完整一对；独立结构字符输入关闭此项以保留字面字符。
     /// - tabSettings: 结构前缀采用的实际 Tab 停靠规则。
-    /// - indentation: 逐目标的已确认前导空白，为空时保留原行；只允许改动普通空光标之前的空白。
+    /// - indentation: 逐目标的已确认前导空白，为空时保留原行；闭合花括号或方括号前的正文按原字节保留。
     /// - permit: 范围、源字节与事务构建共用的继续资格。
     /// 返回：全部目标完整准备时提供事务；矩形、边界、容量或资格失效时拒绝全部动作。
     public init(
@@ -72,12 +72,13 @@ public struct PreparedPairInsertion: Sendable {
                     entry: entry,
                     text: snapshot.text,
                     settings: tabSettings,
+                    allowsBody: closing && (command.input == "}" || command.input == "]"),
                     remaining: &remaining,
                     budget: budget
                 )
-                range = ByteRange(adjusted, range.upper)
-                value = prefix + value
-                caret += prefix.utf8.count
+                range = ByteRange(adjusted.start, range.upper)
+                value = prefix + adjusted.body + value
+                caret += prefix.utf8.count + adjusted.body.utf8.count
             }
             return SelectionInsertionTarget(
                 id: entry.id,

@@ -7,17 +7,19 @@ enum PairIndentationPrefix {
     /// - entry: 原普通选择的稳定身份与实际光标。
     /// - text: 与输入事务相同的固定正文。
     /// - settings: 当前语言的 Tab 停靠宽度。
-    /// - remaining: 全部光标共用的前置原文字节读取额度。
+    /// - allowsBody: 实际闭合花括号或方括号是否允许保留行内正文后调整行首。
+    /// - remaining: 全部光标共用的前置原文字节与新增空白额度。
     /// - budget: 本次完整输入的继续资格与截止。
-    /// 返回：原行起点；原选择非空、有虚拟列、涉及非空白正文或容量不足时整体失败。
+    /// 返回：原行起点及必须原字节保留的行内正文；非空选择、虚拟列、未授权正文或容量不足时整体失败。
     static func prepare(
         prefix: String,
         entry: SelectionEntry,
         text: PieceTree,
         settings: TabSettings,
+        allowsBody: Bool,
         remaining: inout Int,
         budget: SelectionPreparationBudget
-    ) throws -> Int {
+    ) throws -> (start: Int, body: String) {
         let selection = entry.selection
         guard selection.range.isEmpty, selection.virtualColumn == 0,
             prefix.utf8.count <= remaining
@@ -41,19 +43,25 @@ enum PairIndentationPrefix {
         }
         let start = text.lineStart(text.lineNumber(at: selection.head))
         guard selection.head - start <= remaining else {
-            throw NateError.message("结构字符的共享前导空白读取超过 1 MiB。")
+            throw NateError.message("结构字符的共享前置原文读取超过 1 MiB。")
         }
         remaining -= selection.head - start
-        // 独立复验完整原范围，外部结构判断只能提供空白，不能借扩大范围删除未选择的正文。
-        for position in start..<selection.head {
-            if position & 255 == 0 {
+        var end = start
+        while end < selection.head {
+            if end & 255 == 0 {
                 try budget.check()
             }
-            guard let byte = text.byte(at: position), byte == 9 || byte == 32 else {
-                throw NateError.message("结构字符之前含正文，不能重写该范围。")
+            guard let byte = text.byte(at: end), byte == 9 || byte == 32 else {
+                break
             }
+            end += 1
         }
+        guard allowsBody || end == selection.head else {
+            throw NateError.message("当前结构字符不能调整带正文的前导范围。")
+        }
+        // 只接受调用方提供的新空白，扩大范围中的正文必须由同一原树读取，不能被外部计划替换。
+        let body = text.text(in: ByteRange(end, selection.head))
         try budget.check()
-        return start
+        return (start, body)
     }
 }

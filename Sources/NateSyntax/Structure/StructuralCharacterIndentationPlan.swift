@@ -83,6 +83,7 @@ public struct StructuralCharacterIndentationPlan: Sendable {
             }
             consumed += range.count
             let source = Array(snapshot.text.bytes(in: range))
+            let initial = lexical
             let startsOpaque =
                 !lexical.blockEnd.isEmpty || lexical.c.blockComment || lexical.c.lineComment
                 || lexical.c.quote != nil || lexical.c.regex || lexical.c.header
@@ -122,25 +123,42 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                     permit: permit
                 )
                 // 同行多个目标若共同重写前缀会覆盖彼此输入，整行继续采用明确的字面字符。
-                guard targets.count == 1, !startsOpaque, target.selection.range.isEmpty,
-                    target.selection.virtualColumn == 0,
-                    source[..<offset].allSatisfy({
-                        $0 == 9 || $0 == 32
-                    }),
-                    !tokens.contains(where: {
-                        $0.isStructureOpaque && $0.range.lower <= target.selection.head
-                            && target.selection.head < $0.range.upper
-                    })
+                guard targets.count == 1, target.selection.range.isEmpty,
+                    target.selection.virtualColumn == 0
                 else {
                     continue
                 }
                 let origin: (line: Int, increase: Bool)?
                 if input == "{" || input == "[" {
+                    guard !startsOpaque,
+                        source[..<offset].allSatisfy({
+                            $0 == 9 || $0 == 32
+                        }),
+                        !tokens.contains(where: {
+                            $0.isStructureOpaque && $0.range.lower <= target.selection.head
+                                && target.selection.head < $0.range.upper
+                        })
+                    else {
+                        continue
+                    }
                     origin = previous
                 }
                 else if let opening = stack.last,
                     opening.byte == (input == "}" ? 123 : 91), opening.line < line
                 {
+                    // 只在插入点真正回到代码区后才调整行首，完整行的末状态不能替代光标处的状态。
+                    guard
+                        try StructuralInsertionContext.isCode(
+                            source: source,
+                            offset: offset,
+                            base: range.lower,
+                            initial: initial,
+                            scanner: scanner,
+                            language: language
+                        )
+                    else {
+                        continue
+                    }
                     origin = (opening.line, false)
                 }
                 else {
