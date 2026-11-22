@@ -75,9 +75,22 @@ public enum TextDigests {
         }
         var result: [LineDigest] = []
         result.reserveCapacity(source.lineCount)
+        var emptyValues: DigestValues?
         for line in 0..<source.lineCount {
+            // 已算出的摘要不授予后继行新的执行时间，缓存命中前仍须复验共同截止与取消资格。
+            try check(deadline: deadline, permit: permit)
             let body = source.lineRange(line, includeEnding: false)
-            let values = try values(text: source, range: body, deadline: deadline, permit: permit)
+            let values: DigestValues
+            // 同次操作内空行都对应零个原字节，只复用完整摘要，不复用行号、范围或执行资格。
+            if body.isEmpty, let cached = emptyValues {
+                values = cached
+            }
+            else {
+                values = try Self.values(text: source, range: body, deadline: deadline, permit: permit)
+                if body.isEmpty {
+                    emptyValues = values
+                }
+            }
             result.append(
                 LineDigest(
                     line: line + 1,
