@@ -338,6 +338,9 @@ extension ApplicationController {
         case "fileOpeningPreferences": showFileOpeningPreferences()
         case "webSearchPreferences": showWebSearchPreferences()
         case "searchOnInternet": searchOnInternet()
+        case "importUserConfiguration": chooseUserConfigurationImport()
+        case "exportUserConfiguration": chooseUserConfigurationExport()
+        case "cancelUserConfiguration": cancelUserConfigurationOperation()
         case "selectConfiguredDelimiters":
             if let (_, _, editor) = quickFindContext(), let position = editor.primarySelection?.head {
                 editor.selectInsideConfiguredDelimiters(at: position)

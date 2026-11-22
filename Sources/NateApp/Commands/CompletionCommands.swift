@@ -25,7 +25,7 @@ extension ApplicationController {
         else {
             return
         }
-        let defaults = UserDefaults.standard
+        let defaults = configurationDefaults()
         let enabled =
             defaults.object(forKey: "completion.enabled") == nil
             || defaults.bool(forKey: "completion.enabled")

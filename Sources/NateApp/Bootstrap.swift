@@ -35,6 +35,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let dateTimePreferences = DateTimePreferencesRuntime()
     let fileOpeningPreferences = FileOpeningPreferencesRuntime()
     let webSearch = WebSearchRuntime()
+    let userConfiguration = UserConfigurationRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
@@ -171,6 +172,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// - notification: 系统启动完成通知。
     /// 返回：异步装配，主事件循环保持可响应。
     func applicationDidFinishLaunching(_ notification: Notification) {
+        connectConfigurationDefaults(.standard)
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(receiveInstanceRequest(_:)),

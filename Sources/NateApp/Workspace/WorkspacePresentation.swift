@@ -112,7 +112,8 @@ extension ApplicationController {
                 ?? pairPreferences.warning
             let files: String? =
                 preferences ?? fileOpeningPreferences.warning ?? fileOpeningPreferences.recentWarning
-            let sidebar: String? = files ?? sidebarRecovery.failure
+            let configuration: String? = files ?? userConfiguration.failure ?? userConfiguration.searchWarning
+            let sidebar: String? = configuration ?? sidebarRecovery.failure
             let importing: String? = pausedWorkspace.task != nil ? "正在导入保留工作区…" : nil
             let matching: String? = sidebar ?? multipleSelection.failure
             let status: String? = matching ?? pausedWorkspace.failure ?? importing

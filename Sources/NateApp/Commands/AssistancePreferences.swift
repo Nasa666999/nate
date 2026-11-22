@@ -6,7 +6,7 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：完整验证后一次发布设置，取消保留原配置。
     func showAssistancePreferences() {
-        let defaults = UserDefaults.standard
+        let defaults = configurationDefaults()
         let enabled = NSButton(checkboxWithTitle: "输入后自动显示补全与参数提示", target: nil, action: nil)
         enabled.state =
             defaults.object(forKey: "completion.enabled") == nil

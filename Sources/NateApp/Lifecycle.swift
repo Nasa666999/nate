@@ -75,6 +75,7 @@ extension ApplicationController {
         cancelMacro()
         macroLibrary.importTask?.cancel()
         cancelKeyboardMapImport()
+        cancelUserConfigurationOperation()
         cancelRunCommandImport()
         cancelRunCommandPreparation()
         let protectedDocuments = documents

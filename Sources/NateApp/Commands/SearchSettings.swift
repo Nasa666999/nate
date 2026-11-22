@@ -8,6 +8,7 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：合法配置供窗口恢复；缺失时使用默认值，失败时保留归档并等待用户显式重新保存。
     func loadSearchSettings() async {
+        searchSettingsState = mergingSearchUserPreferences(searchSettingsState)
         // 未取得应用数据目录时不推断其它位置，也不把临时窗口变成持久化入口。
         guard let applicationSupport else {
             return
@@ -34,8 +35,8 @@ extension ApplicationController {
                 try token.check()
                 return (state, bytes.baseline)
             }
-            searchSettingsState = state
-            mainWindow?.searchResults.setPreferences(state.results)
+            searchSettingsState = mergingSearchUserPreferences(state)
+            mainWindow?.searchResults.setPreferences(searchSettingsState.results)
             searchSettingsBaseline = baseline
             searchSettingsReady = true
             searchSettingsError = nil
@@ -52,6 +53,7 @@ extension ApplicationController {
     /// - state: 当前窗口完整配置。
     /// 返回：记录最新配置并启动至多一个排空任务；未初始化或需显式重新保存时保留待写状态。
     func scheduleSearchSettings(_ state: SearchWindowState) {
+        persistSearchUserPreferences(state)
         searchSettingsState = state
         pendingSearchSettings = state
         // 读取失败不授予覆盖资格；已有排空任务保持唯一写入顺序，新状态只替换尚未开始的候选。
@@ -126,6 +128,7 @@ extension ApplicationController {
             return
         }
         searchSettingsReady = false
+        persistSearchUserPreferences(state, replacingUnknown: true)
         searchSettingsState = state
         pendingSearchSettings = state
         searchSettingsTask = Task {

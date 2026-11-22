@@ -14,7 +14,9 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：发布可解释的策略，配置损坏时保留原配置并阻止后续原文件写入。
     func loadSaveBackupPolicy() {
-        guard let value = UserDefaults.standard.object(forKey: "saveBackupPolicy") else {
+        saveBackupPolicy = SaveBackupPolicy()
+        saveBackupSettingsError = nil
+        guard let value = configurationDefaults().object(forKey: "saveBackupPolicy") else {
             return
         }
         do {
@@ -111,7 +113,7 @@ extension ApplicationController {
             )
             try policy.validate()
             let bytes = try JSONEncoder().encode(SaveBackupConfiguration(policy: policy))
-            UserDefaults.standard.set(bytes, forKey: "saveBackupPolicy")
+            configurationDefaults().set(bytes, forKey: "saveBackupPolicy")
             saveBackupPolicy = policy
             saveBackupSettingsError = nil
             mainWindow?.status.stringValue = "保存备份设置已应用；后续保存按新策略保留历史。"

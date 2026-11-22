@@ -53,6 +53,17 @@ public final class StructurePanel: NSView, NSOutlineViewDataSource, NSOutlineVie
     private var model: FunctionOutline?
     private var items: [StructureItem] = []
     private var detail = ""
+    private var sortingDefaults = UserDefaults.standard
+
+    /// 业务作用：结构排序跟随当前明确的配置来源，导入只排列已有结构，不重新读取正文或保存默认值。
+    /// 参数说明:
+    /// - defaults: 当前应用使用的完整偏好域。
+    /// 返回：原筛选和结构模型保留，排序控件与已有结果采用当前偏好。
+    public func loadSortingPreferences(from defaults: UserDefaults) {
+        sortingDefaults = defaults
+        order.selectedSegment = defaults.bool(forKey: "structure.sortByName") ? 1 : 0
+        rebuild()
+    }
 
     /// 业务作用：组装可过滤、排序和键盘定位的结构侧栏，不在视图内运行文件或正则任务。
     /// 参数说明:
@@ -219,7 +230,7 @@ public final class StructurePanel: NSView, NSOutlineViewDataSource, NSOutlineVie
     /// 参数说明: 无。
     /// 返回：后续打开面板沿用同一顺序。
     @objc private func orderChanged() {
-        UserDefaults.standard.set(order.selectedSegment == 1, forKey: "structure.sortByName")
+        sortingDefaults.set(order.selectedSegment == 1, forKey: "structure.sortByName")
         rebuild()
     }
 

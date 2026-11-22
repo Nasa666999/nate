@@ -22,6 +22,9 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "日期时间格式…", "dateTimePreferences")
         add(application, "文件与新建默认设置…", "fileOpeningPreferences")
         add(application, "搜索引擎…", "webSearchPreferences")
+        add(application, "导入用户配置…", "importUserConfiguration")
+        add(application, "导出用户配置…", "exportUserConfiguration")
+        add(application, "取消配置读写", "cancelUserConfiguration")
         add(application, "保存时备份设置…", "saveBackupPreferences")
         add(application, "快捷键映射器…", "keyboardMap")
         application.addItem(.separator())
@@ -517,6 +520,16 @@ extension ApplicationController: NSMenuItemValidation {
         }
         if id == "searchOnInternet" {
             return webSearchAvailable()
+        }
+        if id == "importUserConfiguration" {
+            return canApplyUserConfiguration() && userConfiguration.task == nil
+                && userConfiguration.preview == nil
+        }
+        if id == "exportUserConfiguration" {
+            return !closing && userConfiguration.task == nil && userConfiguration.preview == nil
+        }
+        if id == "cancelUserConfiguration" {
+            return userConfiguration.task != nil || userConfiguration.preview != nil
         }
         if let enabled = validateMultipleSelectionMenu(menuItem, id: id) {
             return enabled
