@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "1827c6c3378f7a4d55110556f158afd1dfd70605ecc826d107769959af8105b8"
+      "sha256" : "b70a9150045cb43cee3ba4be83ee4dc2bd167da150618792ea18c326a191ffc3"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
@@ -543,6 +543,10 @@
     {
       "path" : "licenses\/Lexilla-LICENSE.txt",
       "sha256" : "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d"
+    },
+    {
+      "path" : "licenses\/Lua-NOTICE.txt",
+      "sha256" : "b71e5d90703bd731a24d8821c10b4a66b1623243347975e83144cbdbb2770658"
     },
     {
       "path" : "licenses\/NotepadPlusPlus-GPL.txt",

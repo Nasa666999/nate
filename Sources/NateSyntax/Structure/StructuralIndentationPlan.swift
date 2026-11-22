@@ -53,7 +53,9 @@ public struct StructuralIndentationPlan: Sendable {
             "c", "cpp", "java", "cs", "objc", "php", "javascript", "javascript.js", "jsp", "css",
             "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r",
         ]
-        usesLanguageRules = udl == nil && (identifier == "python" || curly.contains(identifier))
+        usesLanguageRules =
+            udl == nil
+            && (identifier == "python" || identifier == "lua" || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
                 ranges.map {
@@ -77,7 +79,7 @@ public struct StructuralIndentationPlan: Sendable {
         let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
         let supportsControlLines =
             identifier != "python"
-            && !["perl", "rust", "powershell", "json", "json5"].contains(identifier)
+            && !["perl", "rust", "powershell", "json", "json5", "lua"].contains(identifier)
         var state = SyntaxState()
         var output: [ByteRange: NewlineIndentationAction] = [:]
         var consumed = 0
@@ -95,7 +97,8 @@ public struct StructuralIndentationPlan: Sendable {
                 !state.blockEnd.isEmpty || state.json.blockComment || state.c.blockComment
                 || state.rust.depth > 0 || [13, 16].contains(state.powershell.mode)
                 || [1, 3, 17, 18].contains(state.objc.mode)
-            let startsInDirective = state.c.preprocessor || state.objc.mode == 9
+                || state.lua.mode == 1
+            let startsInDirective = state.c.preprocessor || state.objc.mode == 9 || state.lua.mode == 9
             let tokens = scanner.highlight(source, base: row.lower, state: &state)
             guard state.diagnostic == nil else {
                 throw NateError.message(state.diagnostic ?? "语言缩进缺少完整词法状态。")
@@ -110,6 +113,7 @@ public struct StructuralIndentationPlan: Sendable {
                 startsInDirective
                 || tokens.contains {
                     $0.lexicalStyle == "c:preprocessor" || $0.lexicalStyle == "objc:9"
+                        || $0.lexicalStyle == "lua:9"
                 }
             for token in tokens where token.isStructureOpaque {
                 let lower = token.range.lower - row.lower
@@ -148,6 +152,16 @@ public struct StructuralIndentationPlan: Sendable {
                 conditions = nil
             }
             previousCondition = !directiveLine && conditions?.contains(significant.last) == true
+            let lua =
+                identifier == "lua"
+                ? try LuaIndentationLine(
+                    code: code,
+                    tokens: tokens,
+                    base: row.lower,
+                    significant: significant,
+                    deadline: deadline,
+                    permit: permit
+                ) : nil
             for target in targets {
                 try Self.check(deadline: deadline, permit: permit)
                 let offset = target.lower - row.lower
@@ -161,6 +175,8 @@ public struct StructuralIndentationPlan: Sendable {
                     identifier == "objc"
                     && (token?.lexicalStyle == "objc:2" || token?.lexicalStyle == "objc:15")
                     || identifier == "r" && token?.lexicalStyle == "r:1"
+                    || identifier == "lua"
+                        && (token?.lexicalStyle == "lua:2" || token?.lexicalStyle == "lua:3")
                 // 行注释中的后继闭合符没有代码资格，换行只能使用注释前已经确认的标点和条件头。
                 let following = nativeLineComment ? nil : snapshot.text.byte(at: target.upper)
                 let insideString =
@@ -194,7 +210,7 @@ public struct StructuralIndentationPlan: Sendable {
                     // 行尾注释只遮蔽自身，不能抹去注释前已成立的条件头；注释中的代码仍已从判断输入移除。
                     insideNativeLiteral = false
                 }
-                else if identifier == "powershell" || identifier == "objc" || identifier == "r" {
+                else if ["powershell", "objc", "r", "lua"].contains(identifier) {
                     insideNativeLiteral = try !StructuralInsertionContext.isCode(
                         source: Array(source.utf8),
                         offset: offset,
@@ -212,6 +228,14 @@ public struct StructuralIndentationPlan: Sendable {
                 }
                 else if identifier == "python" {
                     output[target] = last == 58 ? .increase : .inherit
+                }
+                else if let lua {
+                    output[target] = lua.action(
+                        offset: offset,
+                        end: target.upper - row.lower,
+                        last: last,
+                        allowFollowing: !nativeLineComment
+                    )
                 }
                 else {
                     let array = identifier == "json" || identifier == "json5"

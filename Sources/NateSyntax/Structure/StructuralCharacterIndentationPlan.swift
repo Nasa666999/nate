@@ -52,7 +52,7 @@ public struct StructuralCharacterIndentationPlan: Sendable {
         let identifier = language?.id ?? "normal"
         let curly: Set<String> = [
             "c", "cpp", "java", "cs", "objc", "php", "javascript", "javascript.js", "jsp", "css",
-            "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r",
+            "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r", "lua",
         ]
         let array = identifier == "json" || identifier == "json5"
         guard udl == nil, let language, curly.contains(identifier),
@@ -94,6 +94,7 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                 || [1, 2, 3, 13, 14, 15, 16].contains(lexical.powershell.mode)
                 || [1, 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 17, 18].contains(lexical.objc.mode)
                 || [1, 6, 7, 10, 11, 12, 13, 14, 15].contains(lexical.r.mode)
+                || [1, 2, 3, 6, 7, 8, 9, 12].contains(lexical.lua.mode)
             let tokens = scanner.highlight(
                 String(decoding: source, as: UTF8.self),
                 base: range.lower,

@@ -1,0 +1,10 @@
+Lua 词法与折叠规则的 Swift 适配参考 Lexilla 的 LexLua.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexLua.cxx
+
+Written by Paul Winwood. Folder by Alexey Yutkin.
+Modified by Marcos E. Wurzius & Philippe Lhoste.
+Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留独立词表、长字面与注释、名称和标签及真实物理行状态，
+使用有界原字节扫描、固定正文与资源身份和完整标量投影；不执行 Lua 或载入模块。
