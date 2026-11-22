@@ -90,9 +90,10 @@ public struct StructuralIndentationPlan: Sendable {
             }
             consumed += row.count
             let source = snapshot.text.text(in: row)
+            let initial = state
             let startsInBlockComment =
                 !state.blockEnd.isEmpty || state.json.blockComment || state.c.blockComment
-                || state.rust.depth > 0
+                || state.rust.depth > 0 || [13, 16].contains(state.powershell.mode)
             let startsInDirective = state.c.preprocessor
             let tokens = scanner.highlight(source, base: row.lower, state: &state)
             guard state.diagnostic == nil else {
@@ -180,7 +181,20 @@ public struct StructuralIndentationPlan: Sendable {
                 else {
                     insideBlockComment = false
                 }
-                if insideString || insideBlockComment || directiveLine {
+                let insidePowerShellLiteral: Bool
+                if identifier == "powershell" {
+                    insidePowerShellLiteral = try !PowerShellLexing.isCode(
+                        source: Array(source.utf8),
+                        offset: offset,
+                        base: row.lower,
+                        initial: initial,
+                        scanner: scanner
+                    )
+                }
+                else {
+                    insidePowerShellLiteral = false
+                }
+                if insideString || insideBlockComment || directiveLine || insidePowerShellLiteral {
                     output[target] = .inherit
                 }
                 else if identifier == "python" {

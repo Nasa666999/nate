@@ -19,6 +19,15 @@ enum StructuralInsertionContext {
         scanner: SyntaxScanner,
         language: LanguageDefinition
     ) throws -> Bool {
+        if language.id == "powershell" {
+            return try PowerShellLexing.isCode(
+                source: source,
+                offset: offset,
+                base: base,
+                initial: initial,
+                scanner: scanner
+            )
+        }
         if language.id == "rust" {
             return try RustLexing.isCode(
                 source: source,

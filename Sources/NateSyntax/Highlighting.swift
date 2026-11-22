@@ -70,6 +70,7 @@ public struct SyntaxState: Sendable, Equatable {
     var lisp = LispLexicalState()
     var rust = RustLexicalState()
     var yaml = YAMLLexicalState()
+    var powershell = PowerShellLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -87,6 +88,7 @@ public struct SyntaxScanner: Sendable {
     let deadline: ContinuousClock.Instant
     let rustResource: Data?
     let yamlRules: YAMLRules?
+    let powershellRules: PowerShellRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -108,15 +110,18 @@ public struct SyntaxScanner: Sendable {
             rustResource = nil
         }
         yamlRules = language.id == "yaml" ? YAMLRules(language: language, deadline: self.deadline) : nil
+        powershellRules =
+            language.id == "powershell"
+            ? PowerShellRules(language: language, deadline: self.deadline) : nil
         self.snapshot =
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
-                "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml",
+                "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
-        if ["makefile", "rust", "yaml"].contains(language.id) {
+        if ["makefile", "rust", "yaml", "powershell"].contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
             keywords = []
             secondaryKeywords = []
@@ -146,6 +151,16 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "powershell" {
+            return PowerShellLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: powershellRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if language.id == "yaml" {
             return YAMLLexing.highlight(
                 text,

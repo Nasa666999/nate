@@ -59,7 +59,7 @@ extension EditorView {
             syntaxFailedLines = nil
             // 续行、UDL 短语及原生词法前瞻依赖后续原文，正文变化后须重新确认完整前缀与修订。
             if !language.usesSharedCLexer,
-                !["python", "registry", "latex", "rust", "yaml"].contains(language.id),
+                !["python", "registry", "latex", "rust", "yaml", "powershell"].contains(language.id),
                 userLanguage?.requiresSourceLookahead != true,
                 syntaxDocument == document.id,
                 syntaxLanguage == resource,

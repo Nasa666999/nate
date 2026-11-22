@@ -1,0 +1,8 @@
+PowerShell 词法与折叠规则的 Swift 适配参考 Lexilla 的 LexPowerShell.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexPowerShell.cxx
+
+Copyright 2008 by Tim Gerundt <tim@gerundt.de>
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配使用有界原字节扫描、固定正文与资源身份、多行字面状态及完整标量投影；
+着色和折叠不运行脚本，不展开变量，不读取脚本引用的外部资源。

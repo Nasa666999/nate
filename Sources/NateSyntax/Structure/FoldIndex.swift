@@ -50,7 +50,7 @@ public struct FoldIndex: Sendable {
         let deadline = ContinuousClock.now.advanced(
             by: [
                 "python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex", "lisp",
-                "scheme", "rust", "yaml",
+                "scheme", "rust", "yaml", "powershell",
             ].contains(
                 language?.id ?? ""
             ) || language?.usesSharedCLexer == true || udl != nil
@@ -59,6 +59,13 @@ public struct FoldIndex: Sendable {
         var candidates: [FoldRegion] = []
         if let udl {
             candidates = try UDLFolding.regions(snapshot: snapshot, definition: udl, deadline: deadline)
+        }
+        else if let language, language.id == "powershell" {
+            candidates = try PowerShellFolding.regions(
+                snapshot: snapshot,
+                language: language,
+                deadline: deadline
+            )
         }
         else if let language, language.id == "yaml" {
             candidates = try YAMLFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
