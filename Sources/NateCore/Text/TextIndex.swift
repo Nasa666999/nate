@@ -9,6 +9,10 @@ extension PieceTree {
         guard offset >= 0, offset <= utf16Count else {
             return nil
         }
+        // 合法 UTF-8 的两种计数相等证明整棵正文都是 ASCII，坐标可直接换算而不反复解码叶片。
+        if root.count == root.utf16Count {
+            return offset
+        }
         var node = root
         var remaining = offset
         var base = 0
@@ -21,6 +25,9 @@ extension PieceTree {
                 base += left.count
                 node = right
             }
+        }
+        if node.count == node.utf16Count {
+            return base + remaining
         }
         var units = 0
         var bytes = 0
@@ -42,6 +49,10 @@ extension PieceTree {
         guard isBoundary(offset) else {
             return nil
         }
+        // 整体或落点叶片满足 ASCII 计数证明时保留原偏移，其它正文仍按真实标量累计 UTF-16 单元。
+        if root.count == root.utf16Count {
+            return offset
+        }
         var node = root
         var remaining = offset
         var units = 0
@@ -54,6 +65,9 @@ extension PieceTree {
                 units += left.utf16Count
                 node = right
             }
+        }
+        if node.count == node.utf16Count {
+            return units + remaining
         }
         return units + String(decoding: node.bytes.prefix(remaining), as: UTF8.self).utf16.count
     }
