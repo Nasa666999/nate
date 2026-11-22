@@ -19,6 +19,15 @@ enum StructuralInsertionContext {
         scanner: SyntaxScanner,
         language: LanguageDefinition
     ) throws -> Bool {
+        if ["javascript.js", "typescript"].contains(language.id) {
+            return try ScriptLexing.isCode(
+                source: source,
+                offset: offset,
+                base: base,
+                initial: initial,
+                scanner: scanner
+            )
+        }
         if language.id == "lua" {
             return try LuaLexing.isCode(
                 source: source,

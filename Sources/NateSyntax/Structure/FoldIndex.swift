@@ -245,7 +245,7 @@ public struct FoldIndex: Sendable {
         case "lisp", "scheme": return [40]
         case "actionscript", "baanc", "c", "cpp", "cs", "css", "d", "escript", "go", "java",
             "javascript", "javascript.js", "objc", "oscript", "php", "powershell", "r", "rc", "rust",
-            "swift", "tcl":
+            "swift", "tcl", "typescript":
             return [123]
         default: return []
         }

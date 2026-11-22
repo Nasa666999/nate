@@ -37,6 +37,10 @@ extension CLexing {
         cursor += 1
         if state.blockComment {
             if state.blockStar && byte == 47 {
+                if state.scriptPreprocessorComment {
+                    state.preprocessor = true
+                    state.scriptPreprocessorComment = false
+                }
                 state.blockComment = false
                 state.blockStar = false
                 state.documentation = false
@@ -91,8 +95,8 @@ extension CLexing {
         let complete = end == bytes.count || [0, 9, 10, 11, 12, 13, 32].contains(bytes[end])
         let valid =
             complete
-            && (documentationKeywords.contains(name)
-                || documentationKeywords.contains(String(decoding: bytes[start..<end], as: UTF8.self)))
+            && (containsDocumentation(name)
+                || containsDocumentation(String(decoding: bytes[start..<end], as: UTF8.self)))
         try emit(start, end, kind: .comment, style: valid ? "documentationKeyword" : "documentationInvalid")
         // 命令文字已经隔开前面的星号，迟到的斜线不能再消费旧的块注释结束候选。
         state.blockStar = false

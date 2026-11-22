@@ -13,10 +13,13 @@ extension CLexing {
     /// 参数说明: 无。
     /// 返回：合法字面起始完整消费时为真，否则原位置保留给普通词元处理。
     mutating func beginLiteral() throws -> Bool {
-        if state.language == "go", !state.preprocessor, bytes[cursor] == 96 {
+        if state.language == "go" || scriptRules != nil, !state.preprocessor, bytes[cursor] == 96 {
             state.rawEnding = [96]
             state.rawMatched = 0
             state.rawVisibleBeforeMatch = nil
+            if scriptRules != nil {
+                state.templateDelimiter = state.rawEnding
+            }
             state.expectsHeader = false
             literalStart = cursor
             try emit(cursor, cursor + 1, kind: .string, style: "raw")
@@ -54,6 +57,9 @@ extension CLexing {
             state.rawEnding = [41] + delimiter + [34]
             state.rawMatched = 0
             state.rawVisibleBeforeMatch = nil
+            if scriptRules != nil {
+                state.templateDelimiter = state.rawEnding
+            }
             state.expectsHeader = false
             literalStart = cursor
             try emit(cursor, end + 1, kind: .string, style: "raw")
@@ -113,6 +119,9 @@ extension CLexing {
     /// 参数说明: 无。
     /// 返回：推进一个原字节，完整定界符匹配后解除原始字面状态。
     mutating func rawByte() throws {
+        if try scriptTemplateByte() {
+            return
+        }
         let byte = bytes[cursor]
         state.logicalStart = false
         let previous = state.previousNonWhite
@@ -134,6 +143,9 @@ extension CLexing {
                 state.previousNonWhite = previous
             }
             state.rawEnding = []
+            if state.templateDepths.isEmpty {
+                state.templateDelimiter = []
+            }
             state.rawMatched = 0
             state.rawVisibleBeforeMatch = nil
         }
@@ -149,14 +161,16 @@ extension CLexing {
         let ending = newlineWidth(at: cursor)
         if ending > 0 {
             try emit(cursor, cursor + ending, kind: .string, style: "invalid")
-            for index in tokens.indices
-            where tokens[index].kind == .string && tokens[index].range.lower >= base + literalStart {
-                try budget.consume()
-                tokens[index] = SyntaxToken(
-                    range: tokens[index].range,
-                    kind: .string,
-                    lexicalStyle: "c:invalid"
-                )
+            if try !reclassifyScriptLiteral("invalid") {
+                for index in tokens.indices
+                where tokens[index].kind == .string && tokens[index].range.lower >= base + literalStart {
+                    try budget.consume()
+                    tokens[index] = try makeToken(
+                        range: tokens[index].range,
+                        kind: .string,
+                        style: "invalid"
+                    )
+                }
             }
             state.quote = nil
             state.header = false
@@ -206,6 +220,9 @@ extension CLexing {
             state.escape = true
         }
         else {
+            if byte == state.quote, try scriptQuotedSuffix() {
+                return
+            }
             // 闭合引号与下个状态在同一步交接，普通正文与转义引号仍正常推进前文。
             try emit(cursor, cursor + 1, kind: .string, style: style, updatesContext: byte != state.quote)
             if byte == state.quote {

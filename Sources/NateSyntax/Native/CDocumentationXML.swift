@@ -64,9 +64,9 @@ extension CLexing {
                 let suffix = String(decoding: source[(start + 1)..<end], as: UTF8.self)
                 let valid =
                     value == 62
-                    ? documentationKeywords.contains(name)
+                    ? containsDocumentation(name)
                     : [0, 9, 10, 11, 12, 13, 32].contains(value)
-                        && (documentationKeywords.contains(name) || documentationKeywords.contains(suffix))
+                        && (containsDocumentation(name) || containsDocumentation(suffix))
                 style = valid ? "documentationKeyword" : "documentationInvalid"
                 break
             }
@@ -76,7 +76,7 @@ extension CLexing {
             let name = String(decoding: source[start..<end], as: UTF8.self)
             let suffix = String(decoding: source[(start + 1)..<end], as: UTF8.self)
             style =
-                documentationKeywords.contains(name) || documentationKeywords.contains(suffix)
+                containsDocumentation(name) || containsDocumentation(suffix)
                 ? "documentationKeyword" : "documentationInvalid"
         }
         try emit(start, min(end, bytes.count), kind: .comment, style: style)

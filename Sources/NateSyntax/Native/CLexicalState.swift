@@ -41,6 +41,12 @@ struct CLexicalState: Sendable, Equatable {
     var directivePrefix = ""
     var xmlContinuation: CXMLContinuation?
     var xmlTerminator = false
+    var scriptResource: Data?
+    var scriptSourceIdentity: UUID?
+    var scriptPreprocessorComment = false
+    var scriptPreprocessorQuote = false
+    var templateDepths: [Int] = []
+    var templateDelimiter: [UInt8] = []
 }
 
 struct CXMLContinuation: Sendable, Equatable {

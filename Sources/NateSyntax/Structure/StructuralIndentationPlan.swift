@@ -114,6 +114,7 @@ public struct StructuralIndentationPlan: Sendable {
                 || tokens.contains {
                     $0.lexicalStyle == "c:preprocessor" || $0.lexicalStyle == "objc:9"
                         || $0.lexicalStyle == "lua:9"
+                        || $0.lexicalStyle == "script:9"
                 }
             for token in tokens where token.isStructureOpaque {
                 let lower = token.range.lower - row.lower
@@ -171,19 +172,32 @@ public struct StructuralIndentationPlan: Sendable {
                 }
                 let token = Self.token(before: target.lower, in: tokens)
                 let nextToken = Self.token(before: target.lower + 1, in: tokens)
+                let scriptContext =
+                    ["javascript.js", "typescript"].contains(identifier)
+                    ? try ScriptLexing.prefixState(
+                        source: Array(source.utf8),
+                        offset: offset,
+                        base: row.lower,
+                        initial: initial,
+                        scanner: scanner
+                    ) : nil
                 let nativeLineComment =
                     identifier == "objc"
                     && (token?.lexicalStyle == "objc:2" || token?.lexicalStyle == "objc:15")
                     || identifier == "r" && token?.lexicalStyle == "r:1"
                     || identifier == "lua"
                         && (token?.lexicalStyle == "lua:2" || token?.lexicalStyle == "lua:3")
+                    || scriptContext?.lineComment == true
                 // 行注释中的后继闭合符没有代码资格，换行只能使用注释前已经确认的标点和条件头。
                 let following = nativeLineComment ? nil : snapshot.text.byte(at: target.upper)
                 let insideString =
                     token?.kind == .string
                     && ((token?.range.upper ?? 0) > target.lower || nextToken?.kind == .string)
                 let insideBlockComment: Bool
-                if let token, token.kind == .comment {
+                if nativeLineComment {
+                    insideBlockComment = false
+                }
+                else if let token, token.kind == .comment {
                     let marker = language.lineComment
                     let lineComment =
                         !(startsInBlockComment && token.range.lower == row.lower)
@@ -210,7 +224,11 @@ public struct StructuralIndentationPlan: Sendable {
                     // 行尾注释只遮蔽自身，不能抹去注释前已成立的条件头；注释中的代码仍已从判断输入移除。
                     insideNativeLiteral = false
                 }
-                else if ["powershell", "objc", "r", "lua"].contains(identifier) {
+                else if let scriptContext {
+                    insideNativeLiteral = !ScriptLexing.isCode(scriptContext)
+                }
+                else if ["powershell", "objc", "r", "lua", "javascript.js", "typescript"].contains(identifier)
+                {
                     insideNativeLiteral = try !StructuralInsertionContext.isCode(
                         source: Array(source.utf8),
                         offset: offset,

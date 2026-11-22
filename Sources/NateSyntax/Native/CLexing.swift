@@ -8,6 +8,7 @@ struct CLexing {
     let secondaryKeywords: Set<String>
     let globalClasses: Set<String>
     let documentationKeywords: Set<String>
+    let scriptRules: ScriptRules?
     let snapshot: DocumentSnapshot?
     let unicodeLineEnding: Bool
     var state: CLexicalState
@@ -15,17 +16,19 @@ struct CLexing {
     var cursor = 0
     var literalStart = 0
     var tokens: [SyntaxToken] = []
+    var skippedScriptEnd = false
 
-    /// 业务作用：逐行推进独立 C/C++ 词法状态，整行有完整资格后才发布呈现和后续检查点。
+    /// 业务作用：逐行推进共享 C 系与脚本词法状态，整行有完整资格后才发布呈现和后续检查点。
     /// 参数说明:
     /// - text: 完整原始逻辑行，包含实际结束符。
     /// - base: 当前行在原快照中的 UTF-8 起点。
-    /// - language: 当前固定的 C 或 C++ 模式身份。
+    /// - language: 当前明确的共享词法模式身份。
     /// - keywords: 当前语言的主要关键字集合。
     /// - secondaryKeywords: 当前语言的次要关键字集合。
     /// - globalClasses: 当前语言在共享词法中单独呈现的全局类与内置名称。
     /// - documentationKeywords: 当前语言明确定义的文档注释命令集合。
     /// - snapshot: 固定当前范围、跨行及前后文证据的完整正文快照。
+    /// - scriptRules: 脚本语言的完整独立词表和样式，其它共享语言为空。
     /// - deadline: 本次固定快照分析的共同截止。
     /// - state: 前一完整行的独立状态，失败时只设置诊断。
     /// 返回：完整有界词元；范围、模式、容量、取消或截止失败均不发布部分状态。
@@ -38,6 +41,7 @@ struct CLexing {
         globalClasses: Set<String>,
         documentationKeywords: Set<String>,
         snapshot: DocumentSnapshot? = nil,
+        scriptRules: ScriptRules? = nil,
         deadline: ContinuousClock.Instant,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
@@ -55,6 +59,19 @@ struct CLexing {
         do {
             let budget = CLexingBudget(deadline: deadline)
             try budget.check()
+            if ["javascript.js", "typescript"].contains(language) {
+                // 模板与用户词表依赖完整资源及原文根，旧资源或另一份正文不能继续传播已确认的脚本状态。
+                guard let scriptRules,
+                    state.c.scriptResource == nil || state.c.scriptResource == scriptRules.identity,
+                    state.c.nextOffset != nil || base == 0,
+                    state.c.nextOffset == nil
+                        || (state.c.scriptSourceIdentity == nil) == (snapshot == nil),
+                    state.c.scriptSourceIdentity == nil
+                        || state.c.scriptSourceIdentity == snapshot?.text.sourceIdentity
+                else {
+                    throw NateError.message("脚本词法缺少完整规则或相同正文根和连续来源。")
+                }
+            }
             if let documentID = state.c.documentID {
                 // 文本身份已经绑定时不能用其它文档或修订的前置标点继续判断正则起点。
                 guard let snapshot, snapshot.id == documentID, snapshot.revision == state.c.revision else {
@@ -78,16 +95,23 @@ struct CLexing {
                 secondaryKeywords: secondaryKeywords,
                 globalClasses: globalClasses,
                 documentationKeywords: documentationKeywords,
+                scriptRules: scriptRules,
                 snapshot: snapshot,
-                unicodeLineEnding: text.hasSuffix("\u{0085}") || text.hasSuffix("\u{2028}")
-                    || text.hasSuffix("\u{2029}"),
+                unicodeLineEnding: scriptRules == nil
+                    && (text.hasSuffix("\u{0085}") || text.hasSuffix("\u{2028}")
+                        || text.hasSuffix("\u{2029}")),
                 state: state.c,
                 budget: budget
             )
             scanner.state.language = language
             scanner.state.documentID = snapshot?.id
             scanner.state.revision = snapshot?.revision
+            if let scriptRules {
+                scanner.state.scriptResource = scriptRules.identity
+                scanner.state.scriptSourceIdentity = snapshot?.text.sourceIdentity
+            }
             try scanner.scan()
+            try scanner.finishScriptDocument()
             scanner.state.lastRawByte = scanner.bytes.last ?? scanner.state.lastRawByte
             scanner.state.nextOffset = base + scanner.bytes.count
             try scanner.budget.check()
@@ -162,7 +186,11 @@ struct CLexing {
                     continue
                 }
             }
-            let splice = state.regexEscape ? 0 : spliceWidth(at: cursor)
+            if try consumeScriptTerminalSplice() {
+                continue
+            }
+            let escapedScriptSlash = scriptRules != nil && state.quote != nil && state.escape
+            let splice = state.regexEscape || escapedScriptSlash ? 0 : spliceWidth(at: cursor)
             if splice > 0 {
                 try emitContext(cursor, cursor + splice)
                 // 块注释只接受原文中相邻的结束符；物理续行不能把分隔两行的星号与斜线拼成结束符。
@@ -190,8 +218,14 @@ struct CLexing {
                 try commentByte()
                 continue
             }
+            if try scriptPreprocessorByte() {
+                continue
+            }
             let ending = newlineWidth(at: cursor)
             if ending > 0 {
+                if scriptRules != nil {
+                    try emit(cursor, cursor + ending, kind: .text, style: "text", updatesContext: false)
+                }
                 endLogicalLine()
                 cursor += ending
                 continue
@@ -201,6 +235,9 @@ struct CLexing {
                 continue
             }
             if [9, 11, 12, 32].contains(byte) {
+                if scriptRules != nil {
+                    try emit(cursor, cursor + 1, kind: .text, style: "text", updatesContext: false)
+                }
                 cursor += 1
             }
             else if cursor + 1 < bytes.count, byte == 47, bytes[cursor + 1] == 47 || bytes[cursor + 1] == 42 {
@@ -212,6 +249,9 @@ struct CLexing {
                     state.lineComment
                     ? third == 33 || third == 47 && !(cursor + 3 < bytes.count && bytes[cursor + 3] == 47)
                     : third == 33 || third == 42
+                state.scriptPreprocessorComment =
+                    scriptRules != nil && state.preprocessor
+                    && state.blockComment
                 try emit(cursor, cursor + 2, kind: .comment, style: commentStyle)
                 cursor += 2
             }
@@ -254,6 +294,9 @@ struct CLexing {
             else {
                 state.logicalStart = false
                 state.expectsHeader = false
+                if try closeScriptExpression(byte) {
+                    continue
+                }
                 let isOperator = "%^&*()-+=|{}[]:;<>,/?!.~".utf8.contains(byte)
                 state.operatorPending = isOperator
                 try emitCode(
@@ -271,6 +314,7 @@ struct CLexing {
     /// 参数说明: 无。
     /// 返回：预处理身份立即结束，行注释和正则等待下一行先完成纯续行消费；块注释与原始字面保留独立边界。
     mutating func endLogicalLine() {
+        state.scriptPreprocessorQuote = false
         state.logicalStart = true
         state.preprocessor = false
         state.directiveWord = false

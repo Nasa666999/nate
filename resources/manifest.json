@@ -66,7 +66,7 @@
     },
     {
       "path" : "completion\/javascript.xml",
-      "sha256" : "6c6edd3b4b47d358ae27be9b0a698343ba633e3d60fadadeb5882bc6cd196321"
+      "sha256" : "52741449674bfb287a535ae51c4f84bd5365955dbd6c7d23ba72db705250bf48"
     },
     {
       "path" : "completion\/lisp.xml",
@@ -122,7 +122,7 @@
     },
     {
       "path" : "completion\/typescript.xml",
-      "sha256" : "210974a19b7ff6074ab754142f17a10ebb829918664ed2a11b6e32a00ce3fb9d"
+      "sha256" : "83c236a219f0a9efb601d659edb6583a161d3797c34ff81072a61b3c3236db9a"
     },
     {
       "path" : "completion\/vb.xml",
@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "b70a9150045cb43cee3ba4be83ee4dc2bd167da150618792ea18c326a191ffc3"
+      "sha256" : "03922edf067c88139519d33ea3780acabda1ee5ed3deeefe28680ec293bcb514"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
@@ -571,6 +571,10 @@
     {
       "path" : "licenses\/Rust-NOTICE.txt",
       "sha256" : "572e637c1211a989ac2300b9d85536925e56ddaea2190ccfa35b5364615f6b57"
+    },
+    {
+      "path" : "licenses\/Script-NOTICE.txt",
+      "sha256" : "a12cd16a77f122f7203ec28bd967046cf797a56449c8d9e97879d07f1ee37825"
     },
     {
       "path" : "licenses\/UDL-NOTICE.txt",

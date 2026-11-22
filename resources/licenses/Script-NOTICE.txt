@@ -1,0 +1,15 @@
+JavaScript 与 TypeScript 共享词法适配参考 Lexilla 的 LexCPP.cxx 与 SubStyles.h。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexCPP.cxx
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexlib/SubStyles.h
+
+Copyright 1998-2005 by Neil Hodgson <neilh@scintilla.org>
+Copyright 2012 by Neil Hodgson <neilh@scintilla.org>
+Further folding features and configuration properties added by Udo Lechner.
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留各自词表、文档词、用户子样式、普通和原始字面、正则与模板表达式及物理行状态，
+使用有界原字节扫描、固定正文和资源身份及完整显示投影；不执行脚本、加载模块或计算预处理条件。
+
+JavaScript 与 TypeScript 补全保留 Notepad++ 原名称资源，并补充 ECMAScript 全局函数及 JSON 对象的参数签名。
+接口依据：https://tc39.es/ecma262/multipage/global-object.html
+接口依据：https://tc39.es/ecma262/multipage/structured-data.html

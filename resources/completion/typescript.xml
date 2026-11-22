@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<AutoComplete>
+		<Environment ignoreCase="no" additionalWordChar="." startFunc="(" stopFunc=")" paramSeparator="," />
         <KeyWord name="abstract" />
         <KeyWord name="any" />
         <KeyWord name="as" />
@@ -68,5 +69,59 @@
         <KeyWord name="while" />
         <KeyWord name="with" />
         <KeyWord name="yield" />
+			<KeyWord name="parseInt" func="yes">
+			<Overload retVal="number" descr="按指定进制读取整数；省略 radix 时使用语言的默认判定。">
+				<Param name="string" />
+				<Param name="radix?: number" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="parseFloat" func="yes">
+			<Overload retVal="number" descr="读取开头的浮点数。">
+				<Param name="string" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="isNaN" func="yes">
+			<Overload retVal="boolean" descr="转换为数值后判断是否为 NaN。">
+				<Param name="number" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="isFinite" func="yes">
+			<Overload retVal="boolean" descr="转换为数值后判断是否有限。">
+				<Param name="number" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="encodeURI" func="yes">
+			<Overload retVal="string" descr="编码完整 URI。">
+				<Param name="uri" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="encodeURIComponent" func="yes">
+			<Overload retVal="string" descr="编码 URI 组成部分。">
+				<Param name="uriComponent" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="decodeURI" func="yes">
+			<Overload retVal="string" descr="解码完整 URI。">
+				<Param name="encodedURI" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="decodeURIComponent" func="yes">
+			<Overload retVal="string" descr="解码 URI 组成部分。">
+				<Param name="encodedURIComponent" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="JSON.parse" func="yes">
+			<Overload retVal="any" descr="解析 JSON；可选 reviver 转换解析后的值。">
+				<Param name="text: string" />
+				<Param name="reviver?: (key, value) =&gt; any" />
+			</Overload>
+		</KeyWord>
+			<KeyWord name="JSON.stringify" func="yes">
+			<Overload retVal="string | undefined" descr="生成 JSON；可选 replacer 筛选值，space 控制缩进。">
+				<Param name="value" />
+				<Param name="replacer?: function | array | null" />
+				<Param name="space?: string | number" />
+			</Overload>
+		</KeyWord>
 	</AutoComplete>
 </NotepadPlus>

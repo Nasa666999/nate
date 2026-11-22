@@ -28,7 +28,9 @@ struct CFoldingLine {
                 tokenIndex < tokens.count && tokens[tokenIndex].range.lower <= base + cursor
                 ? tokens[tokenIndex] : nil
             let byte = bytes[cursor]
-            if token?.lexicalStyle == "c:preprocessor" {
+            if token?.lexicalStyle == "c:preprocessor"
+                || ["script:9", "script:23", "script:24"].contains(token?.lexicalStyle ?? "")
+            {
                 preprocessor = true
             }
             if preprocessor && !blockComment && !lineComment, byte == 35 {
@@ -73,7 +75,7 @@ struct CFoldingLine {
                     }
                 }
             }
-            else if token?.lexicalStyle == "c:punctuation" {
+            else if token?.lexicalStyle == "c:punctuation" || token?.lexicalStyle == "script:10" {
                 if [40, 91, 123].contains(byte) {
                     change += 1
                 }

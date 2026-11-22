@@ -19,7 +19,7 @@ public struct SyntaxAnalysis: Sendable {
     /// - startLine: 可信行首检查点。
     /// - initial: 与该检查点匹配的词法状态。
     /// - deadline: 所属操作的共同截止，为空时最多五秒，调用方不能借新分析延长既有期限。
-    /// 返回：有界可见行样式及稀疏行首状态，取消不发布部分配置。
+    /// 返回：有界可见行样式及稀疏行首状态；行号无效、取消或超量时不发布部分样式。
     public static func analyze(
         snapshot: DocumentSnapshot,
         language: LanguageDefinition,
@@ -29,6 +29,13 @@ public struct SyntaxAnalysis: Sendable {
         initial: LexicalState?,
         deadline: ContinuousClock.Instant? = nil
     ) throws -> SyntaxAnalysis {
+        // 行号只来自正文的 CR/LF 索引；失配检查点不能构造倒置范围或借越界跳过状态传播。
+        guard visible.lowerBound >= 0, startLine >= 0,
+            startLine <= min(snapshot.text.lineCount, visible.upperBound),
+            startLine <= visible.lowerBound
+        else {
+            throw NateError.invalidRange
+        }
         var native = SyntaxState()
         var user = UDLState()
         if case .native(let state) = initial {

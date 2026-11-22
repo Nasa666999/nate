@@ -2,23 +2,29 @@ import Foundation
 import NateCore
 
 extension CLexing {
-    /// 业务作用：主要与次要关键字共享稳定词元边界，前缀 @ 名称保持独立身份，预处理名称只在井号后解释。
+    /// 业务作用：有序词表共享稳定词元边界，脚本用户子样式按原字节匹配，预处理名称只在井号后解释。
     /// 参数说明: 无。
     /// 返回：推进一个完整原始标识符，并保留其代码或预处理身份。
     mutating func word() throws {
         let wasContinued = state.continuedWord
         let start = cursor
-        if bytes[cursor] == 64 {
+        if bytes[cursor] == 64 || scriptRules != nil && bytes[cursor] == 36 {
             cursor += 1
         }
-        while cursor < bytes.count, Self.wordPart(bytes[cursor]) {
+        while cursor < bytes.count, Self.wordPart(bytes[cursor]),
+            scriptRules == nil || Self.scriptWordPart(bytes[cursor])
+        {
             try budget.consume()
             cursor += 1
         }
         let value = String(decoding: bytes[start..<cursor], as: UTF8.self)
-        let continues = cursor < bytes.count ? spliceWidth(at: cursor) > 0 : unicodeLineEnding
+        let continues =
+            cursor < bytes.count
+            ? spliceWidth(at: cursor) > 0 || scriptTerminalSplice(at: cursor) : unicodeLineEnding
         state.continuedWord = cursor == bytes.count && unicodeLineEnding
-        state.splicedWord = cursor < bytes.count && spliceWidth(at: cursor) > 0
+        state.splicedWord =
+            cursor < bytes.count
+            && (spliceWidth(at: cursor) > 0 || scriptTerminalSplice(at: cursor))
         if state.directiveWord {
             if value.utf8.count <= 64 - state.directivePrefix.utf8.count {
                 state.directivePrefix += value
@@ -38,13 +44,31 @@ extension CLexing {
         else {
             state.expectsHeader = false
         }
-        let style =
-            wasContinued || continues
-            ? "identifier"
-            : (keywords.contains(value)
+        let style: String
+        if wasContinued || continues {
+            style = "identifier"
+        }
+        else if let scriptRules {
+            switch scriptRules.identifier(Data(bytes[start..<cursor])) {
+            case 5:
+                style = "keyword"
+            case 16:
+                style = "type"
+            case 19:
+                style = "globalClass"
+            case let identifier where identifier >= 128:
+                style = "substyle" + String(identifier)
+            default:
+                style = "identifier"
+            }
+        }
+        else {
+            style =
+                keywords.contains(value)
                 ? "keyword"
                 : (secondaryKeywords.contains(value)
-                    ? "type" : (globalClasses.contains(value) ? "globalClass" : "identifier")))
+                    ? "type" : (globalClasses.contains(value) ? "globalClass" : "identifier"))
+        }
         try emitCode(start, cursor, kind: style == "identifier" ? .text : .keyword, style: style)
     }
 
@@ -58,7 +82,11 @@ extension CLexing {
             let byte = bytes[cursor]
             let exponentSign =
                 cursor > start && [69, 101, 80, 112].contains(bytes[cursor - 1]) && [43, 45].contains(byte)
-            guard Self.wordPart(byte) || byte == 46 || byte == 39 || exponentSign else {
+            let allowed =
+                scriptRules == nil
+                ? Self.wordPart(byte) || byte == 46 || byte == 39 || exponentSign
+                : Self.scriptWordPart(byte) || byte == 46 || !userLiteral && (byte == 39 || exponentSign)
+            guard allowed else {
                 break
             }
             try budget.consume()
@@ -67,7 +95,9 @@ extension CLexing {
             }
             cursor += 1
         }
-        state.continuedNumber = cursor < bytes.count ? spliceWidth(at: cursor) > 0 : unicodeLineEnding
+        state.continuedNumber =
+            cursor < bytes.count
+            ? spliceWidth(at: cursor) > 0 || scriptTerminalSplice(at: cursor) : unicodeLineEnding
         state.numberUserLiteral = state.continuedNumber && userLiteral
         try emitCode(start, cursor, kind: .number, style: userLiteral ? "userLiteral" : "number")
     }
@@ -78,14 +108,16 @@ extension CLexing {
     mutating func continueToken() throws -> Bool {
         let byte = bytes[cursor]
         if state.continuedWord {
-            if Self.wordPart(byte) {
+            if Self.wordPart(byte), scriptRules == nil || Self.scriptWordPart(byte) {
                 try word()
                 return true
             }
             state.continuedWord = false
         }
         if state.continuedNumber {
-            if Self.wordPart(byte) || byte == 46 || byte == 39 {
+            if (Self.wordPart(byte) || byte == 46 || byte == 39)
+                && (scriptRules == nil || byte != 36 && (!state.numberUserLiteral || byte != 39))
+            {
                 try number()
                 return true
             }
@@ -184,7 +216,7 @@ extension CLexing {
     /// - start: 当前行内起点。
     /// - end: 当前行内结束边界。
     /// - kind: 基础呈现类别。
-    /// - style: C 词法命名空间中的独立身份。
+    /// - style: 共享词法确认的独立身份，脚本另绑定实际数字样式。
     /// - updatesContext: 是否从已消费字节推进正则起点和原始前后缀判断。
     /// 返回：完整范围加入有限列表；超量抛错，调用方不得发布半行结果。
     mutating func emit(_ start: Int, _ end: Int, kind: SyntaxKind, style: String, updatesContext: Bool = true)
@@ -216,26 +248,24 @@ extension CLexing {
                 }
             }
         }
-        let identity = "c:" + style
+        let token = try makeToken(
+            range: ByteRange(base + start, base + end),
+            kind: kind,
+            style: style
+        )
         if let last = tokens.last, last.range.upper == base + start, last.kind == kind,
-            last.lexicalStyle == identity
+            last.lexicalStyle == token.lexicalStyle
         {
-            tokens[tokens.count - 1] = SyntaxToken(
+            tokens[tokens.count - 1] = try makeToken(
                 range: ByteRange(last.range.lower, base + end),
                 kind: kind,
-                lexicalStyle: identity
+                style: style
             )
             return
         }
         guard tokens.count < 65_536 else {
             throw NateError.message("C/C++ 高亮暂停：单行词法片段超过 65536 个。")
         }
-        tokens.append(
-            SyntaxToken(
-                range: ByteRange(base + start, base + end),
-                kind: kind,
-                lexicalStyle: identity
-            )
-        )
+        tokens.append(token)
     }
 }

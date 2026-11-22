@@ -16,9 +16,10 @@ public struct LanguageDefinition: Codable, Sendable, Identifiable {
 
     /// 业务作用：按内置语言身份选择共享 C 词法与折叠规则，避免把仅有相似括号的语言误归入同一语法。
     /// 参数说明: 无。
-    /// 返回：C、C++、Java、C#、Go、Swift、ActionScript 与资源文件为真，其它语言保持独立规则。
+    /// 返回：C、C++、Java、C#、Go、Swift、ActionScript、独立 JavaScript、TypeScript 与资源文件为真。
     public var usesSharedCLexer: Bool {
-        ["c", "cpp", "java", "cs", "go", "swift", "actionscript", "rc"].contains(id)
+        ["c", "cpp", "java", "cs", "go", "swift", "actionscript", "rc", "javascript.js", "typescript"]
+            .contains(id)
     }
 
     /// 业务作用：几何只等待可能改变字体或隐藏字符的内置样式，纯颜色资源不阻断原生列定位。
