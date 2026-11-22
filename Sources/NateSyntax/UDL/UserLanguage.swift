@@ -48,6 +48,16 @@ public struct UDLDefinition: Sendable {
             generation = UUID()
         }
     }
+    public var allowFoldOfComments = false {
+        didSet {
+            generation = UUID()
+        }
+    }
+    public var foldCompact = false {
+        didSet {
+            generation = UUID()
+        }
+    }
     public var prefix: Set<Int> {
         didSet {
             generation = UUID()
@@ -252,6 +262,15 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
                 }
                 current?.lineCommentPosition = position
             }
+            for key in ["allowFoldOfComments", "foldCompact"] {
+                if let value = attributeDict[key], value != "yes" && value != "no" {
+                    failure = .message("UDL 的 \(key) 必须为 yes 或 no。")
+                    parser.abortParsing()
+                    return
+                }
+            }
+            current?.allowFoldOfComments = attributeDict["allowFoldOfComments"] == "yes"
+            current?.foldCompact = attributeDict["foldCompact"] == "yes"
         case "Prefix":
             for group in 1...8 where attributeDict["Keywords\(group)"] == "yes" {
                 current?.prefix.insert(group)

@@ -18,13 +18,15 @@ public struct FoldIndex: Sendable {
     /// 参数说明:
     /// - language: 当前内置语言资源。
     /// - udl: 独立用户语言；其折叠需采用自己的字面规则。
-    /// 返回：当前语言具有语法、注释、预处理、缩进、配置节或差异层级规则时为真。
+    /// 返回：当前语言具有语法、注释、预处理、缩进、配置节、差异或 UDL 明确字面层级规则时为真。
     public static func supports(language: LanguageDefinition?, udl: UDLDefinition?) -> Bool {
-        udl == nil
-            && (["python", "ini", "props", "diff", "registry", "ihex", "tex", "latex"].contains(
-                language?.id ?? ""
-            )
-                || !openers(for: language?.id ?? "").isEmpty)
+        if let udl {
+            return udl.allowFoldOfComments || UDLFoldRules(definition: udl).enabled
+        }
+        return ["python", "ini", "props", "diff", "registry", "ihex", "tex", "latex"].contains(
+            language?.id ?? ""
+        )
+            || !openers(for: language?.id ?? "").isEmpty
     }
 
     /// 业务作用：将同一修订的词法证据按语言规则转成真实行折叠范围，缺少完整分析证据时不隐藏正文。
@@ -32,8 +34,14 @@ public struct FoldIndex: Sendable {
     /// - snapshot: 配对所属的完整正文快照。
     /// - brackets: 已完成且与快照身份一致的结构证据。
     /// - language: 当前内置语言定义。
+    /// - udl: 当前独立 UDL，存在时按自身明确字面及注释分组规则建立范围。
     /// 返回：最多 65536 个完整多行范围及父级索引；身份、数量或时间预算不满足时拒绝发布。
-    public init(snapshot: DocumentSnapshot, brackets: BracketIndex, language: LanguageDefinition?) throws {
+    public init(
+        snapshot: DocumentSnapshot,
+        brackets: BracketIndex,
+        language: LanguageDefinition?,
+        udl: UDLDefinition? = nil
+    ) throws {
         guard brackets.documentID == snapshot.id, brackets.revision == snapshot.revision else {
             // 不同正文的字节范围不能用于隐藏当前行，缺少一致证据时保留全部正文可见。
             throw NateError.staleRevision
@@ -45,11 +53,14 @@ public struct FoldIndex: Sendable {
                 "scheme",
             ].contains(
                 language?.id ?? ""
-            ) || language?.usesSharedCLexer == true
+            ) || language?.usesSharedCLexer == true || udl != nil
                 ? .seconds(5) : .seconds(1)
         )
         var candidates: [FoldRegion] = []
-        if let language, ["lisp", "scheme"].contains(language.id) {
+        if let udl {
+            candidates = try UDLFolding.regions(snapshot: snapshot, definition: udl, deadline: deadline)
+        }
+        else if let language, ["lisp", "scheme"].contains(language.id) {
             candidates = try LispFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, language.id == "latex" {

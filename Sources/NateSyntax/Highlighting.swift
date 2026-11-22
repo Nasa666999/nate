@@ -12,6 +12,7 @@ public struct SyntaxToken: Sendable {
     public let background: String?
     public let fontStyle: Int
     public let lexicalStyle: String
+    public let foldMarker: SyntaxFoldMarker?
 
     /// 业务作用：携带可配置语法呈现，样式不进入正文历史。
     /// 参数说明:
@@ -21,6 +22,7 @@ public struct SyntaxToken: Sendable {
     /// - background: 资源显式指定的背景色，为空时继承视图底色。
     /// - fontStyle: UDL 粗体、斜体和下划线位集合。
     /// - lexicalStyle: 原词法样式身份，为空时采用基础类别；颜色相同不代表词法作用域相同。
+    /// - foldMarker: 词法过程明确确认的折叠动作及其实际上下文，没有标记时为空。
     /// 返回：独立呈现属性。
     public init(
         range: ByteRange,
@@ -28,7 +30,8 @@ public struct SyntaxToken: Sendable {
         foreground: String? = nil,
         background: String? = nil,
         fontStyle: Int = 0,
-        lexicalStyle: String? = nil
+        lexicalStyle: String? = nil,
+        foldMarker: SyntaxFoldMarker? = nil
     ) {
         self.range = range
         self.kind = kind
@@ -36,6 +39,7 @@ public struct SyntaxToken: Sendable {
         self.background = background
         self.fontStyle = fontStyle
         self.lexicalStyle = lexicalStyle ?? kind.rawValue
+        self.foldMarker = foldMarker
     }
 
     /// 业务作用：代码结构只使用真实代码标点，字符串、注释和宏体不能制造主代码块。

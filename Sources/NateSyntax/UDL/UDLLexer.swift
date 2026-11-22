@@ -14,6 +14,7 @@ public struct UDLState: Sendable, Equatable {
     var ruleGeneration: UUID?
     var atLineStart = true
     var hasVisible = false
+    var foldWhite = true
     public fileprivate(set) var diagnostic: String?
 
     /// 业务作用：建立独立 UDL 行首状态，供跨行分隔符和注释传播。
@@ -85,13 +86,16 @@ public enum UDLLexer {
         budget: UDLScanBudget
     ) throws -> [SyntaxToken] {
         let bytes = Array(text.utf8)
+        state.foldWhite = true
         try budget.consume(bytes.count)
         let comments = indexed(definition.lists["Comments"] ?? [])
         let delimiters = indexed(definition.lists["Delimiters"] ?? [])
         let numbers = try UDLNumberRules(definition: definition, budget: budget)
+        var folders = UDLFoldRules(definition: definition)
         var numberEnds: [String: Set<UInt8>] = [:]
         var numberBlocked: [String: Int] = [:]
         var tokens: [SyntaxToken] = []
+        var backwardStart = true
         var i = 0
         while i < bytes.count {
             try budget.consume()
@@ -99,13 +103,29 @@ public enum UDLLexer {
                 throw NateError.message("UDL 单行词法片段超过 65536 个。")
             }
             let start = i
+            var forwardBoundary = false
+            var compactForward = false
             defer {
                 UDLPhysicalLine.advance(bytes[start..<i], state: &state)
+                if i > start {
+                    backwardStart = forwardBoundary || bytes[i - 1] > 0 && bytes[i - 1] < 33
+                    // 前向符号消费后观察真实后继；已跳过的起止文字不再被当作普通正文重复计入紧凑层级。
+                    if compactForward {
+                        if i == bytes.count || bytes[i] == 0 || bytes[i] >= 33 {
+                            state.foldWhite = false
+                        }
+                    }
+                    else if bytes[start..<i].contains(where: {
+                        $0 == 0 || $0 >= 33
+                    }) {
+                        state.foldWhite = false
+                    }
+                }
             }
             let context = state.contexts.last
             let nesting =
-                context.flatMap {
-                    definition.styles[$0.style]?.nesting
+                context.map {
+                    definition.styles[$0.style]?.nesting ?? 0
                 } ?? UInt32.max
             if let context,
                 let escape = try budget.longest(
@@ -150,6 +170,8 @@ public enum UDLLexer {
                     definition: definition
                 )
                 state.contexts.removeLast()
+                forwardBoundary = true
+                compactForward = context.style != "LINE COMMENTS"
                 continue
             }
             if let context, context.lineOnly, bytes[i] == 10 || bytes[i] == 13 {
@@ -199,6 +221,7 @@ public enum UDLLexer {
                 )
                 i += opener.utf8.count
                 entered = true
+                compactForward = true
             }
             else if nesting & 0x200 != 0,
                 UDLPhysicalLine.permits(
@@ -250,11 +273,13 @@ public enum UDLLexer {
                         )
                         i += opener.utf8.count
                         entered = true
+                        compactForward = true
                         break
                     }
                 }
             }
             if entered {
+                forwardBoundary = true
                 if state.contexts.count > 128 {
                     throw NateError.message("UDL 嵌套超过 128 层，原上下文保留。")
                 }
@@ -312,6 +337,32 @@ public enum UDLLexer {
                 }
             }
             var matched = false
+            if let folder = try folders.match(
+                bytes: bytes,
+                offset: i,
+                context: context?.style,
+                nesting: nesting,
+                wordStart: backwardStart,
+                contextEnds: context?.ends ?? [],
+                budget: budget
+            ) {
+                i += folder.text.utf8.count
+                forwardBoundary = folder.style == "FOLDER IN CODE1"
+                compactForward = forwardBoundary
+                emit(
+                    &tokens,
+                    start: base + start,
+                    end: base + i,
+                    style: folder.style,
+                    definition: definition,
+                    merge: false,
+                    foldMarker: SyntaxFoldMarker(
+                        action: folder.action,
+                        insideComment: context?.style.contains("COMMENT") == true
+                    )
+                )
+                continue
+            }
             for group in 1...8 where nesting & (1 << (group + 9)) != 0 {
                 if i == 0 || !word(bytes[i - 1]),
                     let keyword = try budget.longest(
@@ -353,6 +404,8 @@ public enum UDLLexer {
                         || (i == 0 || !word(bytes[i - 1])) && (end == bytes.count || !word(bytes[end]))
                     {
                         i = end
+                        forwardBoundary = group == 1
+                        compactForward = forwardBoundary
                         emit(
                             &tokens,
                             start: base + start,
@@ -407,13 +460,17 @@ public enum UDLLexer {
     /// - end: 新片段结束。
     /// - style: 资源样式名。
     /// - definition: 完整 UDL。
+    /// - merge: 是否合并相邻相同样式，折叠标记须保留各自独立的完整边界。
+    /// - foldMarker: 当前独立标记的明确结构身份。
     /// 返回：追加或合并呈现，不改正文。
     static func emit(
         _ tokens: inout [SyntaxToken],
         start: Int,
         end: Int,
         style: String,
-        definition: UDLDefinition
+        definition: UDLDefinition,
+        merge: Bool = true,
+        foldMarker: SyntaxFoldMarker? = nil
     ) {
         let rule = definition.styles[style]
         let lexicalStyle = "udl:" + style
@@ -426,7 +483,7 @@ public enum UDLLexer {
                     ? .string
                     : style == "NUMBERS" ? .number : style.hasPrefix("KEYWORDS") ? .keyword : .punctuation
         var start = start
-        if let previous = tokens.last, previous.range.upper == start, previous.kind == kind,
+        if merge, let previous = tokens.last, previous.range.upper == start, previous.kind == kind,
             previous.lexicalStyle == lexicalStyle,
             previous.foreground == rule?.foreground, previous.background == rule?.background,
             previous.fontStyle == rule?.fontStyle ?? 0
@@ -441,7 +498,8 @@ public enum UDLLexer {
                 foreground: rule?.foreground,
                 background: rule?.background,
                 fontStyle: rule?.fontStyle ?? 0,
-                lexicalStyle: lexicalStyle
+                lexicalStyle: lexicalStyle,
+                foldMarker: foldMarker
             )
         )
     }

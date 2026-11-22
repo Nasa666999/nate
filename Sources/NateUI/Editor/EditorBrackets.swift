@@ -217,7 +217,12 @@ extension EditorView {
                 var failure: String?
                 if FoldIndex.supports(language: language, udl: udl) {
                     do {
-                        folds = try FoldIndex(snapshot: snapshot, brackets: brackets, language: language)
+                        folds = try FoldIndex(
+                            snapshot: snapshot,
+                            brackets: brackets,
+                            language: language,
+                            udl: udl
+                        )
                     }
                     catch {
                         if Task.isCancelled || error is CancellationError {

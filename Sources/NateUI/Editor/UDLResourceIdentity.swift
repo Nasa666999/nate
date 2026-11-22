@@ -14,6 +14,8 @@ enum UDLResourceIdentity {
         append(definition.caseIgnored ? "yes" : "no", hash: &hash)
         append(String(definition.decimalSeparator.rawValue), hash: &hash)
         append(String(definition.lineCommentPosition.rawValue), hash: &hash)
+        append(definition.allowFoldOfComments ? "yes" : "no", hash: &hash)
+        append(definition.foldCompact ? "yes" : "no", hash: &hash)
         append(String(definition.extensions.count), hash: &hash)
         for value in definition.extensions {
             append(value, hash: &hash)
