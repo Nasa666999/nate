@@ -133,4 +133,31 @@ enum UDLCompatibility {
         }
         return messages
     }
+
+    /// 业务作用：无效编号不能取得规则权限，完整 UTF-8 标记的增强行为保留逐项说明。
+    /// 参数说明:
+    /// - word: 当前完整原字段。
+    /// - list: 实际注释或分隔符规则组。
+    /// - position: 该组内保留候选包装后的有序位置。
+    /// - path: 当前 XML 节点的实际路径。
+    /// 返回：编号非法或使用超出原字符范围的标记时给出单项说明，其它有效字段不产生说明。
+    static func indexedMessage(word: String, list: String, position: Int, path: String) -> String? {
+        let maximum: Int
+        switch list {
+        case "Comments": maximum = 4
+        case "Delimiters": maximum = 23
+        default: return nil
+        }
+        if let indexed = UDLIndexedRule.parse(word, maximum: maximum) {
+            if indexed.body.unicodeScalars.contains(where: {
+                $0.value > 255
+            }) {
+                return
+                    "\(path)[\(list)]/token[\(position + 1)] 使用完整 UTF-8 标记匹配；超过码点 255 的内容属于 Nate 增强行为，原 XML 已保留。"
+            }
+            return nil
+        }
+        return
+            "未应用编号字段 \(path)[\(list)]/token[\(position + 1)]；编号须为两位 ASCII 数字且位于 00–\(String(format: "%02d", maximum))，原 XML 已保留。"
+    }
 }

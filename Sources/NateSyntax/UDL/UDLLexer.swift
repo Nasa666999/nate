@@ -132,8 +132,16 @@ public enum UDLLexer {
         let bytes = Array(text.utf8)
         state.foldWhite = true
         try budget.consume(bytes.count)
-        let commentRules = try UDLForwardRules(words: definition.lists["Comments"] ?? [], budget: budget)
-        let delimiterRules = try UDLForwardRules(words: definition.lists["Delimiters"] ?? [], budget: budget)
+        let commentRules = try UDLForwardRules(
+            words: definition.lists["Comments"] ?? [],
+            maximumField: 4,
+            budget: budget
+        )
+        let delimiterRules = try UDLForwardRules(
+            words: definition.lists["Delimiters"] ?? [],
+            maximumField: 23,
+            budget: budget
+        )
         let comments = commentRules.flattened
         let delimiters = delimiterRules.flattened
         let quoted = try UDLQuotedRules(

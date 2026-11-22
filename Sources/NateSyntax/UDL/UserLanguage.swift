@@ -132,8 +132,12 @@ public enum UDLImporter {
         else {
             throw NateError.message("UDL 必须为不含 DTD 与实体声明、大小不超过 4 MB 的 UTF-8 XML。")
         }
-        let delegate = UDLXMLReader(original: data)
-        let parser = XMLParser(data: data)
+        let input = try UDLXMLInput(data)
+        let delegate = UDLXMLReader(
+            original: data,
+            input: input
+        )
+        let parser = XMLParser(data: input.data)
         parser.shouldResolveExternalEntities = false
         parser.externalEntityResolvingPolicy = .never
         parser.delegate = delegate
@@ -167,17 +171,17 @@ public enum UDLImporter {
         }
     }
 
-    /// 业务作用：UDL 的双括号短语是字面规则，不解释为通用正则。
+    /// 业务作用：按完整标量识别 UDL 编号与候选包装，组合附加符不吞并 ASCII 语法边界。
     /// 参数说明:
     /// - text: 关键字或分隔符列表。
     /// - preserveIndexedGroups: 注释与分隔符保留编号后双括号语法，替代项不能提前变成普通短语。
     /// 返回：保留短语内部空格的有序标记。
     static func words(_ text: String, preserveIndexedGroups: Bool = false) -> [String] {
         var result: [String] = []
-        let chars = Array(text)
+        let chars = Array(text.unicodeScalars)
         var i = 0
         while i < chars.count {
-            while i < chars.count && chars[i].isWhitespace {
+            while i < chars.count && chars[i].properties.isWhitespace {
                 i += 1
             }
             guard i < chars.count else {
@@ -185,7 +189,8 @@ public enum UDLImporter {
             }
             let start = i
             let numbered =
-                i + 3 < chars.count && chars[i].isNumber && chars[i + 1].isNumber && chars[i + 2] == "("
+                i + 3 < chars.count && (48...57).contains(chars[i].value)
+                && (48...57).contains(chars[i + 1].value) && chars[i + 2] == "("
                 && chars[i + 3] == "("
             if numbered {
                 i += 2
@@ -197,20 +202,21 @@ public enum UDLImporter {
                     i += 1
                 }
                 if numbered, preserveIndexedGroups {
-                    result.append(String(chars[start..<min(chars.count, i + 2)]))
+                    result.append(String(String.UnicodeScalarView(chars[start..<min(chars.count, i + 2)])))
                 }
                 else {
                     result.append(
-                        (numbered ? String(chars[start..<(start + 2)]) : "") + String(chars[inside..<i])
+                        (numbered ? String(String.UnicodeScalarView(chars[start..<(start + 2)])) : "")
+                            + String(String.UnicodeScalarView(chars[inside..<i]))
                     )
                 }
                 i = min(chars.count, i + 2)
             }
             else {
-                while i < chars.count && !chars[i].isWhitespace {
+                while i < chars.count && !chars[i].properties.isWhitespace {
                     i += 1
                 }
-                result.append(String(chars[start..<i]))
+                result.append(String(String.UnicodeScalarView(chars[start..<i])))
             }
         }
         return result
@@ -219,6 +225,7 @@ public enum UDLImporter {
 
 private final class UDLXMLReader: NSObject, XMLParserDelegate {
     let original: Data
+    let input: UDLXMLInput
     var definitions: [UDLDefinition] = []
     var current: UDLDefinition?
     var depth = 0
@@ -235,9 +242,11 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
     /// 业务作用：为一次受限导入保留完整原定义，未知字段不会在导出时丢失。
     /// 参数说明:
     /// - original: 已经过安全预检的 XML。
+    /// - input: 解析阶段使用的有界字符保护与恢复规则。
     /// 返回：只在本次解析中使用的读取器。
-    init(original: Data) {
+    init(original: Data, input: UDLXMLInput) {
         self.original = original
+        self.input = input
     }
 
     /// 业务作用：逐节点校验深度、数量、命名和字段类型。
@@ -255,6 +264,12 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String: String]
     ) {
+        let elementName = input.decoded(elementName)
+        let attributeDict = Dictionary(
+            uniqueKeysWithValues: attributeDict.map {
+                (input.decoded($0.key), input.decoded($0.value))
+            }
+        )
         depth += 1
         nodes += 1
         let parent = elements.last
@@ -392,7 +407,34 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
         guard keywordName != nil, ignoredDepth == nil else {
             return
         }
-        keywordText += string
+        appendKeyword(input.decoded(string), parser: parser)
+    }
+
+    /// 业务作用：CDATA 按原字面内容进入规则，数值引用保持文字职责而不再被解释。
+    /// 参数说明:
+    /// - parser: 当前 XML 解析器。
+    /// - CDATABlock: 当前完整 UTF-8 字面片段。
+    /// 返回：原标量及引用写法完整追加；非法编码或超量时终止整份定义。
+    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
+        guard keywordName != nil, ignoredDepth == nil else {
+            return
+        }
+        do {
+            appendKeyword(try input.cdata(CDATABlock), parser: parser)
+        }
+        catch {
+            failure = .message(error.localizedDescription)
+            parser.abortParsing()
+        }
+    }
+
+    /// 业务作用：普通文本与 CDATA 共用同一实际规则文本容量，分段回调不能绕过上限。
+    /// 参数说明:
+    /// - value: 已完整恢复的规则文字。
+    /// - parser: 本次完整资源解析器。
+    /// 返回：追加当前候选，超过单项 1 MiB 时终止而不发布。
+    private func appendKeyword(_ value: String, parser: XMLParser) {
+        keywordText += value
         if keywordText.utf8.count > 1_048_576 {
             failure = .message("UDL 单项规则超过 1 MB。")
             parser.abortParsing()
@@ -416,6 +458,7 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
             depth -= 1
             elements.removeLast()
         }
+        let elementName = input.decoded(elementName)
         if let ignoredDepth {
             if depth == ignoredDepth {
                 self.ignoredDepth = nil
@@ -433,6 +476,22 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
                     keywordText,
                     preserveIndexedGroups: name == "Comments" || name == "Delimiters"
                 )
+            if name == "Comments" || name == "Delimiters" {
+                let path = "/" + elements.joined(separator: "/")
+                for (position, word) in (current?.lists[name] ?? []).enumerated() {
+                    if let message = UDLCompatibility.indexedMessage(
+                        word: word,
+                        list: name,
+                        position: position,
+                        path: path
+                    ) {
+                        appendDiagnostics([message], parser: parser)
+                        guard failure == nil else {
+                            return
+                        }
+                    }
+                }
+            }
             keywordName = nil
         }
         if elementName == "UserLang", let definition = current {

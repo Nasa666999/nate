@@ -35,18 +35,20 @@ struct UDLForwardRules {
     /// 业务作用：注释与分隔符保留每次同编号出现的位置，双括号中的替代项属于同一个对应组。
     /// 参数说明:
     /// - words: 保留双括号组语法的原字段。
+    /// - maximumField: 当前注释或分隔符组允许的最大两位编号。
     /// - budget: 规则展开和后续词法匹配共同持有的预算。
     /// 返回：有界且保留位置身份的前向规则；超量时不发布部分字段。
-    init(words: [String], budget: UDLScanBudget) throws {
+    init(words: [String], maximumField: Int, budget: UDLScanBudget) throws {
         var groups: [Int: [[String]]] = [:]
         for word in words {
             try budget.consume(word.utf8.count + 1)
-            guard word.utf8.count > 2, let field = Int(word.prefix(2)) else {
+            guard let indexed = UDLIndexedRule.parse(word, maximum: maximumField) else {
                 continue
             }
-            let raw = String(word.dropFirst(2))
+            let field = indexed.field
+            let raw = indexed.body
             var alternatives: [String] = []
-            if raw.hasPrefix("(("), raw.hasSuffix("))") {
+            if raw.utf8.prefix(2).elementsEqual([40, 40]), raw.utf8.suffix(2).elementsEqual([41, 41]) {
                 let bytes = Array(raw.utf8.dropFirst(2).dropLast(2))
                 var start = 0
                 for index in 0...bytes.count where index == bytes.count || bytes[index] == 32 {
