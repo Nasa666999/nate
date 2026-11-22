@@ -75,9 +75,13 @@ public struct StructuralIndentationPlan: Sendable {
             throw NateError.message("语言缩进的前置词法传播超过一百万行。")
         }
         let scanner = SyntaxScanner(language: language, snapshot: snapshot)
+        let supportsControlLines =
+            identifier != "python"
+            && !["perl", "rust", "powershell", "json", "json5"].contains(identifier)
         var state = SyntaxState()
         var output: [ByteRange: NewlineIndentationAction] = [:]
         var consumed = 0
+        var previousCondition = false
         for line in 0...lastLine {
             try Self.check(deadline: deadline, permit: permit)
             let row = snapshot.text.lineRange(line)
@@ -93,7 +97,9 @@ public struct StructuralIndentationPlan: Sendable {
             guard state.diagnostic == nil else {
                 throw NateError.message(state.diagnostic ?? "语言缩进缺少完整词法状态。")
             }
-            guard let targets = byLine[line] else {
+            let targets = byLine[line] ?? []
+            guard !targets.isEmpty || supportsControlLines && byLine[line + 1] != nil else {
+                previousCondition = false
                 continue
             }
             var code = Array(source.utf8)
@@ -123,6 +129,20 @@ public struct StructuralIndentationPlan: Sendable {
                     significant.append(index)
                 }
             }
+            let precedingCondition = previousCondition
+            let conditions: ControlIndentationLine?
+            if supportsControlLines {
+                conditions = try ControlIndentationLine(
+                    code: code,
+                    caseInsensitive: identifier == "php",
+                    deadline: deadline,
+                    permit: permit
+                )
+            }
+            else {
+                conditions = nil
+            }
+            previousCondition = !directiveLine && conditions?.contains(significant.last) == true
             for target in targets {
                 try Self.check(deadline: deadline, permit: permit)
                 let offset = target.lower - row.lower
@@ -172,6 +192,15 @@ public struct StructuralIndentationPlan: Sendable {
                         output[target] = following == closer ? .expandPair : .increase
                     }
                     else if following == 125 || array && following == 93 {
+                        output[target] = .decrease
+                    }
+                    else if following == 123 {
+                        output[target] = .inherit
+                    }
+                    else if conditions?.contains(before) == true {
+                        output[target] = .increase
+                    }
+                    else if supportsControlLines && precedingCondition {
                         output[target] = .decrease
                     }
                     else {

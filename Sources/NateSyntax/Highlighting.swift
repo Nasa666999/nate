@@ -359,7 +359,13 @@ public enum SyntaxEngine {
                     emit(start, i, .keyword)
                 }
             }
-            else if bytes[i] == 60 && ["xml", "html", "php", "jsp", "asp"].contains(language.id) {
+            else if bytes[i] == 60 && ["xml", "html", "php", "jsp", "asp"].contains(language.id),
+                ["xml", "html"].contains(language.id)
+                    || i + 1 < bytes.count
+                        && ((65...90).contains(bytes[i + 1]) || (97...122).contains(bytes[i + 1])
+                            || [33, 47, 63].contains(bytes[i + 1]))
+            {
+                // 嵌入脚本中的比较和移位运算不能吞掉同行字符串或注释，只有标签起始外观进入标记分支。
                 i += 1
                 while i < bytes.count && bytes[i] != 62 {
                     i += 1
