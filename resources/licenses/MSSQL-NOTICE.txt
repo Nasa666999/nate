@@ -1,0 +1,14 @@
+T-SQL 词法与折叠适配参考 Lexilla 的 LexMSSQL.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexMSSQL.cxx
+
+By Filip Yaghob <fyaghob@gmail.com>
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留独立名称优先顺序、引用列名、变量、嵌套注释、原字节类别及跨行状态，
+使用固定正文和资源身份、有界后继确认及原生样式属性；不连接数据库或执行 SQL。
+
+名称补全由随包 T-SQL 词表生成，常用函数参数依据 Microsoft 的公开接口补充：
+https://learn.microsoft.com/en-us/sql/t-sql/functions/abs-transact-sql
+https://learn.microsoft.com/en-us/sql/t-sql/functions/isnull-transact-sql
+https://learn.microsoft.com/en-us/sql/t-sql/functions/round-transact-sql
+https://learn.microsoft.com/en-us/sql/t-sql/functions/substring-transact-sql

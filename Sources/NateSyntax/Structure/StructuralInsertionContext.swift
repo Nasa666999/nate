@@ -19,6 +19,17 @@ enum StructuralInsertionContext {
         scanner: SyntaxScanner,
         language: LanguageDefinition
     ) throws -> Bool {
+        if language.id == "mssql" {
+            return try MSSQLLexing.isCode(
+                MSSQLLexing.prefixState(
+                    source: source,
+                    offset: offset,
+                    base: base,
+                    initial: initial,
+                    scanner: scanner
+                )
+            )
+        }
         if ["javascript.js", "typescript"].contains(language.id) {
             return try ScriptLexing.isCode(
                 source: source,

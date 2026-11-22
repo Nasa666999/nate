@@ -23,9 +23,10 @@ public struct FoldIndex: Sendable {
         if let udl {
             return udl.allowFoldOfComments || UDLFoldRules(definition: udl).enabled
         }
-        return ["python", "ini", "props", "diff", "registry", "ihex", "tex", "latex", "yaml", "lua"].contains(
-            language?.id ?? ""
-        )
+        return ["python", "ini", "props", "diff", "registry", "ihex", "tex", "latex", "yaml", "lua", "mssql"]
+            .contains(
+                language?.id ?? ""
+            )
             || !openers(for: language?.id ?? "").isEmpty
     }
 
@@ -50,7 +51,7 @@ public struct FoldIndex: Sendable {
         let deadline = ContinuousClock.now.advanced(
             by: [
                 "python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex", "lisp",
-                "scheme", "rust", "yaml", "powershell", "objc", "r", "lua",
+                "scheme", "rust", "yaml", "powershell", "objc", "r", "lua", "mssql",
             ].contains(
                 language?.id ?? ""
             ) || language?.usesSharedCLexer == true || udl != nil
@@ -65,6 +66,9 @@ public struct FoldIndex: Sendable {
         }
         else if let language, language.id == "r" {
             candidates = try RFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
+        }
+        else if let language, language.id == "mssql" {
+            candidates = try MSSQLFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, language.id == "objc" {
             candidates = try ObjCFolding.regions(snapshot: snapshot, language: language, deadline: deadline)

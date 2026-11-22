@@ -77,6 +77,10 @@
       "sha256" : "416fe3ea910de79521deaac2ed97ef62e5b194ea64e81d60c3c47690daa9a95e"
     },
     {
+      "path" : "completion\/mssql.xml",
+      "sha256" : "f1cebecdad6da0802e344731a9611918f26fe0e8643f6897f5a8a931d5722557"
+    },
+    {
       "path" : "completion\/nsis.xml",
       "sha256" : "b236035bbf44da61f8a64a108e72d380e5e85e9e0ec06401b94fa73adb7bceb3"
     },
@@ -534,7 +538,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "03922edf067c88139519d33ea3780acabda1ee5ed3deeefe28680ec293bcb514"
+      "sha256" : "ed43b8d4387f031ef0a20c749825b1a5c8ac3132885ffb21ca728a27f99d2fe9"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
@@ -547,6 +551,10 @@
     {
       "path" : "licenses\/Lua-NOTICE.txt",
       "sha256" : "b71e5d90703bd731a24d8821c10b4a66b1623243347975e83144cbdbb2770658"
+    },
+    {
+      "path" : "licenses\/MSSQL-NOTICE.txt",
+      "sha256" : "2ba1cb83fbb247e4fcd212b417262ed63c4d840866c0b9500f49c5b55b8ea235"
     },
     {
       "path" : "licenses\/NotepadPlusPlus-GPL.txt",

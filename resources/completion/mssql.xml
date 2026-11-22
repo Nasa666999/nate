@@ -1,0 +1,1708 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NotepadPlus>
+	<AutoComplete language="T-SQL">
+		<Environment ignoreCase="yes" additionalWordChar="@." startFunc="(" stopFunc=")" paramSeparator="," />
+		<KeyWord name="@@connections" />
+		<KeyWord name="@@cpu_busy" />
+		<KeyWord name="@@cursor_rows" />
+		<KeyWord name="@@datefirst" />
+		<KeyWord name="@@dbts" />
+		<KeyWord name="@@error" />
+		<KeyWord name="@@fetch_status" />
+		<KeyWord name="@@identity" />
+		<KeyWord name="@@idle" />
+		<KeyWord name="@@io_busy" />
+		<KeyWord name="@@langid" />
+		<KeyWord name="@@language" />
+		<KeyWord name="@@lock_timeout" />
+		<KeyWord name="@@max_connections" />
+		<KeyWord name="@@max_precision" />
+		<KeyWord name="@@nestlevel" />
+		<KeyWord name="@@options" />
+		<KeyWord name="@@pack_received" />
+		<KeyWord name="@@pack_sent" />
+		<KeyWord name="@@packet_errors" />
+		<KeyWord name="@@procid" />
+		<KeyWord name="@@remserver" />
+		<KeyWord name="@@rowcount" />
+		<KeyWord name="@@servername" />
+		<KeyWord name="@@servicename" />
+		<KeyWord name="@@spid" />
+		<KeyWord name="@@textsize" />
+		<KeyWord name="@@timetickstotal_errors" />
+		<KeyWord name="@@total_read" />
+		<KeyWord name="@@total_write" />
+		<KeyWord name="@@trancount" />
+		<KeyWord name="@@version" />
+		<KeyWord name="abs" func="yes">
+			<Overload retVal="依表达式类型" descr="计算数值绝对值。">
+				<Param name="numeric_expression" />
+			</Overload>
+		</KeyWord>
+		<KeyWord name="acos" func="yes" />
+		<KeyWord name="action" />
+		<KeyWord name="add" />
+		<KeyWord name="all" />
+		<KeyWord name="alter" />
+		<KeyWord name="and" />
+		<KeyWord name="any" />
+		<KeyWord name="app_name" func="yes" />
+		<KeyWord name="approx_count_distinct" func="yes" />
+		<KeyWord name="as" />
+		<KeyWord name="asc" />
+		<KeyWord name="ascii" func="yes" />
+		<KeyWord name="asin" func="yes" />
+		<KeyWord name="atan" func="yes" />
+		<KeyWord name="atn2" func="yes" />
+		<KeyWord name="authorization" />
+		<KeyWord name="avg" func="yes" />
+		<KeyWord name="backup" />
+		<KeyWord name="begin" />
+		<KeyWord name="between" />
+		<KeyWord name="bigint" />
+		<KeyWord name="binary" />
+		<KeyWord name="binary_checksum" func="yes" />
+		<KeyWord name="bit" />
+		<KeyWord name="break" />
+		<KeyWord name="browse" />
+		<KeyWord name="bulk" />
+		<KeyWord name="by" />
+		<KeyWord name="cascade" />
+		<KeyWord name="case" func="yes" />
+		<KeyWord name="cast" func="yes" />
+		<KeyWord name="ceiling" func="yes" />
+		<KeyWord name="char" func="yes" />
+		<KeyWord name="character" />
+		<KeyWord name="charindex" func="yes" />
+		<KeyWord name="check" />
+		<KeyWord name="checkpoint" />
+		<KeyWord name="checksum" func="yes" />
+		<KeyWord name="checksum_agg" func="yes" />
+		<KeyWord name="choose" func="yes" />
+		<KeyWord name="close" />
+		<KeyWord name="clustered" />
+		<KeyWord name="coalesce" func="yes" />
+		<KeyWord name="col_length" func="yes" />
+		<KeyWord name="col_name" func="yes" />
+		<KeyWord name="collate" />
+		<KeyWord name="collationproperty" func="yes" />
+		<KeyWord name="column" />
+		<KeyWord name="columnproperty" func="yes" />
+		<KeyWord name="columns_updated" func="yes" />
+		<KeyWord name="commit" />
+		<KeyWord name="committed" />
+		<KeyWord name="compute" />
+		<KeyWord name="confirm" />
+		<KeyWord name="connections" />
+		<KeyWord name="constraint" />
+		<KeyWord name="contains" />
+		<KeyWord name="containstable" />
+		<KeyWord name="continue" />
+		<KeyWord name="controlrow" />
+		<KeyWord name="convert" func="yes" />
+		<KeyWord name="cos" func="yes" />
+		<KeyWord name="cot" func="yes" />
+		<KeyWord name="count" func="yes" />
+		<KeyWord name="count_big" func="yes" />
+		<KeyWord name="cpu_busy" />
+		<KeyWord name="create" />
+		<KeyWord name="cross" />
+		<KeyWord name="current" />
+		<KeyWord name="current_date" />
+		<KeyWord name="current_time" />
+		<KeyWord name="current_timestamp" func="yes" />
+		<KeyWord name="current_user" func="yes" />
+		<KeyWord name="cursor" />
+		<KeyWord name="cursor_rows" />
+		<KeyWord name="cursor_status" func="yes" />
+		<KeyWord name="database" />
+		<KeyWord name="databaseproperty" func="yes" />
+		<KeyWord name="databasepropertyex" func="yes" />
+		<KeyWord name="datalength" func="yes" />
+		<KeyWord name="dateadd" func="yes" />
+		<KeyWord name="datediff" func="yes" />
+		<KeyWord name="datediff_big" func="yes" />
+		<KeyWord name="datefirst" />
+		<KeyWord name="datefromparts" func="yes" />
+		<KeyWord name="datename" func="yes" />
+		<KeyWord name="datepart" func="yes" />
+		<KeyWord name="datetime" />
+		<KeyWord name="datetime2fromparts" func="yes" />
+		<KeyWord name="datetimefromparts" func="yes" />
+		<KeyWord name="datetimeoffsetfromparts" func="yes" />
+		<KeyWord name="day" func="yes" />
+		<KeyWord name="db_id" func="yes" />
+		<KeyWord name="db_name" func="yes" />
+		<KeyWord name="dbcc" />
+		<KeyWord name="dbts" />
+		<KeyWord name="deallocate" />
+		<KeyWord name="dec" />
+		<KeyWord name="decimal" />
+		<KeyWord name="declare" />
+		<KeyWord name="default" />
+		<KeyWord name="degrees" func="yes" />
+		<KeyWord name="delete" />
+		<KeyWord name="deleted" />
+		<KeyWord name="deny" />
+		<KeyWord name="desc" />
+		<KeyWord name="difference" func="yes" />
+		<KeyWord name="disable" />
+		<KeyWord name="disk" />
+		<KeyWord name="distinct" />
+		<KeyWord name="distributed" />
+		<KeyWord name="double" />
+		<KeyWord name="drop" />
+		<KeyWord name="dummy" />
+		<KeyWord name="dump" />
+		<KeyWord name="else" />
+		<KeyWord name="enable" />
+		<KeyWord name="end" />
+		<KeyWord name="eomonth" func="yes" />
+		<KeyWord name="errlvl" />
+		<KeyWord name="error" />
+		<KeyWord name="errorexit" />
+		<KeyWord name="escape" />
+		<KeyWord name="except" />
+		<KeyWord name="exec" />
+		<KeyWord name="execute" />
+		<KeyWord name="exists" />
+		<KeyWord name="exit" />
+		<KeyWord name="exp" func="yes" />
+		<KeyWord name="fetch" />
+		<KeyWord name="fetch_status" />
+		<KeyWord name="file" />
+		<KeyWord name="file_id" func="yes" />
+		<KeyWord name="file_name" func="yes" />
+		<KeyWord name="filegroup_id" func="yes" />
+		<KeyWord name="filegroup_name" func="yes" />
+		<KeyWord name="filegroupproperty" func="yes" />
+		<KeyWord name="fileproperty" func="yes" />
+		<KeyWord name="fillfactor" />
+		<KeyWord name="float" />
+		<KeyWord name="floor" func="yes" />
+		<KeyWord name="floppy" />
+		<KeyWord name="fn_chariswhitespace" func="yes" />
+		<KeyWord name="fn_dblog" func="yes" />
+		<KeyWord name="fn_escapecmdshellsymbols" func="yes" />
+		<KeyWord name="fn_escapecmdshellsymbolsremovequotes" func="yes" />
+		<KeyWord name="fn_generateparameterpattern" func="yes" />
+		<KeyWord name="fn_get_sql" func="yes" />
+		<KeyWord name="fn_getpersistedservernamecasevariation" func="yes" />
+		<KeyWord name="fn_helpcollations" func="yes" />
+		<KeyWord name="fn_isreplmergeagent" func="yes" />
+		<KeyWord name="fn_listextendedproperty" func="yes" />
+		<KeyWord name="fn_msfulltext" func="yes" />
+		<KeyWord name="fn_msgensqescstr" func="yes" />
+		<KeyWord name="fn_mssharedversion" func="yes" />
+		<KeyWord name="fn_removeparameterwithargument" func="yes" />
+		<KeyWord name="fn_repladjustcolumnmap" func="yes" />
+		<KeyWord name="fn_replbitstringtoint" func="yes" />
+		<KeyWord name="fn_replcomposepublicationsnapshotfolder" func="yes" />
+		<KeyWord name="fn_replgenerateshorterfilenameprefix" func="yes" />
+		<KeyWord name="fn_replgetagentcommandlinefromjobid" func="yes" />
+		<KeyWord name="fn_replgetbinary8lodword" func="yes" />
+		<KeyWord name="fn_replinttobitstring" func="yes" />
+		<KeyWord name="fn_replmakestringliteral" func="yes" />
+		<KeyWord name="fn_replprepadbinary8" func="yes" />
+		<KeyWord name="fn_replquotename" func="yes" />
+		<KeyWord name="fn_replrotr" func="yes" />
+		<KeyWord name="fn_repltrimleadingzerosinhexstr" func="yes" />
+		<KeyWord name="fn_repluniquename" func="yes" />
+		<KeyWord name="fn_serverid" func="yes" />
+		<KeyWord name="fn_servershareddrives" func="yes" />
+		<KeyWord name="fn_skipparameterargument" func="yes" />
+		<KeyWord name="fn_sqlvarbasetostr" func="yes" />
+		<KeyWord name="fn_trace_geteventinfo" func="yes" />
+		<KeyWord name="fn_trace_getfilterinfo" func="yes" />
+		<KeyWord name="fn_trace_getinfo" func="yes" />
+		<KeyWord name="fn_trace_gettable" func="yes" />
+		<KeyWord name="fn_updateparameterwithargument" func="yes" />
+		<KeyWord name="fn_varbintohexstr" func="yes" />
+		<KeyWord name="fn_varbintohexsubstring" func="yes" />
+		<KeyWord name="fn_virtualfilestats" func="yes" />
+		<KeyWord name="fn_virtualservernodes" func="yes" />
+		<KeyWord name="for" />
+		<KeyWord name="foreign" />
+		<KeyWord name="formatmessage" func="yes" />
+		<KeyWord name="forward_only" />
+		<KeyWord name="freetext" />
+		<KeyWord name="freetexttable" />
+		<KeyWord name="from" />
+		<KeyWord name="full" />
+		<KeyWord name="fulltextcatalogproperty" func="yes" />
+		<KeyWord name="fulltextserviceproperty" func="yes" />
+		<KeyWord name="function" />
+		<KeyWord name="getansinull" func="yes" />
+		<KeyWord name="getdate" func="yes" />
+		<KeyWord name="getutcdate" func="yes" />
+		<KeyWord name="go" />
+		<KeyWord name="goto" />
+		<KeyWord name="grant" />
+		<KeyWord name="group" />
+		<KeyWord name="grouping" func="yes" />
+		<KeyWord name="has_dbaccess" func="yes" />
+		<KeyWord name="having" />
+		<KeyWord name="holdlock" />
+		<KeyWord name="host_id" func="yes" />
+		<KeyWord name="host_name" func="yes" />
+		<KeyWord name="ident_current" func="yes" />
+		<KeyWord name="ident_incr" func="yes" />
+		<KeyWord name="ident_seed" func="yes" />
+		<KeyWord name="identity" />
+		<KeyWord name="identity_insert" />
+		<KeyWord name="identitycol" />
+		<KeyWord name="idle" />
+		<KeyWord name="if" />
+		<KeyWord name="iif" func="yes" />
+		<KeyWord name="image" />
+		<KeyWord name="in" />
+		<KeyWord name="index" />
+		<KeyWord name="index_col" func="yes" />
+		<KeyWord name="indexkey_property" func="yes" />
+		<KeyWord name="indexproperty" func="yes" />
+		<KeyWord name="inner" />
+		<KeyWord name="insert" />
+		<KeyWord name="inserted" />
+		<KeyWord name="instead" />
+		<KeyWord name="int" />
+		<KeyWord name="integer" />
+		<KeyWord name="intersect" />
+		<KeyWord name="into" />
+		<KeyWord name="io_busy" />
+		<KeyWord name="is" />
+		<KeyWord name="is_member" func="yes" />
+		<KeyWord name="is_srvrolemember" func="yes" />
+		<KeyWord name="isdate" func="yes" />
+		<KeyWord name="isnull" func="yes">
+			<Overload retVal="依表达式类型" descr="表达式为空值时采用替代值。">
+				<Param name="check_expression" />
+				<Param name="replacement_value" />
+			</Overload>
+		</KeyWord>
+		<KeyWord name="isnumeric" func="yes" />
+		<KeyWord name="isolation" />
+		<KeyWord name="join" />
+		<KeyWord name="key" />
+		<KeyWord name="kill" />
+		<KeyWord name="langid" />
+		<KeyWord name="language" />
+		<KeyWord name="left" func="yes" />
+		<KeyWord name="len" func="yes" />
+		<KeyWord name="level" />
+		<KeyWord name="like" />
+		<KeyWord name="lineno" />
+		<KeyWord name="load" />
+		<KeyWord name="lock_timeout" />
+		<KeyWord name="log" func="yes" />
+		<KeyWord name="log10" func="yes" />
+		<KeyWord name="lower" func="yes" />
+		<KeyWord name="ltrim" func="yes" />
+		<KeyWord name="max" func="yes" />
+		<KeyWord name="max_connections" />
+		<KeyWord name="max_precision" />
+		<KeyWord name="min" func="yes" />
+		<KeyWord name="mirrorexit" />
+		<KeyWord name="money" />
+		<KeyWord name="month" func="yes" />
+		<KeyWord name="move" />
+		<KeyWord name="ms_sqlctrs_users" func="yes" />
+		<KeyWord name="national" />
+		<KeyWord name="nchar" func="yes" />
+		<KeyWord name="nestlevel" />
+		<KeyWord name="newid" func="yes" />
+		<KeyWord name="no" />
+		<KeyWord name="nocheck" />
+		<KeyWord name="nocount" />
+		<KeyWord name="nonclustered" />
+		<KeyWord name="norecovery" />
+		<KeyWord name="not" />
+		<KeyWord name="nounload" />
+		<KeyWord name="ntext" />
+		<KeyWord name="null" />
+		<KeyWord name="nullif" func="yes" />
+		<KeyWord name="numeric" />
+		<KeyWord name="nvarchar" />
+		<KeyWord name="object_id" func="yes" />
+		<KeyWord name="object_name" func="yes" />
+		<KeyWord name="objectproperty" func="yes" />
+		<KeyWord name="of" />
+		<KeyWord name="off" />
+		<KeyWord name="offsets" />
+		<KeyWord name="on" />
+		<KeyWord name="once" />
+		<KeyWord name="only" />
+		<KeyWord name="open" />
+		<KeyWord name="opendatasource" />
+		<KeyWord name="openjson" func="yes" />
+		<KeyWord name="openquery" />
+		<KeyWord name="openrowset" />
+		<KeyWord name="option" />
+		<KeyWord name="options" />
+		<KeyWord name="or" />
+		<KeyWord name="order" />
+		<KeyWord name="outer" />
+		<KeyWord name="output" />
+		<KeyWord name="over" />
+		<KeyWord name="pack_received" />
+		<KeyWord name="pack_sent" />
+		<KeyWord name="packet_errors" />
+		<KeyWord name="parse" func="yes" />
+		<KeyWord name="parsename" func="yes" />
+		<KeyWord name="patindex" func="yes" />
+		<KeyWord name="percent" />
+		<KeyWord name="perm" />
+		<KeyWord name="permanent" />
+		<KeyWord name="permissions" func="yes" />
+		<KeyWord name="pi" func="yes" />
+		<KeyWord name="pipe" />
+		<KeyWord name="plan" />
+		<KeyWord name="power" func="yes" />
+		<KeyWord name="precision" />
+		<KeyWord name="prepare" />
+		<KeyWord name="primary" />
+		<KeyWord name="print" />
+		<KeyWord name="privileges" />
+		<KeyWord name="proc" />
+		<KeyWord name="procedure" />
+		<KeyWord name="processexit" />
+		<KeyWord name="procid" />
+		<KeyWord name="public" />
+		<KeyWord name="quotename" func="yes" />
+		<KeyWord name="radians" func="yes" />
+		<KeyWord name="raiserror" />
+		<KeyWord name="rand" func="yes" />
+		<KeyWord name="read" />
+		<KeyWord name="read_only" />
+		<KeyWord name="readtext" />
+		<KeyWord name="real" />
+		<KeyWord name="reconfigure" />
+		<KeyWord name="recovery" />
+		<KeyWord name="references" />
+		<KeyWord name="remserver" />
+		<KeyWord name="repeatable" />
+		<KeyWord name="replace" func="yes" />
+		<KeyWord name="replicate" func="yes" />
+		<KeyWord name="replication" />
+		<KeyWord name="restore" />
+		<KeyWord name="restrict" />
+		<KeyWord name="return" />
+		<KeyWord name="returns" />
+		<KeyWord name="reverse" func="yes" />
+		<KeyWord name="revoke" />
+		<KeyWord name="right" func="yes" />
+		<KeyWord name="rollback" />
+		<KeyWord name="round" func="yes">
+			<Overload retVal="依表达式类型" descr="按指定位置舍入；function 为非零时改为截断。">
+				<Param name="numeric_expression" />
+				<Param name="length" />
+				<Param name="function?: integer" />
+			</Overload>
+		</KeyWord>
+		<KeyWord name="rowcount" />
+		<KeyWord name="rowcount_big" func="yes" />
+		<KeyWord name="rowguidcol" />
+		<KeyWord name="rtrim" func="yes" />
+		<KeyWord name="rule" />
+		<KeyWord name="save" />
+		<KeyWord name="schema" />
+		<KeyWord name="scope_identity" func="yes" />
+		<KeyWord name="select" />
+		<KeyWord name="serializable" />
+		<KeyWord name="servername" />
+		<KeyWord name="serverproperty" func="yes" />
+		<KeyWord name="servicename" />
+		<KeyWord name="session_user" func="yes" />
+		<KeyWord name="sessionproperty" func="yes" />
+		<KeyWord name="set" />
+		<KeyWord name="setuser" />
+		<KeyWord name="shutdown" />
+		<KeyWord name="sign" func="yes" />
+		<KeyWord name="sin" func="yes" />
+		<KeyWord name="smalldatetime" />
+		<KeyWord name="smalldatetimefromparts" func="yes" />
+		<KeyWord name="smallint" />
+		<KeyWord name="smallmoney" />
+		<KeyWord name="some" />
+		<KeyWord name="soundex" func="yes" />
+		<KeyWord name="sp_activedirectory_obj" func="yes" />
+		<KeyWord name="sp_activedirectory_scp" func="yes" />
+		<KeyWord name="sp_activedirectory_start" func="yes" />
+		<KeyWord name="sp_add_agent_parameter" func="yes" />
+		<KeyWord name="sp_add_agent_profile" func="yes" />
+		<KeyWord name="sp_add_data_file_recover_suspect_db" func="yes" />
+		<KeyWord name="sp_add_datatype_mapping" func="yes" />
+		<KeyWord name="sp_add_file_recover_suspect_db" func="yes" />
+		<KeyWord name="sp_add_log_file_recover_suspect_db" func="yes" />
+		<KeyWord name="sp_add_server_sortinfo" func="yes" />
+		<KeyWord name="sp_add_server_sortinfo75" func="yes" />
+		<KeyWord name="sp_addalias" func="yes" />
+		<KeyWord name="sp_addapprole" func="yes" />
+		<KeyWord name="sp_addarticle" func="yes" />
+		<KeyWord name="sp_adddistpublisher" func="yes" />
+		<KeyWord name="sp_adddistributiondb" func="yes" />
+		<KeyWord name="sp_adddistributor" func="yes" />
+		<KeyWord name="sp_addextendedproc" func="yes" />
+		<KeyWord name="sp_addextendedproperty" func="yes" />
+		<KeyWord name="sp_addgroup" func="yes" />
+		<KeyWord name="sp_addlinkedserver" func="yes" />
+		<KeyWord name="sp_addlinkedsrvlogin" func="yes" />
+		<KeyWord name="sp_addlogin" func="yes" />
+		<KeyWord name="sp_addmergealternatepublisher" func="yes" />
+		<KeyWord name="sp_addmergearticle" func="yes" />
+		<KeyWord name="sp_addmergefilter" func="yes" />
+		<KeyWord name="sp_addmergepublication" func="yes" />
+		<KeyWord name="sp_addmergepullsubscription" func="yes" />
+		<KeyWord name="sp_addmergepullsubscription_agent" func="yes" />
+		<KeyWord name="sp_addmergesubscription" func="yes" />
+		<KeyWord name="sp_addmessage" func="yes" />
+		<KeyWord name="sp_addpublication" func="yes" />
+		<KeyWord name="sp_addpublication_snapshot" func="yes" />
+		<KeyWord name="sp_addpublisher" func="yes" />
+		<KeyWord name="sp_addpullsubscription" func="yes" />
+		<KeyWord name="sp_addpullsubscription_agent" func="yes" />
+		<KeyWord name="sp_addqueued_artinfo" func="yes" />
+		<KeyWord name="sp_addremotelogin" func="yes" />
+		<KeyWord name="sp_addrole" func="yes" />
+		<KeyWord name="sp_addrolemember" func="yes" />
+		<KeyWord name="sp_addscriptexec" func="yes" />
+		<KeyWord name="sp_addserver" func="yes" />
+		<KeyWord name="sp_addsrvrolemember" func="yes" />
+		<KeyWord name="sp_addsubscriber" func="yes" />
+		<KeyWord name="sp_addsubscriber_schedule" func="yes" />
+		<KeyWord name="sp_addsubscription" func="yes" />
+		<KeyWord name="sp_addsynctriggers" func="yes" />
+		<KeyWord name="sp_addtabletocontents" func="yes" />
+		<KeyWord name="sp_addtype" func="yes" />
+		<KeyWord name="sp_addumpdevice" func="yes" />
+		<KeyWord name="sp_adduser" func="yes" />
+		<KeyWord name="sp_adjustpublisheridentityrange" func="yes" />
+		<KeyWord name="sp_altermessage" func="yes" />
+		<KeyWord name="sp_approlepassword" func="yes" />
+		<KeyWord name="sp_article_validation" func="yes" />
+		<KeyWord name="sp_articlecolumn" func="yes" />
+		<KeyWord name="sp_articlefilter" func="yes" />
+		<KeyWord name="sp_articlesynctranprocs" func="yes" />
+		<KeyWord name="sp_articleview" func="yes" />
+		<KeyWord name="sp_attach_db" func="yes" />
+		<KeyWord name="sp_attach_single_file_db" func="yes" />
+		<KeyWord name="sp_attachsubscription" func="yes" />
+		<KeyWord name="sp_autostats" func="yes" />
+		<KeyWord name="sp_bcp_dbcmptlevel" func="yes" />
+		<KeyWord name="sp_bindefault" func="yes" />
+		<KeyWord name="sp_bindrule" func="yes" />
+		<KeyWord name="sp_bindsession" func="yes" />
+		<KeyWord name="sp_blockcnt" func="yes" />
+		<KeyWord name="sp_browsemergesnapshotfolder" func="yes" />
+		<KeyWord name="sp_browsesnapshotfolder" func="yes" />
+		<KeyWord name="sp_catalogs" func="yes" />
+		<KeyWord name="sp_catalogs_rowset" func="yes" />
+		<KeyWord name="sp_certify_removable" func="yes" />
+		<KeyWord name="sp_change_agent_parameter" func="yes" />
+		<KeyWord name="sp_change_agent_profile" func="yes" />
+		<KeyWord name="sp_change_subscription_properties" func="yes" />
+		<KeyWord name="sp_change_users_login" func="yes" />
+		<KeyWord name="sp_changearticle" func="yes" />
+		<KeyWord name="sp_changedbowner" func="yes" />
+		<KeyWord name="sp_changedistpublisher" func="yes" />
+		<KeyWord name="sp_changedistributiondb" func="yes" />
+		<KeyWord name="sp_changedistributor_password" func="yes" />
+		<KeyWord name="sp_changedistributor_property" func="yes" />
+		<KeyWord name="sp_changegroup" func="yes" />
+		<KeyWord name="sp_changemergearticle" func="yes" />
+		<KeyWord name="sp_changemergefilter" func="yes" />
+		<KeyWord name="sp_changemergepublication" func="yes" />
+		<KeyWord name="sp_changemergepullsubscription" func="yes" />
+		<KeyWord name="sp_changemergesubscription" func="yes" />
+		<KeyWord name="sp_changeobjectowner" func="yes" />
+		<KeyWord name="sp_changepublication" func="yes" />
+		<KeyWord name="sp_changesubscriber" func="yes" />
+		<KeyWord name="sp_changesubscriber_schedule" func="yes" />
+		<KeyWord name="sp_changesubscription" func="yes" />
+		<KeyWord name="sp_changesubscriptiondtsinfo" func="yes" />
+		<KeyWord name="sp_changesubstatus" func="yes" />
+		<KeyWord name="sp_check_constbytable_rowset" func="yes" />
+		<KeyWord name="sp_check_constraints_rowset" func="yes" />
+		<KeyWord name="sp_check_for_sync_trigger" func="yes" />
+		<KeyWord name="sp_check_publication_access" func="yes" />
+		<KeyWord name="sp_check_removable" func="yes" />
+		<KeyWord name="sp_check_removable_sysusers" func="yes" />
+		<KeyWord name="sp_check_sync_trigger" func="yes" />
+		<KeyWord name="sp_checknames" func="yes" />
+		<KeyWord name="sp_cleanupdbreplication" func="yes" />
+		<KeyWord name="sp_cleanupwebtask" func="yes" />
+		<KeyWord name="sp_column_privileges" func="yes" />
+		<KeyWord name="sp_column_privileges_ex" func="yes" />
+		<KeyWord name="sp_column_privileges_rowset" func="yes" />
+		<KeyWord name="sp_columns" func="yes" />
+		<KeyWord name="sp_columns_ex" func="yes" />
+		<KeyWord name="sp_columns_rowset" func="yes" />
+		<KeyWord name="sp_configure" func="yes" />
+		<KeyWord name="sp_convertwebtasks" func="yes" />
+		<KeyWord name="sp_copymergesnapshot" func="yes" />
+		<KeyWord name="sp_copysnapshot" func="yes" />
+		<KeyWord name="sp_copysubscription" func="yes" />
+		<KeyWord name="sp_create_removable" func="yes" />
+		<KeyWord name="sp_createmergepalrole" func="yes" />
+		<KeyWord name="sp_createorphan" func="yes" />
+		<KeyWord name="sp_createstats" func="yes" />
+		<KeyWord name="sp_cursor" func="yes" />
+		<KeyWord name="sp_cursor_list" func="yes" />
+		<KeyWord name="sp_cursorclose" func="yes" />
+		<KeyWord name="sp_cursorexecute" func="yes" />
+		<KeyWord name="sp_cursorfetch" func="yes" />
+		<KeyWord name="sp_cursoropen" func="yes" />
+		<KeyWord name="sp_cursoroption" func="yes" />
+		<KeyWord name="sp_cursorprepare" func="yes" />
+		<KeyWord name="sp_cursorprepexec" func="yes" />
+		<KeyWord name="sp_cursorunprepare" func="yes" />
+		<KeyWord name="sp_cycle_errorlog" func="yes" />
+		<KeyWord name="sp_databases" func="yes" />
+		<KeyWord name="sp_datatype_info" func="yes" />
+		<KeyWord name="sp_db_upgrade" func="yes" />
+		<KeyWord name="sp_dbcmptlevel" func="yes" />
+		<KeyWord name="sp_dbfixedrolepermission" func="yes" />
+		<KeyWord name="sp_dboption" func="yes" />
+		<KeyWord name="sp_dbremove" func="yes" />
+		<KeyWord name="sp_ddopen" func="yes" />
+		<KeyWord name="sp_defaultdb" func="yes" />
+		<KeyWord name="sp_defaultlanguage" func="yes" />
+		<KeyWord name="sp_deletemergeconflictrow" func="yes" />
+		<KeyWord name="sp_denylogin" func="yes" />
+		<KeyWord name="sp_depends" func="yes" />
+		<KeyWord name="sp_describe_cursor" func="yes" />
+		<KeyWord name="sp_describe_cursor_columns" func="yes" />
+		<KeyWord name="sp_describe_cursor_tables" func="yes" />
+		<KeyWord name="sp_detach_db" func="yes" />
+		<KeyWord name="sp_disableagentoffload" func="yes" />
+		<KeyWord name="sp_diskdefault" func="yes" />
+		<KeyWord name="sp_distcounters" func="yes" />
+		<KeyWord name="sp_drop_agent_parameter" func="yes" />
+		<KeyWord name="sp_drop_agent_profile" func="yes" />
+		<KeyWord name="sp_dropalias" func="yes" />
+		<KeyWord name="sp_dropanonymousagent" func="yes" />
+		<KeyWord name="sp_dropapprole" func="yes" />
+		<KeyWord name="sp_droparticle" func="yes" />
+		<KeyWord name="sp_dropdevice" func="yes" />
+		<KeyWord name="sp_dropdistpublisher" func="yes" />
+		<KeyWord name="sp_dropdistributiondb" func="yes" />
+		<KeyWord name="sp_dropdistributor" func="yes" />
+		<KeyWord name="sp_dropextendedproc" func="yes" />
+		<KeyWord name="sp_dropextendedproperty" func="yes" />
+		<KeyWord name="sp_dropgroup" func="yes" />
+		<KeyWord name="sp_droplinkedsrvlogin" func="yes" />
+		<KeyWord name="sp_droplogin" func="yes" />
+		<KeyWord name="sp_dropmergealternatepublisher" func="yes" />
+		<KeyWord name="sp_dropmergearticle" func="yes" />
+		<KeyWord name="sp_dropmergefilter" func="yes" />
+		<KeyWord name="sp_dropmergepublication" func="yes" />
+		<KeyWord name="sp_dropmergepullsubscription" func="yes" />
+		<KeyWord name="sp_dropmergesubscription" func="yes" />
+		<KeyWord name="sp_dropmessage" func="yes" />
+		<KeyWord name="sp_droporphans" func="yes" />
+		<KeyWord name="sp_droppublication" func="yes" />
+		<KeyWord name="sp_droppublisher" func="yes" />
+		<KeyWord name="sp_droppullsubscription" func="yes" />
+		<KeyWord name="sp_dropremotelogin" func="yes" />
+		<KeyWord name="sp_droprole" func="yes" />
+		<KeyWord name="sp_droprolemember" func="yes" />
+		<KeyWord name="sp_dropserver" func="yes" />
+		<KeyWord name="sp_dropsrvrolemember" func="yes" />
+		<KeyWord name="sp_dropsubscriber" func="yes" />
+		<KeyWord name="sp_dropsubscription" func="yes" />
+		<KeyWord name="sp_droptype" func="yes" />
+		<KeyWord name="sp_dropuser" func="yes" />
+		<KeyWord name="sp_dropwebtask" func="yes" />
+		<KeyWord name="sp_dsninfo" func="yes" />
+		<KeyWord name="sp_enableagentoffload" func="yes" />
+		<KeyWord name="sp_enum_oledb_providers" func="yes" />
+		<KeyWord name="sp_enumcodepages" func="yes" />
+		<KeyWord name="sp_enumcustomresolvers" func="yes" />
+		<KeyWord name="sp_enumdsn" func="yes" />
+		<KeyWord name="sp_enumerrorlogs" func="yes" />
+		<KeyWord name="sp_enumfullsubscribers" func="yes" />
+		<KeyWord name="sp_enumoledbdatasources" func="yes" />
+		<KeyWord name="sp_eventlog" func="yes" />
+		<KeyWord name="sp_execresultset" func="yes" />
+		<KeyWord name="sp_execute" func="yes" />
+		<KeyWord name="sp_executesql" func="yes" />
+		<KeyWord name="sp_expired_subscription_cleanup" func="yes" />
+		<KeyWord name="sp_fallback_ms_sel_fb_svr" func="yes" />
+		<KeyWord name="sp_fetchshowcmdsinput" func="yes" />
+		<KeyWord name="sp_fixindex" func="yes" />
+		<KeyWord name="sp_fkeys" func="yes" />
+		<KeyWord name="sp_foreign_keys_rowset" func="yes" />
+		<KeyWord name="sp_foreignkeys" func="yes" />
+		<KeyWord name="sp_fulltext_catalog" func="yes" />
+		<KeyWord name="sp_fulltext_column" func="yes" />
+		<KeyWord name="sp_fulltext_database" func="yes" />
+		<KeyWord name="sp_fulltext_getdata" func="yes" />
+		<KeyWord name="sp_fulltext_service" func="yes" />
+		<KeyWord name="sp_fulltext_table" func="yes" />
+		<KeyWord name="sp_generate_agent_parameter" func="yes" />
+		<KeyWord name="sp_generatefilters" func="yes" />
+		<KeyWord name="sp_get_distributor" func="yes" />
+		<KeyWord name="sp_getagentoffloadinfo" func="yes" />
+		<KeyWord name="sp_getapplock" func="yes" />
+		<KeyWord name="sp_getarticlepkcolbitmap" func="yes" />
+		<KeyWord name="sp_getbindtoken" func="yes" />
+		<KeyWord name="sp_getmbcscharlen" func="yes" />
+		<KeyWord name="sp_getmergedeletetype" func="yes" />
+		<KeyWord name="sp_getqueuedarticlesynctraninfo" func="yes" />
+		<KeyWord name="sp_getqueuedrows" func="yes" />
+		<KeyWord name="sp_getschemalock" func="yes" />
+		<KeyWord name="sp_getsqlqueueversion" func="yes" />
+		<KeyWord name="sp_getsubscriptiondtspackagename" func="yes" />
+		<KeyWord name="sp_gettypestring" func="yes" />
+		<KeyWord name="sp_grant_publication_access" func="yes" />
+		<KeyWord name="sp_grantdbaccess" func="yes" />
+		<KeyWord name="sp_grantlogin" func="yes" />
+		<KeyWord name="sp_help" func="yes" />
+		<KeyWord name="sp_help_agent_default" func="yes" />
+		<KeyWord name="sp_help_agent_parameter" func="yes" />
+		<KeyWord name="sp_help_agent_profile" func="yes" />
+		<KeyWord name="sp_help_datatype_mapping" func="yes" />
+		<KeyWord name="sp_help_fulltext_catalogs" func="yes" />
+		<KeyWord name="sp_help_fulltext_catalogs_cursor" func="yes" />
+		<KeyWord name="sp_help_fulltext_columns" func="yes" />
+		<KeyWord name="sp_help_fulltext_columns_cursor" func="yes" />
+		<KeyWord name="sp_help_fulltext_tables" func="yes" />
+		<KeyWord name="sp_help_fulltext_tables_cursor" func="yes" />
+		<KeyWord name="sp_help_publication_access" func="yes" />
+		<KeyWord name="sp_help_revlogin" func="yes" />
+		<KeyWord name="sp_helpallowmerge_publication" func="yes" />
+		<KeyWord name="sp_helparticle" func="yes" />
+		<KeyWord name="sp_helparticlecolumns" func="yes" />
+		<KeyWord name="sp_helparticledts" func="yes" />
+		<KeyWord name="sp_helpconstraint" func="yes" />
+		<KeyWord name="sp_helpdb" func="yes" />
+		<KeyWord name="sp_helpdbfixedrole" func="yes" />
+		<KeyWord name="sp_helpdevice" func="yes" />
+		<KeyWord name="sp_helpdistpublisher" func="yes" />
+		<KeyWord name="sp_helpdistributiondb" func="yes" />
+		<KeyWord name="sp_helpdistributor" func="yes" />
+		<KeyWord name="sp_helpdistributor_properties" func="yes" />
+		<KeyWord name="sp_helpextendedproc" func="yes" />
+		<KeyWord name="sp_helpfile" func="yes" />
+		<KeyWord name="sp_helpfilegroup" func="yes" />
+		<KeyWord name="sp_helpgroup" func="yes" />
+		<KeyWord name="sp_helpindex" func="yes" />
+		<KeyWord name="sp_helplanguage" func="yes" />
+		<KeyWord name="sp_helplinkedsrvlogin" func="yes" />
+		<KeyWord name="sp_helplog" func="yes" />
+		<KeyWord name="sp_helplogins" func="yes" />
+		<KeyWord name="sp_helpmergealternatepublisher" func="yes" />
+		<KeyWord name="sp_helpmergearticle" func="yes" />
+		<KeyWord name="sp_helpmergearticlecolumn" func="yes" />
+		<KeyWord name="sp_helpmergearticleconflicts" func="yes" />
+		<KeyWord name="sp_helpmergecleanupwait" func="yes" />
+		<KeyWord name="sp_helpmergeconflictrows" func="yes" />
+		<KeyWord name="sp_helpmergedeleteconflictrows" func="yes" />
+		<KeyWord name="sp_helpmergefilter" func="yes" />
+		<KeyWord name="sp_helpmergepublication" func="yes" />
+		<KeyWord name="sp_helpmergepullsubscription" func="yes" />
+		<KeyWord name="sp_helpmergesubscription" func="yes" />
+		<KeyWord name="sp_helpntgroup" func="yes" />
+		<KeyWord name="sp_helppublication" func="yes" />
+		<KeyWord name="sp_helppublicationsync" func="yes" />
+		<KeyWord name="sp_helppullsubscription" func="yes" />
+		<KeyWord name="sp_helpremotelogin" func="yes" />
+		<KeyWord name="sp_helpreplfailovermode" func="yes" />
+		<KeyWord name="sp_helpreplicationdb" func="yes" />
+		<KeyWord name="sp_helpreplicationdboption" func="yes" />
+		<KeyWord name="sp_helpreplicationoption" func="yes" />
+		<KeyWord name="sp_helprole" func="yes" />
+		<KeyWord name="sp_helprolemember" func="yes" />
+		<KeyWord name="sp_helprotect" func="yes" />
+		<KeyWord name="sp_helpserver" func="yes" />
+		<KeyWord name="sp_helpsort" func="yes" />
+		<KeyWord name="sp_helpsql" func="yes" />
+		<KeyWord name="sp_helpsrvrole" func="yes" />
+		<KeyWord name="sp_helpsrvrolemember" func="yes" />
+		<KeyWord name="sp_helpstats" func="yes" />
+		<KeyWord name="sp_helpsubscriberinfo" func="yes" />
+		<KeyWord name="sp_helpsubscription" func="yes" />
+		<KeyWord name="sp_helpsubscription_properties" func="yes" />
+		<KeyWord name="sp_helptext" func="yes" />
+		<KeyWord name="sp_helptrigger" func="yes" />
+		<KeyWord name="sp_helpuser" func="yes" />
+		<KeyWord name="sp_hexadecimal" func="yes" />
+		<KeyWord name="sp_indexes" func="yes" />
+		<KeyWord name="sp_indexes_rowset" func="yes" />
+		<KeyWord name="sp_indexoption" func="yes" />
+		<KeyWord name="sp_invalidate_textptr" func="yes" />
+		<KeyWord name="sp_isarticlecolbitset" func="yes" />
+		<KeyWord name="sp_ismbcsleadbyte" func="yes" />
+		<KeyWord name="sp_ivindexhasnullcols" func="yes" />
+		<KeyWord name="sp_link_publication" func="yes" />
+		<KeyWord name="sp_linkedservers" func="yes" />
+		<KeyWord name="sp_linkedservers_rowset" func="yes" />
+		<KeyWord name="sp_lock" func="yes" />
+		<KeyWord name="sp_logdevice" func="yes" />
+		<KeyWord name="sp_makewebtask" func="yes" />
+		<KeyWord name="sp_marksubscriptionvalidation" func="yes" />
+		<KeyWord name="sp_mergearticlecolumn" func="yes" />
+		<KeyWord name="sp_mergecleanupmetadata" func="yes" />
+		<KeyWord name="sp_mergecompletecleanup" func="yes" />
+		<KeyWord name="sp_mergedummyupdate" func="yes" />
+		<KeyWord name="sp_mergemetadataretentioncleanup" func="yes" />
+		<KeyWord name="sp_mergepreparecleanup" func="yes" />
+		<KeyWord name="sp_mergesubscription_cleanup" func="yes" />
+		<KeyWord name="sp_monitor" func="yes" />
+		<KeyWord name="sp_ms_marksystemobject" func="yes" />
+		<KeyWord name="sp_ms_replication_installed" func="yes" />
+		<KeyWord name="sp_ms_upd_sysobj_category" func="yes" />
+		<KeyWord name="sp_msacquireheadofqueuelock" func="yes" />
+		<KeyWord name="sp_msacquireserverresourcefordynamicsnapshot" func="yes" />
+		<KeyWord name="sp_msacquireslotlock" func="yes" />
+		<KeyWord name="sp_msactivate_auto_sub" func="yes" />
+		<KeyWord name="sp_msadd_compensating_cmd" func="yes" />
+		<KeyWord name="sp_msadd_distributor_alerts_and_responses" func="yes" />
+		<KeyWord name="sp_msadd_mergereplcommand" func="yes" />
+		<KeyWord name="sp_msadd_repl_job" func="yes" />
+		<KeyWord name="sp_msaddanonymousreplica" func="yes" />
+		<KeyWord name="sp_msaddexecarticle" func="yes" />
+		<KeyWord name="sp_msaddguidcolumn" func="yes" />
+		<KeyWord name="sp_msaddguidindex" func="yes" />
+		<KeyWord name="sp_msaddinitialarticle" func="yes" />
+		<KeyWord name="sp_msaddinitialpublication" func="yes" />
+		<KeyWord name="sp_msaddinitialschemaarticle" func="yes" />
+		<KeyWord name="sp_msaddinitialsubscription" func="yes" />
+		<KeyWord name="sp_msaddlogin_implicit_ntlogin" func="yes" />
+		<KeyWord name="sp_msaddmergedynamicsnapshotjob" func="yes" />
+		<KeyWord name="sp_msaddmergepub_snapshot" func="yes" />
+		<KeyWord name="sp_msaddmergeschemaarticle" func="yes" />
+		<KeyWord name="sp_msaddmergetriggers" func="yes" />
+		<KeyWord name="sp_msaddoffloadparameter" func="yes" />
+		<KeyWord name="sp_msaddpub_snapshot" func="yes" />
+		<KeyWord name="sp_msaddpubtocontents" func="yes" />
+		<KeyWord name="sp_msaddschemaarticle" func="yes" />
+		<KeyWord name="sp_msaddupdatetrigger" func="yes" />
+		<KeyWord name="sp_msadduser_implicit_ntlogin" func="yes" />
+		<KeyWord name="sp_msadjustmergeidentity" func="yes" />
+		<KeyWord name="sp_msagent_access_check" func="yes" />
+		<KeyWord name="sp_msalreadyhavegeneration" func="yes" />
+		<KeyWord name="sp_msareallcolumnscomputed" func="yes" />
+		<KeyWord name="sp_msarticlecleanup" func="yes" />
+		<KeyWord name="sp_msarticlecol" func="yes" />
+		<KeyWord name="sp_msarticlecolstatus" func="yes" />
+		<KeyWord name="sp_msbelongs" func="yes" />
+		<KeyWord name="sp_msbumpupcomplevel" func="yes" />
+		<KeyWord name="sp_mschange_priority" func="yes" />
+		<KeyWord name="sp_mschange_retention" func="yes" />
+		<KeyWord name="sp_mschangearticleresolver" func="yes" />
+		<KeyWord name="sp_mschangemergeschemaarticle" func="yes" />
+		<KeyWord name="sp_mschangeobjectowner" func="yes" />
+		<KeyWord name="sp_mschangeschemaarticle" func="yes" />
+		<KeyWord name="sp_mscheck_agent_instance" func="yes" />
+		<KeyWord name="sp_mscheck_subscription" func="yes" />
+		<KeyWord name="sp_mscheck_uid_owns_anything" func="yes" />
+		<KeyWord name="sp_mscheckatpublisher" func="yes" />
+		<KeyWord name="sp_mscheckexistsgeneration" func="yes" />
+		<KeyWord name="sp_mscheckidentityrange" func="yes" />
+		<KeyWord name="sp_mscheckmergereplication" func="yes" />
+		<KeyWord name="sp_mscheckmetadatamatch" func="yes" />
+		<KeyWord name="sp_mschecksnapshotstatus" func="yes" />
+		<KeyWord name="sp_mscheckvalidsystables" func="yes" />
+		<KeyWord name="sp_mschunkgeneration" func="yes" />
+		<KeyWord name="sp_mscleanup_conflict" func="yes" />
+		<KeyWord name="sp_mscleanup_conflict_table" func="yes" />
+		<KeyWord name="sp_mscleanup_metadata" func="yes" />
+		<KeyWord name="sp_mscleanup_publication_adinfo" func="yes" />
+		<KeyWord name="sp_mscleanup_zeroartnick_genhistory" func="yes" />
+		<KeyWord name="sp_mscleanupdynsnapshotvws" func="yes" />
+		<KeyWord name="sp_mscleanupforpullreinit" func="yes" />
+		<KeyWord name="sp_mscleanupmergepublisher" func="yes" />
+		<KeyWord name="sp_mscleanupmergepublisherdb" func="yes" />
+		<KeyWord name="sp_mscleanuptask" func="yes" />
+		<KeyWord name="sp_msclearcolumnbit" func="yes" />
+		<KeyWord name="sp_mscompletecleanup" func="yes" />
+		<KeyWord name="sp_mscomputearticlescreationorder" func="yes" />
+		<KeyWord name="sp_mscomputemergearticlescreationorder" func="yes" />
+		<KeyWord name="sp_mscomputemergeunresolvedrefs" func="yes" />
+		<KeyWord name="sp_mscomputeunresolvedrefs" func="yes" />
+		<KeyWord name="sp_mscontractsubsnb" func="yes" />
+		<KeyWord name="sp_mscopyregvalue" func="yes" />
+		<KeyWord name="sp_mscopyscriptfile" func="yes" />
+		<KeyWord name="sp_mscopysnapshot" func="yes" />
+		<KeyWord name="sp_mscreate_dist_tables" func="yes" />
+		<KeyWord name="sp_mscreate_distributor_tables" func="yes" />
+		<KeyWord name="sp_mscreate_mergesystables" func="yes" />
+		<KeyWord name="sp_mscreate_pub_tables" func="yes" />
+		<KeyWord name="sp_mscreate_replication_checkup_agent" func="yes" />
+		<KeyWord name="sp_mscreate_replication_status_table" func="yes" />
+		<KeyWord name="sp_mscreate_sub_tables" func="yes" />
+		<KeyWord name="sp_mscreatebeforetable" func="yes" />
+		<KeyWord name="sp_mscreatedupkeyupdatequery" func="yes" />
+		<KeyWord name="sp_mscreateglobalreplica" func="yes" />
+		<KeyWord name="sp_mscreateretry" func="yes" />
+		<KeyWord name="sp_msdbuseraccess" func="yes" />
+		<KeyWord name="sp_msdbuserpriv" func="yes" />
+		<KeyWord name="sp_msdefer_check" func="yes" />
+		<KeyWord name="sp_msdelete_specifiedcontents" func="yes" />
+		<KeyWord name="sp_msdeletecontents" func="yes" />
+		<KeyWord name="sp_msdeletepushagent" func="yes" />
+		<KeyWord name="sp_msdeleteretry" func="yes" />
+		<KeyWord name="sp_msdeletetranconflictrow" func="yes" />
+		<KeyWord name="sp_msdelgenzero" func="yes" />
+		<KeyWord name="sp_msdelrow" func="yes" />
+		<KeyWord name="sp_msdelsubrows" func="yes" />
+		<KeyWord name="sp_msdelsubrowsbatch" func="yes" />
+		<KeyWord name="sp_msdependencies" func="yes" />
+		<KeyWord name="sp_msdoesfilterhaveparent" func="yes" />
+		<KeyWord name="sp_msdrop_6x_replication_agent" func="yes" />
+		<KeyWord name="sp_msdrop_distributor_alerts_and_responses" func="yes" />
+		<KeyWord name="sp_msdrop_expired_mergesubscription" func="yes" />
+		<KeyWord name="sp_msdrop_expired_subscription" func="yes" />
+		<KeyWord name="sp_msdrop_mergesystables" func="yes" />
+		<KeyWord name="sp_msdrop_object" func="yes" />
+		<KeyWord name="sp_msdrop_pub_tables" func="yes" />
+		<KeyWord name="sp_msdrop_replcom" func="yes" />
+		<KeyWord name="sp_msdrop_repltran" func="yes" />
+		<KeyWord name="sp_msdrop_rladmin" func="yes" />
+		<KeyWord name="sp_msdrop_rlcore" func="yes" />
+		<KeyWord name="sp_msdrop_rlrecon" func="yes" />
+		<KeyWord name="sp_msdroparticleconstraints" func="yes" />
+		<KeyWord name="sp_msdroparticleprocs" func="yes" />
+		<KeyWord name="sp_msdroparticletombstones" func="yes" />
+		<KeyWord name="sp_msdroparticletriggers" func="yes" />
+		<KeyWord name="sp_msdropconstraints" func="yes" />
+		<KeyWord name="sp_msdropdynsnapshotvws" func="yes" />
+		<KeyWord name="sp_msdropfkreferencingarticle" func="yes" />
+		<KeyWord name="sp_msdropmergedynamicsnapshotjob" func="yes" />
+		<KeyWord name="sp_msdropmergepub_snapshot" func="yes" />
+		<KeyWord name="sp_msdropretry" func="yes" />
+		<KeyWord name="sp_msdroptemptable" func="yes" />
+		<KeyWord name="sp_msdummyupdate" func="yes" />
+		<KeyWord name="sp_msenum3rdpartypublications" func="yes" />
+		<KeyWord name="sp_msenum_misc_agents" func="yes" />
+		<KeyWord name="sp_msenum_replication_agents" func="yes" />
+		<KeyWord name="sp_msenum_replication_job" func="yes" />
+		<KeyWord name="sp_msenum_replqueues" func="yes" />
+		<KeyWord name="sp_msenum_replsqlqueues" func="yes" />
+		<KeyWord name="sp_msenumallpublications" func="yes" />
+		<KeyWord name="sp_msenumallsubscriptions" func="yes" />
+		<KeyWord name="sp_msenumchanges" func="yes" />
+		<KeyWord name="sp_msenumcolumns" func="yes" />
+		<KeyWord name="sp_msenumdeletesmetadata" func="yes" />
+		<KeyWord name="sp_msenumgenerations" func="yes" />
+		<KeyWord name="sp_msenummergepublications" func="yes" />
+		<KeyWord name="sp_msenumpartialchanges" func="yes" />
+		<KeyWord name="sp_msenumpartialdeletes" func="yes" />
+		<KeyWord name="sp_msenumpubreferences" func="yes" />
+		<KeyWord name="sp_msenumreplicas" func="yes" />
+		<KeyWord name="sp_msenumretries" func="yes" />
+		<KeyWord name="sp_msenumschemachange" func="yes" />
+		<KeyWord name="sp_msenumschemachange_70" func="yes" />
+		<KeyWord name="sp_msenumschemachange_80" func="yes" />
+		<KeyWord name="sp_msenumschemachange_80sp3" func="yes" />
+		<KeyWord name="sp_msenumsubscriptions" func="yes" />
+		<KeyWord name="sp_msenumthirdpartypublicationvendornames" func="yes" />
+		<KeyWord name="sp_msenumtranpublications" func="yes" />
+		<KeyWord name="sp_msestimatemergesnapshotworkload" func="yes" />
+		<KeyWord name="sp_msestimatesnapshotworkload" func="yes" />
+		<KeyWord name="sp_msevalsubscriberinfo" func="yes" />
+		<KeyWord name="sp_msexclause" func="yes" />
+		<KeyWord name="sp_msexpandbelongs" func="yes" />
+		<KeyWord name="sp_msexpandnotbelongs" func="yes" />
+		<KeyWord name="sp_msexpandsubsnb" func="yes" />
+		<KeyWord name="sp_msexternalfkreferences" func="yes" />
+		<KeyWord name="sp_msfetchidentityrange" func="yes" />
+		<KeyWord name="sp_msfillupmissingcols" func="yes" />
+		<KeyWord name="sp_msfilterclause" func="yes" />
+		<KeyWord name="sp_msfix_6x_tasks" func="yes" />
+		<KeyWord name="sp_msfixlineageversions" func="yes" />
+		<KeyWord name="sp_msfixupagentoffloadinfo" func="yes" />
+		<KeyWord name="sp_msfixupaltsnapshotfolder" func="yes" />
+		<KeyWord name="sp_msfixupbeforeimagetables" func="yes" />
+		<KeyWord name="sp_msfixupdistributorinfo" func="yes" />
+		<KeyWord name="sp_msfixupdistributorsecurity" func="yes" />
+		<KeyWord name="sp_msfixupftpinfo" func="yes" />
+		<KeyWord name="sp_msfixupsharedagentproperties" func="yes" />
+		<KeyWord name="sp_msfixupuseftp" func="yes" />
+		<KeyWord name="sp_msfixupworkingdirectory" func="yes" />
+		<KeyWord name="sp_msflush_access_cache" func="yes" />
+		<KeyWord name="sp_msflush_command" func="yes" />
+		<KeyWord name="sp_msforeach_worker" func="yes" />
+		<KeyWord name="sp_msforeachdb" func="yes" />
+		<KeyWord name="sp_msforeachtable" func="yes" />
+		<KeyWord name="sp_msgen_sync_tran_procs" func="yes" />
+		<KeyWord name="sp_msgenreplnickname" func="yes" />
+		<KeyWord name="sp_msgentablenickname" func="yes" />
+		<KeyWord name="sp_msget_agent_names" func="yes" />
+		<KeyWord name="sp_msget_attach_state" func="yes" />
+		<KeyWord name="sp_msget_col_position" func="yes" />
+		<KeyWord name="sp_msget_colinfo" func="yes" />
+		<KeyWord name="sp_msget_current_activity" func="yes" />
+		<KeyWord name="sp_msget_file_existence" func="yes" />
+		<KeyWord name="sp_msget_jobstate" func="yes" />
+		<KeyWord name="sp_msget_load_hint" func="yes" />
+		<KeyWord name="sp_msget_map_position" func="yes" />
+		<KeyWord name="sp_msget_mergepullsubsagent_owner" func="yes" />
+		<KeyWord name="sp_msget_oledbinfo" func="yes" />
+		<KeyWord name="sp_msget_publication_from_taskname" func="yes" />
+		<KeyWord name="sp_msget_publisher_rpc" func="yes" />
+		<KeyWord name="sp_msget_pullsubsagent_owner" func="yes" />
+		<KeyWord name="sp_msget_qualified_name" func="yes" />
+		<KeyWord name="sp_msget_setup_paths" func="yes" />
+		<KeyWord name="sp_msget_shared_agent" func="yes" />
+		<KeyWord name="sp_msget_subtypedatasrc" func="yes" />
+		<KeyWord name="sp_msget_synctran_column" func="yes" />
+		<KeyWord name="sp_msget_synctran_commands" func="yes" />
+		<KeyWord name="sp_msget_type" func="yes" />
+		<KeyWord name="sp_msgetalertinfo" func="yes" />
+		<KeyWord name="sp_msgetarticlereinitvalue" func="yes" />
+		<KeyWord name="sp_msgetbeforetableinsert" func="yes" />
+		<KeyWord name="sp_msgetchangecount" func="yes" />
+		<KeyWord name="sp_msgetcolordinalfromcolname" func="yes" />
+		<KeyWord name="sp_msgetcolumnlist" func="yes" />
+		<KeyWord name="sp_msgetconflictinsertproc" func="yes" />
+		<KeyWord name="sp_msgetconflicttablename" func="yes" />
+		<KeyWord name="sp_msgetlastrecgen" func="yes" />
+		<KeyWord name="sp_msgetlastsentgen" func="yes" />
+		<KeyWord name="sp_msgetlastsentrecgens" func="yes" />
+		<KeyWord name="sp_msgetlastupdatedtime" func="yes" />
+		<KeyWord name="sp_msgetmakegenerationapplock" func="yes" />
+		<KeyWord name="sp_msgetmergelastupdatedtime" func="yes" />
+		<KeyWord name="sp_msgetmetadatabatch" func="yes" />
+		<KeyWord name="sp_msgetonerow" func="yes" />
+		<KeyWord name="sp_msgetpubinfo" func="yes" />
+		<KeyWord name="sp_msgetreplicainfo" func="yes" />
+		<KeyWord name="sp_msgetreplnick" func="yes" />
+		<KeyWord name="sp_msgetrowmetadata" func="yes" />
+		<KeyWord name="sp_msgetserverproperties" func="yes" />
+		<KeyWord name="sp_msgetsubscriberinfo" func="yes" />
+		<KeyWord name="sp_msgettablecontents" func="yes" />
+		<KeyWord name="sp_msgettools_path" func="yes" />
+		<KeyWord name="sp_msgettrancftsrcrow" func="yes" />
+		<KeyWord name="sp_msgettranconflictname" func="yes" />
+		<KeyWord name="sp_msgettranconflictrow" func="yes" />
+		<KeyWord name="sp_msgettranlastupdatedtime" func="yes" />
+		<KeyWord name="sp_msgettypestringudt" func="yes" />
+		<KeyWord name="sp_msgetversion" func="yes" />
+		<KeyWord name="sp_msgetviewcolumnlist" func="yes" />
+		<KeyWord name="sp_msguidtostr" func="yes" />
+		<KeyWord name="sp_mshasdbaccess" func="yes" />
+		<KeyWord name="sp_mshelp_distdb" func="yes" />
+		<KeyWord name="sp_mshelp_identity_property" func="yes" />
+		<KeyWord name="sp_mshelp_replication_status" func="yes" />
+		<KeyWord name="sp_mshelp_replication_table" func="yes" />
+		<KeyWord name="sp_mshelpalterbeforetable" func="yes" />
+		<KeyWord name="sp_mshelpcolumns" func="yes" />
+		<KeyWord name="sp_mshelpconflictpublications" func="yes" />
+		<KeyWord name="sp_mshelpcreatebeforetable" func="yes" />
+		<KeyWord name="sp_mshelpdestowner" func="yes" />
+		<KeyWord name="sp_mshelpfulltextindex" func="yes" />
+		<KeyWord name="sp_mshelpfulltextscript" func="yes" />
+		<KeyWord name="sp_mshelpindex" func="yes" />
+		<KeyWord name="sp_mshelpmergearticles" func="yes" />
+		<KeyWord name="sp_mshelpmergeconflictcounts" func="yes" />
+		<KeyWord name="sp_mshelpmergeconflictpublications" func="yes" />
+		<KeyWord name="sp_mshelpmergedynamicsnapshotjob" func="yes" />
+		<KeyWord name="sp_mshelpmergeidentity" func="yes" />
+		<KeyWord name="sp_mshelpmergeschemaarticles" func="yes" />
+		<KeyWord name="sp_mshelpobjectpublications" func="yes" />
+		<KeyWord name="sp_mshelptranconflictcounts" func="yes" />
+		<KeyWord name="sp_mshelptranconflictpublications" func="yes" />
+		<KeyWord name="sp_mshelptype" func="yes" />
+		<KeyWord name="sp_mshelpvalidationdate" func="yes" />
+		<KeyWord name="sp_msifexistsremotelogin" func="yes" />
+		<KeyWord name="sp_msindexcolfrombin" func="yes" />
+		<KeyWord name="sp_msindexspace" func="yes" />
+		<KeyWord name="sp_msinit_replication_perfmon" func="yes" />
+		<KeyWord name="sp_msinit_subscription_agent" func="yes" />
+		<KeyWord name="sp_msinitdynamicsubscriber" func="yes" />
+		<KeyWord name="sp_msinsertbeforeimageclause" func="yes" />
+		<KeyWord name="sp_msinsertcontents" func="yes" />
+		<KeyWord name="sp_msinsertdeleteconflict" func="yes" />
+		<KeyWord name="sp_msinserterrorlineage" func="yes" />
+		<KeyWord name="sp_msinsertgenerationschemachanges" func="yes" />
+		<KeyWord name="sp_msinsertgenhistory" func="yes" />
+		<KeyWord name="sp_msinsertschemachange" func="yes" />
+		<KeyWord name="sp_msinstance_qv" func="yes" />
+		<KeyWord name="sp_msis_col_replicated" func="yes" />
+		<KeyWord name="sp_msis_identity_insert" func="yes" />
+		<KeyWord name="sp_msis_pk_col" func="yes" />
+		<KeyWord name="sp_msisnonpkukupdateinconflict" func="yes" />
+		<KeyWord name="sp_msispkupdateinconflict" func="yes" />
+		<KeyWord name="sp_msispulldistributionjobnamegenerated" func="yes" />
+		<KeyWord name="sp_msispullmergejobnamegenerated" func="yes" />
+		<KeyWord name="sp_mskilldb" func="yes" />
+		<KeyWord name="sp_msload_replication_status" func="yes" />
+		<KeyWord name="sp_mslocalizeinterruptedgenerations" func="yes" />
+		<KeyWord name="sp_mslocktable" func="yes" />
+		<KeyWord name="sp_msloginmappings" func="yes" />
+		<KeyWord name="sp_msmakearticleprocs" func="yes" />
+		<KeyWord name="sp_msmakeconflictinsertproc" func="yes" />
+		<KeyWord name="sp_msmakeconflicttable" func="yes" />
+		<KeyWord name="sp_msmakectsview" func="yes" />
+		<KeyWord name="sp_msmakedynsnapshotvws" func="yes" />
+		<KeyWord name="sp_msmakeexpandproc" func="yes" />
+		<KeyWord name="sp_msmakegeneration" func="yes" />
+		<KeyWord name="sp_msmakeinsertproc" func="yes" />
+		<KeyWord name="sp_msmakejoinfilter" func="yes" />
+		<KeyWord name="sp_msmakeselectproc" func="yes" />
+		<KeyWord name="sp_msmakesystableviews" func="yes" />
+		<KeyWord name="sp_msmaketempinsertproc" func="yes" />
+		<KeyWord name="sp_msmaketrancftproc" func="yes" />
+		<KeyWord name="sp_msmakeupdateproc" func="yes" />
+		<KeyWord name="sp_msmakeviewproc" func="yes" />
+		<KeyWord name="sp_msmaptype" func="yes" />
+		<KeyWord name="sp_msmark_proc_norepl" func="yes" />
+		<KeyWord name="sp_msmarkreplinfo" func="yes" />
+		<KeyWord name="sp_msmarkschemaobject" func="yes" />
+		<KeyWord name="sp_msmatchkey" func="yes" />
+		<KeyWord name="sp_msmergepublishdb" func="yes" />
+		<KeyWord name="sp_msmergesubscribedb" func="yes" />
+		<KeyWord name="sp_msmergeupdatelastsyncinfo" func="yes" />
+		<KeyWord name="sp_msobjectprivs" func="yes" />
+		<KeyWord name="sp_msobjsearch" func="yes" />
+		<KeyWord name="sp_mspad_command" func="yes" />
+		<KeyWord name="sp_mspost_auto_proc" func="yes" />
+		<KeyWord name="sp_msprep_exclusive" func="yes" />
+		<KeyWord name="sp_msprepare_mergearticle" func="yes" />
+		<KeyWord name="sp_msprepare_sub_for_detach" func="yes" />
+		<KeyWord name="sp_mspreparecleanup" func="yes" />
+		<KeyWord name="sp_mspropagateschematorepubs" func="yes" />
+		<KeyWord name="sp_msproxiedmetadata" func="yes" />
+		<KeyWord name="sp_mspub_adjust_identity" func="yes" />
+		<KeyWord name="sp_mspublicationcleanup" func="yes" />
+		<KeyWord name="sp_mspublicationview" func="yes" />
+		<KeyWord name="sp_mspublishdb" func="yes" />
+		<KeyWord name="sp_mspurgecontentsorphans" func="yes" />
+		<KeyWord name="sp_msquerysubtype" func="yes" />
+		<KeyWord name="sp_msquiescecheck" func="yes" />
+		<KeyWord name="sp_msquiesceforcleanup" func="yes" />
+		<KeyWord name="sp_msquiescetriggersoff" func="yes" />
+		<KeyWord name="sp_msquiescetriggerson" func="yes" />
+		<KeyWord name="sp_msreenable_check" func="yes" />
+		<KeyWord name="sp_msrefcnt" func="yes" />
+		<KeyWord name="sp_msregistersubscription" func="yes" />
+		<KeyWord name="sp_msreinit_article" func="yes" />
+		<KeyWord name="sp_msreinit_failed_subscriptions" func="yes" />
+		<KeyWord name="sp_msreinit_hub" func="yes" />
+		<KeyWord name="sp_msreinitmergepublication" func="yes" />
+		<KeyWord name="sp_msreleasemakegenerationapplock" func="yes" />
+		<KeyWord name="sp_msreleaseslotlock" func="yes" />
+		<KeyWord name="sp_msremove_mergereplcommand" func="yes" />
+		<KeyWord name="sp_msremove_userscript" func="yes" />
+		<KeyWord name="sp_msremovedbreplication" func="yes" />
+		<KeyWord name="sp_msremoveoffloadparameter" func="yes" />
+		<KeyWord name="sp_msrepl_addrolemember" func="yes" />
+		<KeyWord name="sp_msrepl_backup_complete" func="yes" />
+		<KeyWord name="sp_msrepl_backup_start" func="yes" />
+		<KeyWord name="sp_msrepl_check_server" func="yes" />
+		<KeyWord name="sp_msrepl_dbrole" func="yes" />
+		<KeyWord name="sp_msrepl_droprolemember" func="yes" />
+		<KeyWord name="sp_msrepl_fixpalrole" func="yes" />
+		<KeyWord name="sp_msrepl_gettype_mappings" func="yes" />
+		<KeyWord name="sp_msrepl_isdbowner" func="yes" />
+		<KeyWord name="sp_msrepl_linkedservers_rowset" func="yes" />
+		<KeyWord name="sp_msrepl_pal_rolecheck" func="yes" />
+		<KeyWord name="sp_msrepl_schema" func="yes" />
+		<KeyWord name="sp_msrepl_startup" func="yes" />
+		<KeyWord name="sp_msrepl_validate_dts_package" func="yes" />
+		<KeyWord name="sp_msreplcheck_connection" func="yes" />
+		<KeyWord name="sp_msreplcheck_name" func="yes" />
+		<KeyWord name="sp_msreplcheck_permission" func="yes" />
+		<KeyWord name="sp_msreplcheck_publish" func="yes" />
+		<KeyWord name="sp_msreplcheck_pull" func="yes" />
+		<KeyWord name="sp_msreplcheck_qv" func="yes" />
+		<KeyWord name="sp_msreplcheck_subscribe" func="yes" />
+		<KeyWord name="sp_msreplcheckoffloadserver" func="yes" />
+		<KeyWord name="sp_msreplicationcompatlevel" func="yes" />
+		<KeyWord name="sp_msreplraiserror" func="yes" />
+		<KeyWord name="sp_msreplrole" func="yes" />
+		<KeyWord name="sp_msreplsup_table_has_pk" func="yes" />
+		<KeyWord name="sp_msreplupdateschema" func="yes" />
+		<KeyWord name="sp_msreseed" func="yes" />
+		<KeyWord name="sp_msreset_attach_state" func="yes" />
+		<KeyWord name="sp_msreset_queue" func="yes" />
+		<KeyWord name="sp_msreset_queued_reinit" func="yes" />
+		<KeyWord name="sp_msreset_synctran_bit" func="yes" />
+		<KeyWord name="sp_msrestore_sub" func="yes" />
+		<KeyWord name="sp_msrestore_sub_merge" func="yes" />
+		<KeyWord name="sp_msrestore_sub_tran" func="yes" />
+		<KeyWord name="sp_msretrieve_mergepublication" func="yes" />
+		<KeyWord name="sp_msretrieve_publication" func="yes" />
+		<KeyWord name="sp_msretrieve_publication_attributes" func="yes" />
+		<KeyWord name="sp_msscript_article_view" func="yes" />
+		<KeyWord name="sp_msscript_beginproc" func="yes" />
+		<KeyWord name="sp_msscript_begintrig1" func="yes" />
+		<KeyWord name="sp_msscript_begintrig2" func="yes" />
+		<KeyWord name="sp_msscript_compensating_insert" func="yes" />
+		<KeyWord name="sp_msscript_compensating_send" func="yes" />
+		<KeyWord name="sp_msscript_delete_pubwins" func="yes" />
+		<KeyWord name="sp_msscript_delete_statement" func="yes" />
+		<KeyWord name="sp_msscript_delete_subwins" func="yes" />
+		<KeyWord name="sp_msscript_dri" func="yes" />
+		<KeyWord name="sp_msscript_endproc" func="yes" />
+		<KeyWord name="sp_msscript_endtrig" func="yes" />
+		<KeyWord name="sp_msscript_executionmode_stmt" func="yes" />
+		<KeyWord name="sp_msscript_insert_pubwins" func="yes" />
+		<KeyWord name="sp_msscript_insert_statement" func="yes" />
+		<KeyWord name="sp_msscript_insert_subwins" func="yes" />
+		<KeyWord name="sp_msscript_missing_row_check" func="yes" />
+		<KeyWord name="sp_msscript_multirow_trigger" func="yes" />
+		<KeyWord name="sp_msscript_params" func="yes" />
+		<KeyWord name="sp_msscript_pkvar_assignment" func="yes" />
+		<KeyWord name="sp_msscript_procbodystart" func="yes" />
+		<KeyWord name="sp_msscript_pub_upd_trig" func="yes" />
+		<KeyWord name="sp_msscript_security" func="yes" />
+		<KeyWord name="sp_msscript_singlerow_trigger" func="yes" />
+		<KeyWord name="sp_msscript_sync_del_proc" func="yes" />
+		<KeyWord name="sp_msscript_sync_del_trig" func="yes" />
+		<KeyWord name="sp_msscript_sync_ins_proc" func="yes" />
+		<KeyWord name="sp_msscript_sync_ins_trig" func="yes" />
+		<KeyWord name="sp_msscript_sync_upd_proc" func="yes" />
+		<KeyWord name="sp_msscript_sync_upd_trig" func="yes" />
+		<KeyWord name="sp_msscript_trigger_assignment" func="yes" />
+		<KeyWord name="sp_msscript_trigger_exec_rpc" func="yes" />
+		<KeyWord name="sp_msscript_trigger_fetch_statement" func="yes" />
+		<KeyWord name="sp_msscript_trigger_update_checks" func="yes" />
+		<KeyWord name="sp_msscript_trigger_updates" func="yes" />
+		<KeyWord name="sp_msscript_trigger_variables" func="yes" />
+		<KeyWord name="sp_msscript_trigger_version_updates" func="yes" />
+		<KeyWord name="sp_msscript_update_pubwins" func="yes" />
+		<KeyWord name="sp_msscript_update_statement" func="yes" />
+		<KeyWord name="sp_msscript_update_subwins" func="yes" />
+		<KeyWord name="sp_msscript_validate_subscription" func="yes" />
+		<KeyWord name="sp_msscript_where_clause" func="yes" />
+		<KeyWord name="sp_msscriptdatabase" func="yes" />
+		<KeyWord name="sp_msscriptdb_worker" func="yes" />
+		<KeyWord name="sp_msscriptdelconflictfinder" func="yes" />
+		<KeyWord name="sp_msscriptinsertconflictfinder" func="yes" />
+		<KeyWord name="sp_msscriptmvastable" func="yes" />
+		<KeyWord name="sp_msscriptmvastableidx" func="yes" />
+		<KeyWord name="sp_msscriptmvastablenci" func="yes" />
+		<KeyWord name="sp_msscriptmvastablepkc" func="yes" />
+		<KeyWord name="sp_msscriptupdateconflictfinder" func="yes" />
+		<KeyWord name="sp_msscriptviewproc" func="yes" />
+		<KeyWord name="sp_mssendtosqlqueue" func="yes" />
+		<KeyWord name="sp_msset_current_activity" func="yes" />
+		<KeyWord name="sp_msset_sub_guid" func="yes" />
+		<KeyWord name="sp_msset_subscription_properties" func="yes" />
+		<KeyWord name="sp_mssetaccesslist" func="yes" />
+		<KeyWord name="sp_mssetalertinfo" func="yes" />
+		<KeyWord name="sp_mssetartprocs" func="yes" />
+		<KeyWord name="sp_mssetbit" func="yes" />
+		<KeyWord name="sp_mssetconflictscript" func="yes" />
+		<KeyWord name="sp_mssetconflicttable" func="yes" />
+		<KeyWord name="sp_mssetcontext_replagent" func="yes" />
+		<KeyWord name="sp_mssetfilteredstatus" func="yes" />
+		<KeyWord name="sp_mssetfilterparent" func="yes" />
+		<KeyWord name="sp_mssethighestversion" func="yes" />
+		<KeyWord name="sp_mssetlastrecgen" func="yes" />
+		<KeyWord name="sp_mssetlastsentgen" func="yes" />
+		<KeyWord name="sp_mssetreplicainfo" func="yes" />
+		<KeyWord name="sp_mssetreplicastatus" func="yes" />
+		<KeyWord name="sp_mssetrowmetadata" func="yes" />
+		<KeyWord name="sp_mssetserverproperties" func="yes" />
+		<KeyWord name="sp_mssetsubscriberinfo" func="yes" />
+		<KeyWord name="sp_mssettopology" func="yes" />
+		<KeyWord name="sp_mssetupbelongs" func="yes" />
+		<KeyWord name="sp_mssetupbelongs_withoutviewproc" func="yes" />
+		<KeyWord name="sp_mssetupnotbelongs" func="yes" />
+		<KeyWord name="sp_mssetupworktables" func="yes" />
+		<KeyWord name="sp_mssharedfixeddisk" func="yes" />
+		<KeyWord name="sp_mssqldmo70_version" func="yes" />
+		<KeyWord name="sp_mssqldmo80_version" func="yes" />
+		<KeyWord name="sp_mssqlole65_version" func="yes" />
+		<KeyWord name="sp_mssqlole_version" func="yes" />
+		<KeyWord name="sp_mssub_check_identity" func="yes" />
+		<KeyWord name="sp_mssub_cleanup_orphans" func="yes" />
+		<KeyWord name="sp_mssub_cleanup_prop_table" func="yes" />
+		<KeyWord name="sp_mssub_set_identity" func="yes" />
+		<KeyWord name="sp_mssubscription_enabled_for_syncmgr" func="yes" />
+		<KeyWord name="sp_mssubscriptionvalidated" func="yes" />
+		<KeyWord name="sp_mssubsetpublication" func="yes" />
+		<KeyWord name="sp_mssubst_filter_name" func="yes" />
+		<KeyWord name="sp_mssubst_filter_names" func="yes" />
+		<KeyWord name="sp_mstable_has_unique_index" func="yes" />
+		<KeyWord name="sp_mstable_not_modifiable" func="yes" />
+		<KeyWord name="sp_mstablechecks" func="yes" />
+		<KeyWord name="sp_mstablekeys" func="yes" />
+		<KeyWord name="sp_mstablenamefromnick" func="yes" />
+		<KeyWord name="sp_mstablenickname" func="yes" />
+		<KeyWord name="sp_mstablerefs" func="yes" />
+		<KeyWord name="sp_mstablespace" func="yes" />
+		<KeyWord name="sp_mstestbit" func="yes" />
+		<KeyWord name="sp_msunc_to_drive" func="yes" />
+		<KeyWord name="sp_msuniquecolname" func="yes" />
+		<KeyWord name="sp_msuniquename" func="yes" />
+		<KeyWord name="sp_msuniqueobjectname" func="yes" />
+		<KeyWord name="sp_msuniquetempname" func="yes" />
+		<KeyWord name="sp_msunmarkifneeded" func="yes" />
+		<KeyWord name="sp_msunmarkreplinfo" func="yes" />
+		<KeyWord name="sp_msunmarkschemaobject" func="yes" />
+		<KeyWord name="sp_msunregistersubscription" func="yes" />
+		<KeyWord name="sp_msupdate_agenttype_default" func="yes" />
+		<KeyWord name="sp_msupdate_mqserver_distdb" func="yes" />
+		<KeyWord name="sp_msupdate_mqserver_subdb" func="yes" />
+		<KeyWord name="sp_msupdate_replication_status" func="yes" />
+		<KeyWord name="sp_msupdatecontents" func="yes" />
+		<KeyWord name="sp_msupdategenhistory" func="yes" />
+		<KeyWord name="sp_msupdatelastsyncinfo" func="yes" />
+		<KeyWord name="sp_msupdateschemachange" func="yes" />
+		<KeyWord name="sp_msupdatesharedagentproperties" func="yes" />
+		<KeyWord name="sp_msupdatesysmergearticles" func="yes" />
+		<KeyWord name="sp_msupg_createcatalogcomputedcols" func="yes" />
+		<KeyWord name="sp_msupg_dosystabcatalogupgrades" func="yes" />
+		<KeyWord name="sp_msupg_dropcatalogcomputedcols" func="yes" />
+		<KeyWord name="sp_msupg_recreatecatalogfaketables" func="yes" />
+		<KeyWord name="sp_msupg_recreatesystemviews" func="yes" />
+		<KeyWord name="sp_msupg_removesystemcomputedcolumns" func="yes" />
+		<KeyWord name="sp_msupg_upgradecatalog" func="yes" />
+		<KeyWord name="sp_msupgradeconflicttable" func="yes" />
+		<KeyWord name="sp_msuplineageversion" func="yes" />
+		<KeyWord name="sp_msvalidate_agent_parameter" func="yes" />
+		<KeyWord name="sp_msvalidate_subscription" func="yes" />
+		<KeyWord name="sp_msvalidatearticle" func="yes" />
+		<KeyWord name="sp_msverifytranfilter" func="yes" />
+		<KeyWord name="sp_oacreate" func="yes" />
+		<KeyWord name="sp_oadestroy" func="yes" />
+		<KeyWord name="sp_oageterrorinfo" func="yes" />
+		<KeyWord name="sp_oagetproperty" func="yes" />
+		<KeyWord name="sp_oamethod" func="yes" />
+		<KeyWord name="sp_oasetproperty" func="yes" />
+		<KeyWord name="sp_oastop" func="yes" />
+		<KeyWord name="sp_objectfilegroup" func="yes" />
+		<KeyWord name="sp_oledb_column_constraints" func="yes" />
+		<KeyWord name="sp_oledb_database" func="yes" />
+		<KeyWord name="sp_oledb_defdb" func="yes" />
+		<KeyWord name="sp_oledb_deflang" func="yes" />
+		<KeyWord name="sp_oledb_indexinfo" func="yes" />
+		<KeyWord name="sp_oledb_language" func="yes" />
+		<KeyWord name="sp_oledb_ro_usrname" func="yes" />
+		<KeyWord name="sp_oledbinfo" func="yes" />
+		<KeyWord name="sp_password" func="yes" />
+		<KeyWord name="sp_pkeys" func="yes" />
+		<KeyWord name="sp_populateqtraninfo" func="yes" />
+		<KeyWord name="sp_prepare" func="yes" />
+		<KeyWord name="sp_prepexec" func="yes" />
+		<KeyWord name="sp_prepexecrpc" func="yes" />
+		<KeyWord name="sp_primary_keys_rowset" func="yes" />
+		<KeyWord name="sp_primarykeys" func="yes" />
+		<KeyWord name="sp_procedure_params_rowset" func="yes" />
+		<KeyWord name="sp_procedures_rowset" func="yes" />
+		<KeyWord name="sp_processmail" func="yes" />
+		<KeyWord name="sp_procoption" func="yes" />
+		<KeyWord name="sp_prop_oledb_provider" func="yes" />
+		<KeyWord name="sp_provider_types_rowset" func="yes" />
+		<KeyWord name="sp_publication_validation" func="yes" />
+		<KeyWord name="sp_publishdb" func="yes" />
+		<KeyWord name="sp_readerrorlog" func="yes" />
+		<KeyWord name="sp_readwebtask" func="yes" />
+		<KeyWord name="sp_recompile" func="yes" />
+		<KeyWord name="sp_refreshsubscriptions" func="yes" />
+		<KeyWord name="sp_refreshview" func="yes" />
+		<KeyWord name="sp_reinitmergepullsubscription" func="yes" />
+		<KeyWord name="sp_reinitmergesubscription" func="yes" />
+		<KeyWord name="sp_reinitpullsubscription" func="yes" />
+		<KeyWord name="sp_reinitsubscription" func="yes" />
+		<KeyWord name="sp_releaseapplock" func="yes" />
+		<KeyWord name="sp_releaseschemalock" func="yes" />
+		<KeyWord name="sp_remoteoption" func="yes" />
+		<KeyWord name="sp_remove_tempdb_file" func="yes" />
+		<KeyWord name="sp_removedbreplication" func="yes" />
+		<KeyWord name="sp_removesrvreplication" func="yes" />
+		<KeyWord name="sp_rename" func="yes" />
+		<KeyWord name="sp_renamedb" func="yes" />
+		<KeyWord name="sp_repladdcolumn" func="yes" />
+		<KeyWord name="sp_replcmds" func="yes" />
+		<KeyWord name="sp_replcounters" func="yes" />
+		<KeyWord name="sp_repldeletequeuedtran" func="yes" />
+		<KeyWord name="sp_repldone" func="yes" />
+		<KeyWord name="sp_repldropcolumn" func="yes" />
+		<KeyWord name="sp_replflush" func="yes" />
+		<KeyWord name="sp_replica" func="yes" />
+		<KeyWord name="sp_replication_agent_checkup" func="yes" />
+		<KeyWord name="sp_replicationdboption" func="yes" />
+		<KeyWord name="sp_replicationoption" func="yes" />
+		<KeyWord name="sp_replincrementlsn" func="yes" />
+		<KeyWord name="sp_replincrementlsn_internal" func="yes" />
+		<KeyWord name="sp_replpostcmd" func="yes" />
+		<KeyWord name="sp_replpostschema" func="yes" />
+		<KeyWord name="sp_replpostsyncstatus" func="yes" />
+		<KeyWord name="sp_replpostsyncstatus_int" func="yes" />
+		<KeyWord name="sp_replproberemoteserver" func="yes" />
+		<KeyWord name="sp_replqueuemonitor" func="yes" />
+		<KeyWord name="sp_replrestart" func="yes" />
+		<KeyWord name="sp_replscriptuniquekeywhereclause" func="yes" />
+		<KeyWord name="sp_replsendtoqueue" func="yes" />
+		<KeyWord name="sp_replsetoriginator" func="yes" />
+		<KeyWord name="sp_replsetoriginator_internal" func="yes" />
+		<KeyWord name="sp_replsetoriginator_pal" func="yes" />
+		<KeyWord name="sp_replsetsyncstatus" func="yes" />
+		<KeyWord name="sp_replshowcmds" func="yes" />
+		<KeyWord name="sp_replsqlqgetrows" func="yes" />
+		<KeyWord name="sp_replsync" func="yes" />
+		<KeyWord name="sp_repltablehasnonpkuniquekey" func="yes" />
+		<KeyWord name="sp_repltrans" func="yes" />
+		<KeyWord name="sp_replupdateschema" func="yes" />
+		<KeyWord name="sp_replwritetovarbin" func="yes" />
+		<KeyWord name="sp_reset_connection" func="yes" />
+		<KeyWord name="sp_resetstatus" func="yes" />
+		<KeyWord name="sp_resolve_logins" func="yes" />
+		<KeyWord name="sp_restoredbreplication" func="yes" />
+		<KeyWord name="sp_resyncexecute" func="yes" />
+		<KeyWord name="sp_resyncexecutesql" func="yes" />
+		<KeyWord name="sp_resyncmergesubscription" func="yes" />
+		<KeyWord name="sp_resyncprepare" func="yes" />
+		<KeyWord name="sp_resyncuniquetable" func="yes" />
+		<KeyWord name="sp_revoke_publication_access" func="yes" />
+		<KeyWord name="sp_revokedbaccess" func="yes" />
+		<KeyWord name="sp_revokelogin" func="yes" />
+		<KeyWord name="sp_runwebtask" func="yes" />
+		<KeyWord name="sp_schemata_rowset" func="yes" />
+		<KeyWord name="sp_script_insertforcftresolution" func="yes" />
+		<KeyWord name="sp_script_reconciliation_delproc" func="yes" />
+		<KeyWord name="sp_script_reconciliation_insproc" func="yes" />
+		<KeyWord name="sp_script_reconciliation_xdelproc" func="yes" />
+		<KeyWord name="sp_script_synctran_commands" func="yes" />
+		<KeyWord name="sp_scriptdelproc" func="yes" />
+		<KeyWord name="sp_scriptdynamicupdproc" func="yes" />
+		<KeyWord name="sp_scriptinsproc" func="yes" />
+		<KeyWord name="sp_scriptmappedupdproc" func="yes" />
+		<KeyWord name="sp_scriptpkwhereclause" func="yes" />
+		<KeyWord name="sp_scriptpublicationcustomprocs" func="yes" />
+		<KeyWord name="sp_scriptpubwinsrefreshcursorvars" func="yes" />
+		<KeyWord name="sp_scriptreconwhereclause" func="yes" />
+		<KeyWord name="sp_scriptsubconflicttable" func="yes" />
+		<KeyWord name="sp_scriptupdateparams" func="yes" />
+		<KeyWord name="sp_scriptupdproc" func="yes" />
+		<KeyWord name="sp_scriptxdelproc" func="yes" />
+		<KeyWord name="sp_scriptxupdproc" func="yes" />
+		<KeyWord name="sp_sdidebug" func="yes" />
+		<KeyWord name="sp_server_info" func="yes" />
+		<KeyWord name="sp_serveroption" func="yes" />
+		<KeyWord name="sp_setapprole" func="yes" />
+		<KeyWord name="sp_setnetname" func="yes" />
+		<KeyWord name="sp_setreplfailovermode" func="yes" />
+		<KeyWord name="sp_settriggerorder" func="yes" />
+		<KeyWord name="sp_setuserbylogin" func="yes" />
+		<KeyWord name="sp_showrowreplicainfo" func="yes" />
+		<KeyWord name="sp_spaceused" func="yes" />
+		<KeyWord name="sp_special_columns" func="yes" />
+		<KeyWord name="sp_sproc_columns" func="yes" />
+		<KeyWord name="sp_sqlexec" func="yes" />
+		<KeyWord name="sp_srvrolepermission" func="yes" />
+		<KeyWord name="sp_statistics" func="yes" />
+		<KeyWord name="sp_statistics_rowset" func="yes" />
+		<KeyWord name="sp_stored_procedures" func="yes" />
+		<KeyWord name="sp_subscribe" func="yes" />
+		<KeyWord name="sp_subscription_cleanup" func="yes" />
+		<KeyWord name="sp_table_constraints_rowset" func="yes" />
+		<KeyWord name="sp_table_privileges" func="yes" />
+		<KeyWord name="sp_table_privileges_ex" func="yes" />
+		<KeyWord name="sp_table_privileges_rowset" func="yes" />
+		<KeyWord name="sp_table_statistics_rowset" func="yes" />
+		<KeyWord name="sp_table_validation" func="yes" />
+		<KeyWord name="sp_tablecollations" func="yes" />
+		<KeyWord name="sp_tableoption" func="yes" />
+		<KeyWord name="sp_tables" func="yes" />
+		<KeyWord name="sp_tables_ex" func="yes" />
+		<KeyWord name="sp_tables_info_rowset" func="yes" />
+		<KeyWord name="sp_tables_rowset" func="yes" />
+		<KeyWord name="sp_tableswc" func="yes" />
+		<KeyWord name="sp_tempdbspace" func="yes" />
+		<KeyWord name="sp_trace_create" func="yes" />
+		<KeyWord name="sp_trace_generateevent" func="yes" />
+		<KeyWord name="sp_trace_getdata" func="yes" />
+		<KeyWord name="sp_trace_setevent" func="yes" />
+		<KeyWord name="sp_trace_setfilter" func="yes" />
+		<KeyWord name="sp_trace_setstatus" func="yes" />
+		<KeyWord name="sp_unbindefault" func="yes" />
+		<KeyWord name="sp_unbindrule" func="yes" />
+		<KeyWord name="sp_unprepare" func="yes" />
+		<KeyWord name="sp_unsubscribe" func="yes" />
+		<KeyWord name="sp_updateextendedproperty" func="yes" />
+		<KeyWord name="sp_updatestats" func="yes" />
+		<KeyWord name="sp_user_counter1" func="yes" />
+		<KeyWord name="sp_user_counter10" func="yes" />
+		<KeyWord name="sp_user_counter2" func="yes" />
+		<KeyWord name="sp_user_counter3" func="yes" />
+		<KeyWord name="sp_user_counter4" func="yes" />
+		<KeyWord name="sp_user_counter5" func="yes" />
+		<KeyWord name="sp_user_counter6" func="yes" />
+		<KeyWord name="sp_user_counter7" func="yes" />
+		<KeyWord name="sp_user_counter8" func="yes" />
+		<KeyWord name="sp_user_counter9" func="yes" />
+		<KeyWord name="sp_validatelogins" func="yes" />
+		<KeyWord name="sp_validatemergepublication" func="yes" />
+		<KeyWord name="sp_validatemergepullsubscription" func="yes" />
+		<KeyWord name="sp_validatemergesubscription" func="yes" />
+		<KeyWord name="sp_validatepropertyinputs" func="yes" />
+		<KeyWord name="sp_validlang" func="yes" />
+		<KeyWord name="sp_validname" func="yes" />
+		<KeyWord name="sp_verify_publication" func="yes" />
+		<KeyWord name="sp_vupgrade_distdb" func="yes" />
+		<KeyWord name="sp_vupgrade_mergetables" func="yes" />
+		<KeyWord name="sp_vupgrade_mssubscription_properties" func="yes" />
+		<KeyWord name="sp_vupgrade_publisher" func="yes" />
+		<KeyWord name="sp_vupgrade_publisherdb" func="yes" />
+		<KeyWord name="sp_vupgrade_registry" func="yes" />
+		<KeyWord name="sp_vupgrade_replication" func="yes" />
+		<KeyWord name="sp_vupgrade_replmsdb" func="yes" />
+		<KeyWord name="sp_vupgrade_subpass" func="yes" />
+		<KeyWord name="sp_vupgrade_subscription_databases" func="yes" />
+		<KeyWord name="sp_vupgrade_subscription_tables" func="yes" />
+		<KeyWord name="sp_vupgrade_syscol_status" func="yes" />
+		<KeyWord name="sp_who" func="yes" />
+		<KeyWord name="sp_who2" func="yes" />
+		<KeyWord name="sp_xml_preparedocument" func="yes" />
+		<KeyWord name="sp_xml_removedocument" func="yes" />
+		<KeyWord name="space" func="yes" />
+		<KeyWord name="spid" />
+		<KeyWord name="sqare" func="yes" />
+		<KeyWord name="sql_variant" />
+		<KeyWord name="sql_variant_property" func="yes" />
+		<KeyWord name="sqrt" func="yes" />
+		<KeyWord name="statistics" />
+		<KeyWord name="stats" />
+		<KeyWord name="stats_date" func="yes" />
+		<KeyWord name="stdev" func="yes" />
+		<KeyWord name="stdevp" func="yes" />
+		<KeyWord name="str" func="yes" />
+		<KeyWord name="string_agg" func="yes" />
+		<KeyWord name="string_split" func="yes" />
+		<KeyWord name="stuff" func="yes" />
+		<KeyWord name="substring" func="yes">
+			<Overload retVal="字符 / 二进制" descr="显式长度形式；SQL Server 2022 及更早版本要求提供 length。">
+				<Param name="expression" />
+				<Param name="start" />
+				<Param name="length" />
+			</Overload>
+			<Overload retVal="字符 / 二进制" descr="SQL Server 2025 及更新版本、Azure SQL 等可省略 length，读取剩余内容。">
+				<Param name="expression" />
+				<Param name="start" />
+			</Overload>
+		</KeyWord>
+		<KeyWord name="sum" func="yes" />
+		<KeyWord name="suser_sid" func="yes" />
+		<KeyWord name="suser_sname" func="yes" />
+		<KeyWord name="sysallocations" />
+		<KeyWord name="sysalternates" />
+		<KeyWord name="sysaltfiles" />
+		<KeyWord name="syscacheobjects" />
+		<KeyWord name="syscharsets" />
+		<KeyWord name="syscolumns" />
+		<KeyWord name="syscomments" />
+		<KeyWord name="sysconfigures" />
+		<KeyWord name="sysconstraints" />
+		<KeyWord name="syscurconfigs" />
+		<KeyWord name="syscursorcolumns" />
+		<KeyWord name="syscursorrefs" />
+		<KeyWord name="syscursors" />
+		<KeyWord name="syscursortables" />
+		<KeyWord name="sysdatabases" />
+		<KeyWord name="sysdepends" />
+		<KeyWord name="sysdevices" />
+		<KeyWord name="sysfilegroups" />
+		<KeyWord name="sysfiles" />
+		<KeyWord name="sysfiles1" />
+		<KeyWord name="sysforeignkeys" />
+		<KeyWord name="sysfulltextcatalogs" />
+		<KeyWord name="sysindexes" />
+		<KeyWord name="sysindexkeys" />
+		<KeyWord name="syslanguages" />
+		<KeyWord name="syslockinfo" />
+		<KeyWord name="syslocks" />
+		<KeyWord name="syslogins" />
+		<KeyWord name="sysmembers" />
+		<KeyWord name="sysmessages" />
+		<KeyWord name="sysname" />
+		<KeyWord name="sysobjects" />
+		<KeyWord name="sysoledbusers" />
+		<KeyWord name="sysperfinfo" />
+		<KeyWord name="syspermissions" />
+		<KeyWord name="sysprocesses" />
+		<KeyWord name="sysprotects" />
+		<KeyWord name="sysreferences" />
+		<KeyWord name="sysremote_catalogs" />
+		<KeyWord name="sysremote_column_privileges" />
+		<KeyWord name="sysremote_columns" />
+		<KeyWord name="sysremote_foreign_keys" />
+		<KeyWord name="sysremote_indexes" />
+		<KeyWord name="sysremote_primary_keys" />
+		<KeyWord name="sysremote_provider_types" />
+		<KeyWord name="sysremote_schemata" />
+		<KeyWord name="sysremote_statistics" />
+		<KeyWord name="sysremote_table_privileges" />
+		<KeyWord name="sysremote_tables" />
+		<KeyWord name="sysremote_views" />
+		<KeyWord name="sysremotelogins" />
+		<KeyWord name="syssegments" />
+		<KeyWord name="sysservers" />
+		<KeyWord name="system_user" func="yes" />
+		<KeyWord name="systypes" />
+		<KeyWord name="sysusers" />
+		<KeyWord name="sysxlogins" />
+		<KeyWord name="table" />
+		<KeyWord name="tan" func="yes" />
+		<KeyWord name="tape" />
+		<KeyWord name="temp" />
+		<KeyWord name="temporary" />
+		<KeyWord name="text" />
+		<KeyWord name="textsize" />
+		<KeyWord name="then" />
+		<KeyWord name="timefromparts" func="yes" />
+		<KeyWord name="timestamp" />
+		<KeyWord name="timetickstotal_errors" />
+		<KeyWord name="tinyint" />
+		<KeyWord name="to" />
+		<KeyWord name="top" />
+		<KeyWord name="total_read" />
+		<KeyWord name="total_write" />
+		<KeyWord name="tran" />
+		<KeyWord name="trancount" />
+		<KeyWord name="transaction" />
+		<KeyWord name="trigger" />
+		<KeyWord name="truncate" />
+		<KeyWord name="try_cast" func="yes" />
+		<KeyWord name="try_convert" func="yes" />
+		<KeyWord name="try_parse" func="yes" />
+		<KeyWord name="tsequal" />
+		<KeyWord name="typeproperty" func="yes" />
+		<KeyWord name="uncommitted" />
+		<KeyWord name="unicode" func="yes" />
+		<KeyWord name="union" />
+		<KeyWord name="unique" />
+		<KeyWord name="uniqueidentifier" />
+		<KeyWord name="update" />
+		<KeyWord name="updatetext" />
+		<KeyWord name="upper" func="yes" />
+		<KeyWord name="use" />
+		<KeyWord name="user" />
+		<KeyWord name="user_id" func="yes" />
+		<KeyWord name="user_name" func="yes" />
+		<KeyWord name="values" />
+		<KeyWord name="var" func="yes" />
+		<KeyWord name="varbinary" />
+		<KeyWord name="varchar" />
+		<KeyWord name="varp" func="yes" />
+		<KeyWord name="varying" />
+		<KeyWord name="version" />
+		<KeyWord name="view" />
+		<KeyWord name="waitfor" />
+		<KeyWord name="when" />
+		<KeyWord name="where" />
+		<KeyWord name="while" />
+		<KeyWord name="with" />
+		<KeyWord name="work" />
+		<KeyWord name="writetext" />
+		<KeyWord name="xp_adsirequest" func="yes" />
+		<KeyWord name="xp_availablemedia" func="yes" />
+		<KeyWord name="xp_cleanupwebtask" func="yes" />
+		<KeyWord name="xp_cmdshell" func="yes" />
+		<KeyWord name="xp_controlqueueservice" func="yes" />
+		<KeyWord name="xp_convertwebtask" func="yes" />
+		<KeyWord name="xp_createprivatequeue" func="yes" />
+		<KeyWord name="xp_decodequeuecmd" func="yes" />
+		<KeyWord name="xp_deletemail" func="yes" />
+		<KeyWord name="xp_deleteprivatequeue" func="yes" />
+		<KeyWord name="xp_dirtree" func="yes" />
+		<KeyWord name="xp_displayparamstmt" func="yes" />
+		<KeyWord name="xp_displayqueuemesgs" func="yes" />
+		<KeyWord name="xp_dropwebtask" func="yes" />
+		<KeyWord name="xp_dsninfo" func="yes" />
+		<KeyWord name="xp_enum_activescriptengines" func="yes" />
+		<KeyWord name="xp_enum_oledb_providers" func="yes" />
+		<KeyWord name="xp_enumcodepages" func="yes" />
+		<KeyWord name="xp_enumdsn" func="yes" />
+		<KeyWord name="xp_enumerrorlogs" func="yes" />
+		<KeyWord name="xp_enumgroups" func="yes" />
+		<KeyWord name="xp_eventlog" func="yes" />
+		<KeyWord name="xp_execresultset" func="yes" />
+		<KeyWord name="xp_fileexist" func="yes" />
+		<KeyWord name="xp_findnextmsg" func="yes" />
+		<KeyWord name="xp_fixeddrives" func="yes" />
+		<KeyWord name="xp_get_mapi_default_profile" func="yes" />
+		<KeyWord name="xp_get_mapi_profiles" func="yes" />
+		<KeyWord name="xp_get_tape_devices" func="yes" />
+		<KeyWord name="xp_getadmingroupname" func="yes" />
+		<KeyWord name="xp_getfiledetails" func="yes" />
+		<KeyWord name="xp_getnetname" func="yes" />
+		<KeyWord name="xp_getprotocoldllinfo" func="yes" />
+		<KeyWord name="xp_grantlogin" func="yes" />
+		<KeyWord name="xp_instance_regaddmultistring" func="yes" />
+		<KeyWord name="xp_instance_regdeletekey" func="yes" />
+		<KeyWord name="xp_instance_regdeletevalue" func="yes" />
+		<KeyWord name="xp_instance_regenumkeys" func="yes" />
+		<KeyWord name="xp_instance_regenumvalues" func="yes" />
+		<KeyWord name="xp_instance_regread" func="yes" />
+		<KeyWord name="xp_instance_regremovemultistring" func="yes" />
+		<KeyWord name="xp_instance_regwrite" func="yes" />
+		<KeyWord name="xp_isntadmin" func="yes" />
+		<KeyWord name="xp_logevent" func="yes" />
+		<KeyWord name="xp_loginconfig" func="yes" />
+		<KeyWord name="xp_logininfo" func="yes" />
+		<KeyWord name="xp_makecab" func="yes" />
+		<KeyWord name="xp_makewebtask" func="yes" />
+		<KeyWord name="xp_mapdown_bitmap" func="yes" />
+		<KeyWord name="xp_mergelineages" func="yes" />
+		<KeyWord name="xp_mergexpusage" func="yes" />
+		<KeyWord name="xp_msadenabled" func="yes" />
+		<KeyWord name="xp_msadsiobjreg" func="yes" />
+		<KeyWord name="xp_msadsiobjregdb" func="yes" />
+		<KeyWord name="xp_msadsireg" func="yes" />
+		<KeyWord name="xp_msfulltext" func="yes" />
+		<KeyWord name="xp_mslocalsystem" func="yes" />
+		<KeyWord name="xp_msnt2000" func="yes" />
+		<KeyWord name="xp_msplatform" func="yes" />
+		<KeyWord name="xp_msver" func="yes" />
+		<KeyWord name="xp_msx_enlist" func="yes" />
+		<KeyWord name="xp_ntsec_enumdomains" func="yes" />
+		<KeyWord name="xp_oledbinfo" func="yes" />
+		<KeyWord name="xp_orbitmap" func="yes" />
+		<KeyWord name="xp_peekqueue" func="yes" />
+		<KeyWord name="xp_printstatements" func="yes" />
+		<KeyWord name="xp_prop_oledb_provider" func="yes" />
+		<KeyWord name="xp_proxiedmetadata" func="yes" />
+		<KeyWord name="xp_qv" func="yes" />
+		<KeyWord name="xp_readerrorlog" func="yes" />
+		<KeyWord name="xp_readmail" func="yes" />
+		<KeyWord name="xp_readpkfromqueue" func="yes" />
+		<KeyWord name="xp_readpkfromvarbin" func="yes" />
+		<KeyWord name="xp_readwebtask" func="yes" />
+		<KeyWord name="xp_regaddmultistring" func="yes" />
+		<KeyWord name="xp_regdeletekey" func="yes" />
+		<KeyWord name="xp_regdeletevalue" func="yes" />
+		<KeyWord name="xp_regenumkeys" func="yes" />
+		<KeyWord name="xp_regenumvalues" func="yes" />
+		<KeyWord name="xp_regread" func="yes" />
+		<KeyWord name="xp_regremovemultistring" func="yes" />
+		<KeyWord name="xp_regwrite" func="yes" />
+		<KeyWord name="xp_repl_convert_encrypt" func="yes" />
+		<KeyWord name="xp_repl_encrypt" func="yes" />
+		<KeyWord name="xp_repl_help_connect" func="yes" />
+		<KeyWord name="xp_replproberemsrv" func="yes" />
+		<KeyWord name="xp_resetqueue" func="yes" />
+		<KeyWord name="xp_revokelogin" func="yes" />
+		<KeyWord name="xp_runwebtask" func="yes" />
+		<KeyWord name="xp_sendmail" func="yes" />
+		<KeyWord name="xp_servicecontrol" func="yes" />
+		<KeyWord name="xp_setsqlsecurity" func="yes" />
+		<KeyWord name="xp_showcolv" func="yes" />
+		<KeyWord name="xp_showlineage" func="yes" />
+		<KeyWord name="xp_sprintf" func="yes" />
+		<KeyWord name="xp_sqlagent_enum_jobs" func="yes" />
+		<KeyWord name="xp_sqlagent_is_starting" func="yes" />
+		<KeyWord name="xp_sqlagent_monitor" func="yes" />
+		<KeyWord name="xp_sqlagent_msx_account" func="yes" />
+		<KeyWord name="xp_sqlagent_notify" func="yes" />
+		<KeyWord name="xp_sqlagent_param" func="yes" />
+		<KeyWord name="xp_sqlagent_proxy_account" func="yes" />
+		<KeyWord name="xp_sqlmaint" func="yes" />
+		<KeyWord name="xp_sscanf" func="yes" />
+		<KeyWord name="xp_startmail" func="yes" />
+		<KeyWord name="xp_stopmail" func="yes" />
+		<KeyWord name="xp_subdirs" func="yes" />
+		<KeyWord name="xp_test_mapi_profile" func="yes" />
+		<KeyWord name="xp_unc_to_drive" func="yes" />
+		<KeyWord name="xp_unpackcab" func="yes" />
+		<KeyWord name="xp_updateftssqlaccount" func="yes" />
+		<KeyWord name="xp_userlock" func="yes" />
+		<KeyWord name="xp_varbintohexstr" func="yes" />
+		<KeyWord name="year" func="yes" />
+	</AutoComplete>
+</NotepadPlus>
