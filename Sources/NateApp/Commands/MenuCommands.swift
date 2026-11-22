@@ -259,6 +259,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(tools, "取消外部命令", "cancelExternalCommand")
         add(tools, "上次外部命令结果", "lastExternalOutput")
         add(tools, "取消文本工具转换", "cancelTextTool")
+        add(tools, "取消文档比较", "cancelDocumentComparison")
         for (title, id) in [
             ("JSON 格式化", "tool:json"), ("XML 格式化", "tool:xml"),
             ("ASCII / UTF-8 转 HEX", "tool:hexEncode"), ("HEX 转文本 / 原字节", "tool:hexDecode"),
@@ -521,15 +522,8 @@ extension ApplicationController: NSMenuItemValidation {
         if id == "searchOnInternet" {
             return webSearchAvailable()
         }
-        if id == "importUserConfiguration" {
-            return canApplyUserConfiguration() && userConfiguration.task == nil
-                && userConfiguration.preview == nil
-        }
-        if id == "exportUserConfiguration" {
-            return !closing && userConfiguration.task == nil && userConfiguration.preview == nil
-        }
-        if id == "cancelUserConfiguration" {
-            return userConfiguration.task != nil || userConfiguration.preview != nil
+        if let enabled = validateConfigurationAndComparisonMenu(id) {
+            return enabled
         }
         if let enabled = validateMultipleSelectionMenu(menuItem, id: id) {
             return enabled

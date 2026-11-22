@@ -219,44 +219,4 @@ extension ApplicationController {
         controller.showWindow(nil)
     }
 
-    /// 业务作用：比较当前文档与明确选择文件，差异输出不覆盖任一正文。
-    /// 参数说明: 无。
-    /// 返回：逐行增删清单；超出计算预算时保留原文并说明。
-    func compareDocuments() {
-        guard let active, let url = SystemIntegration.chooseFiles().first else {
-            return
-        }
-        let snapshot = active.buffer.snapshot
-        Task {
-            do {
-                let result = try await readIO.readCancellable {
-                    token in
-                    let external = try self.fileAccess.load(
-                        url,
-                        permit: {
-                            !token.isCancelled
-                        }
-                    )
-                    let before = TextTransforms.lines(snapshot.text.text()).map(\.body)
-                    let after = TextTransforms.lines(external.text).map(\.body)
-                    guard before.count + after.count <= 100_000 else {
-                        throw NateError.message("逐行差异超过 100000 行预算，请先选择较小范围。")
-                    }
-                    let difference = after.difference(from: before)
-                    return difference.map {
-                        change in
-                        switch change {
-                        case .insert(let offset, let element, _): return "+ \(offset + 1)  \(element)"
-                        case .remove(let offset, let element, _): return "− \(offset + 1)  \(element)"
-                        }
-                    }.joined(separator: "\n")
-                }
-                mainWindow?.showResults(result.isEmpty ? "两个文本逐行相同。" : result)
-            }
-            catch {
-                SystemIntegration.alert("比较失败", error.localizedDescription)
-            }
-        }
-    }
-
 }

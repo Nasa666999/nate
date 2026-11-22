@@ -529,6 +529,7 @@ extension ApplicationController {
         case "exportHTML", "exportRTF": exportDocument(html: id == "exportHTML")
         case "markdownPreview": previewMarkdown()
         case "compare": compareDocuments()
+        case "cancelDocumentComparison": cancelDocumentComparison()
         case "characterConverter": characterConverter()
         case "hexConversionSettings": showHexConversionSettings()
         case "preferences": showPreferences()

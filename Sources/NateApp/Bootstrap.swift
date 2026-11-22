@@ -36,6 +36,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let fileOpeningPreferences = FileOpeningPreferencesRuntime()
     let webSearch = WebSearchRuntime()
     let userConfiguration = UserConfigurationRuntime()
+    let documentComparison = DocumentComparisonRuntime()
     let projectPanelStates = [
         ProjectPanelState(),
         ProjectPanelState(),
