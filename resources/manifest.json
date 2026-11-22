@@ -42,7 +42,7 @@
     },
     {
       "path" : "completion\/css.xml",
-      "sha256" : "eb2b404da0d577ab067dee3adad0dc59058fbe6237df0f3c9afadadd7b566ae3"
+      "sha256" : "13787152a496f9635b97b9fccce42c5fb04bf247f6529af491200c9d6cfcae95"
     },
     {
       "path" : "completion\/d.xml",
@@ -538,11 +538,15 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "13bcb7082023006570998003c9a85415d568ecc05b1c142c7730fff8a677c3f9"
+      "sha256" : "1679d06fc0fb9d7b88a5822b44ef828437c2711432b98c109313078d5788a53a"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
       "sha256" : "2aa0c9c2f81c640306d8394b826e483630e3608e9545a21059b78bfc91c6826f"
+    },
+    {
+      "path" : "licenses\/CSS-NOTICE.txt",
+      "sha256" : "361b5082fe65b118b87104f21c84bc3067ad13f5494954b09451a2464c121abf"
     },
     {
       "path" : "licenses\/Lexilla-LICENSE.txt",

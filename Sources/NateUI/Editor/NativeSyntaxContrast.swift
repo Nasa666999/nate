@@ -12,7 +12,7 @@ enum NativeSyntaxContrast {
     static var cache: [Key: NSColor] = [:]
     static let languages: Set<String> = [
         "ini", "props", "diff", "makefile", "registry", "ihex", "srec", "tehex", "tex", "latex", "lisp",
-        "scheme", "rust", "yaml", "powershell", "objc", "r", "lua", "script", "mssql", "sql",
+        "scheme", "rust", "yaml", "powershell", "objc", "r", "lua", "script", "mssql", "sql", "css",
     ]
 
     /// 业务作用：内置浅色样式的默认白底在深色外观中继承编辑器底色，默认文字与语法色保持可读。

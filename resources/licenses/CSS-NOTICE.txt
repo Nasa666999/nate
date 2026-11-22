@@ -1,0 +1,9 @@
+CSS 词法与折叠适配参考 Lexilla 的 LexCSS.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexCSS.cxx
+
+Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>
+Written by Jakub Vrána; improved by Philippe Lhoste and Ross McKay.
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留普通 CSS 的选择器、八组词表、属性与伪类、原字节分类和跨行上下文，
+使用固定正文与资源身份、有界未决段确认和原生样式；不执行样式或加载 URL。

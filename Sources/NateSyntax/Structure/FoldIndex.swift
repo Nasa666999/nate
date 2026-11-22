@@ -54,7 +54,7 @@ public struct FoldIndex: Sendable {
         let deadline = ContinuousClock.now.advanced(
             by: [
                 "python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex", "lisp",
-                "scheme", "rust", "yaml", "powershell", "objc", "r", "lua", "mssql", "sql",
+                "scheme", "rust", "yaml", "powershell", "objc", "r", "lua", "mssql", "sql", "css",
             ].contains(
                 language?.id ?? ""
             ) || language?.usesSharedCLexer == true || udl != nil
@@ -69,6 +69,9 @@ public struct FoldIndex: Sendable {
         }
         else if let language, language.id == "r" {
             candidates = try RFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
+        }
+        else if let language, language.id == "css" {
+            candidates = try CSSFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, language.id == "sql" {
             candidates = try SQLFolding.regions(snapshot: snapshot, language: language, deadline: deadline)

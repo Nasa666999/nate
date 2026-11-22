@@ -80,7 +80,7 @@ public struct StructuralIndentationPlan: Sendable {
         let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
         let supportsControlLines =
             identifier != "python"
-            && !["perl", "rust", "powershell", "json", "json5", "lua", "sql"].contains(identifier)
+            && !["perl", "rust", "powershell", "json", "json5", "lua", "sql", "css"].contains(identifier)
         var state = SyntaxState()
         var output: [ByteRange: NewlineIndentationAction] = [:]
         var consumed = 0
@@ -99,6 +99,7 @@ public struct StructuralIndentationPlan: Sendable {
                 || state.rust.depth > 0 || [13, 16].contains(state.powershell.mode)
                 || [1, 3, 17, 18].contains(state.objc.mode)
                 || state.lua.mode == 1 || state.mssql.mode == 1 || [1, 3].contains(state.sql.mode)
+                || state.css.mode == 9
             let startsInDirective = state.c.preprocessor || state.objc.mode == 9 || state.lua.mode == 9
             let tokens = scanner.highlight(source, base: row.lower, state: &state)
             guard state.diagnostic == nil else {
@@ -117,9 +118,11 @@ public struct StructuralIndentationPlan: Sendable {
                         || $0.lexicalStyle == "lua:9"
                         || $0.lexicalStyle == "script:9"
                 }
-            for token in tokens where token.isStructureOpaque {
+            for token in tokens
+            where token.isStructureOpaque || identifier == "css" && token.lexicalStyle != "css:5" {
                 let lower = token.range.lower - row.lower
                 let upper = token.range.upper - row.lower
+                let opaque = token.isStructureOpaque
                 // 字面与命名运算符是完整的不透明表达式，不能让前面的标点冒充行尾；注释与宏体不制造主代码块。
                 let replacement: UInt8 =
                     token.kind == .string || token.lexicalStyle == "r:10" || token.lexicalStyle == "r:11"
@@ -128,7 +131,10 @@ public struct StructuralIndentationPlan: Sendable {
                     if index & 255 == 0 {
                         try Self.check(deadline: deadline, permit: permit)
                     }
-                    code[index] = replacement
+                    // CSS 未引用值和属性内容保留自身文字，只有真正操作符类别的花括号才参与代码块缩进。
+                    if opaque || code[index] == 123 || code[index] == 125 {
+                        code[index] = replacement
+                    }
                 }
             }
             var significant: [Int] = []
@@ -230,6 +236,15 @@ public struct StructuralIndentationPlan: Sendable {
                         initial: initial,
                         scanner: scanner
                     ) : nil
+                let cssContext =
+                    identifier == "css"
+                    ? try CSSLexing.prefixState(
+                        source: Array(source.utf8),
+                        offset: offset,
+                        base: row.lower,
+                        initial: initial,
+                        scanner: scanner
+                    ) : nil
                 let nativeLineComment =
                     identifier == "objc"
                     && (token?.lexicalStyle == "objc:2" || token?.lexicalStyle == "objc:15")
@@ -241,7 +256,13 @@ public struct StructuralIndentationPlan: Sendable {
                         [2, 13].contains($0.mode) && !$0.lineCommentEnded
                     } == true
                 // 行注释中的后继闭合符没有代码资格，换行只能使用注释前已经确认的标点和条件头。
-                let following = nativeLineComment ? nil : snapshot.text.byte(at: target.upper)
+                var following = nativeLineComment ? nil : snapshot.text.byte(at: target.upper)
+                if identifier == "css", following == 123 || following == 125 {
+                    let end = target.upper - row.lower
+                    if end >= 0 && end < code.count && code[end] != following || cssContext?.mode == 16 {
+                        following = nil
+                    }
+                }
                 let insideString =
                     token?.kind == .string
                     && ((token?.range.upper ?? 0) > target.lower || nextToken?.kind == .string)
@@ -284,6 +305,9 @@ public struct StructuralIndentationPlan: Sendable {
                 }
                 else if let sqlContext {
                     insideNativeLiteral = !SQLLexing.isCode(sqlContext)
+                }
+                else if let cssContext {
+                    insideNativeLiteral = !CSSLexing.isCode(cssContext)
                 }
                 else if ["powershell", "objc", "r", "lua", "javascript.js", "typescript"].contains(identifier)
                 {

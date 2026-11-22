@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <NotepadPlus>
 	<AutoComplete>
+		<Environment ignoreCase="no" additionalWordChar="-:@" startFunc="(" stopFunc=")" paramSeparator="," />
 		<KeyWord name="::after" />
 		<KeyWord name="::backdrop" />
 		<KeyWord name="::before" />
@@ -873,5 +874,29 @@
 		<KeyWord name="translateY()" />
 		<KeyWord name="url()" />
 		<KeyWord name="var()" />
+		<KeyWord name="calc" func="yes">
+			<Overload retVal="计算值" descr="对具有兼容单位的值执行数学计算。">
+				<Param name="calculation" />
+			</Overload>
+		</KeyWord>
+		<KeyWord name="min" func="yes">
+			<Overload retVal="最小计算值" descr="从一个或多个逗号分隔的计算中采用最小值。">
+				<Param name="calculation" />
+				<Param name="additional calculations…" />
+			</Overload>
+		</KeyWord>
+		<KeyWord name="max" func="yes">
+			<Overload retVal="最大计算值" descr="从一个或多个逗号分隔的计算中采用最大值。">
+				<Param name="calculation" />
+				<Param name="additional calculations…" />
+			</Overload>
+		</KeyWord>
+		<KeyWord name="clamp" func="yes">
+			<Overload retVal="限制后的计算值" descr="采用最小边界、首选值和最大边界；最小边界优先。">
+				<Param name="minimum" />
+				<Param name="preferred" />
+				<Param name="maximum" />
+			</Overload>
+		</KeyWord>
 	</AutoComplete>
 </NotepadPlus>

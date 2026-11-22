@@ -124,6 +124,10 @@ public struct BracketIndex: Sendable {
                     style = token.lexicalStyle
                     opaque = token.isStructureOpaque
                 }
+                // CSS 属性内容中的花括号可以字面匹配，但没有操作符身份时不能构成结构选择范围。
+                if udl == nil, language?.id == "css", opener == 123, style != "css:5" {
+                    opaque = true
+                }
                 let key = BracketClass(
                     opener: opener,
                     style: style
