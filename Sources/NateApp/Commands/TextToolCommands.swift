@@ -146,12 +146,7 @@ extension ApplicationController {
                         guard data.count <= MIMECodec.maximumBytes, ContinuousClock.now < deadline else {
                             throw NateError.message("工具完整结果超过 64 MiB 或五秒预算，原内容保持不变。")
                         }
-                        guard
-                            let value = String(
-                                data: data,
-                                encoding: .utf8
-                            )
-                        else {
+                        guard let value = UTF8Text.decode(data) else {
                             return PreparedTextTool.bytes(data)
                         }
                         let plan = try PreparedSelectionInsertion(

@@ -88,7 +88,7 @@ public enum KeyboardMapArchive {
         for _ in 0..<count {
             let size = Int(try reader.u16())
             guard (1...KeyboardMap.maximumCommandBytes).contains(size),
-                let command = String(data: try reader.bytes(size), encoding: .utf8)
+                let command = UTF8Text.decode(try reader.bytes(size))
             else {
                 throw KeyboardMapArchiveError.unsupportedFormat
             }
@@ -99,7 +99,7 @@ public enum KeyboardMapArchive {
             var shortcuts: [KeyboardShortcut] = []
             for _ in 0..<keyCount {
                 let size = Int(try reader.u8())
-                guard (1...4).contains(size), let key = String(data: try reader.bytes(size), encoding: .utf8)
+                guard (1...4).contains(size), let key = UTF8Text.decode(try reader.bytes(size))
                 else {
                     throw KeyboardMapArchiveError.unsupportedFormat
                 }

@@ -158,13 +158,13 @@ public enum MacroArchive {
                 }
                 let openingSize = Int(try reader.unsigned(UInt16.self))
                 guard (1...64).contains(openingSize),
-                    let opening = String(data: try reader.bytes(openingSize), encoding: .utf8)
+                    let opening = UTF8Text.decode(try reader.bytes(openingSize))
                 else {
                     throw MacroArchiveError.unsupportedFormat
                 }
                 let closingSize = Int(try reader.unsigned(UInt16.self))
                 guard (1...64).contains(closingSize),
-                    let closing = String(data: try reader.bytes(closingSize), encoding: .utf8)
+                    let closing = UTF8Text.decode(try reader.bytes(closingSize))
                 else {
                     throw MacroArchiveError.unsupportedFormat
                 }
@@ -190,14 +190,14 @@ public enum MacroArchive {
             case 0:
                 let size = Int(try reader.unsigned(UInt32.self))
                 let bytes = try reader.bytes(size)
-                guard let text = String(data: bytes, encoding: .utf8) else {
+                guard let text = UTF8Text.decode(bytes) else {
                     throw NateError.message("宏输入包含非法 UTF-8。")
                 }
                 action = .input(text)
             case 1:
                 let size = Int(try reader.unsigned(UInt16.self))
                 let bytes = try reader.bytes(size)
-                guard let name = String(data: bytes, encoding: .utf8) else {
+                guard let name = UTF8Text.decode(bytes) else {
                     throw NateError.message("宏命令名称包含非法 UTF-8。")
                 }
                 action = .command(name)
@@ -212,7 +212,7 @@ public enum MacroArchive {
             case 4:
                 let size = Int(try reader.unsigned(UInt16.self))
                 let bytes = try reader.bytes(size)
-                guard let name = String(data: bytes, encoding: .utf8),
+                guard let name = UTF8Text.decode(bytes),
                     let command = EditorCommand(rawValue: name)
                 else {
                     throw MacroArchiveError.unsupportedFormat

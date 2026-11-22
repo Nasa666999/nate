@@ -66,12 +66,7 @@ extension EditorView {
                             let text: String
                             switch format {
                             case .binary:
-                                guard
-                                    let value = String(
-                                        data: data,
-                                        encoding: .utf8
-                                    )
-                                else {
+                                guard let value = UTF8Text.decode(data) else {
                                     throw NateError.message("二进制载荷不是完整 UTF-8 文本，未猜测编码或截断 NUL。")
                                 }
                                 text = value

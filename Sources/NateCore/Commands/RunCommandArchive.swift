@@ -91,7 +91,7 @@ public enum RunCommandArchive {
                 )
             )
             let nameSize = Int(try reader.unsigned(UInt16.self))
-            guard nameSize <= 512, let name = String(data: try reader.bytes(nameSize), encoding: .utf8) else {
+            guard nameSize <= 512, let name = UTF8Text.decode(try reader.bytes(nameSize)) else {
                 throw NateError.message("运行配置名称超量或不是合法 UTF-8。")
             }
             let executable = try reader.text()
@@ -121,7 +121,7 @@ public enum RunCommandArchive {
             var shortcut: KeyboardShortcut?
             if hasShortcut == 1 {
                 let size = Int(try reader.unsigned(UInt8.self))
-                guard size <= 4, let key = String(data: try reader.bytes(size), encoding: .utf8) else {
+                guard size <= 4, let key = UTF8Text.decode(try reader.bytes(size)) else {
                     throw NateError.invalidText
                 }
                 let value = try KeyboardShortcut(key: key, modifiers: reader.unsigned(UInt8.self))

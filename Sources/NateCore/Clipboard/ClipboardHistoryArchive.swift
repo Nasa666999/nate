@@ -88,7 +88,7 @@ public enum ClipboardHistoryArchive {
         for _ in 0..<count {
             try budget.check()
             let identity = try reader.bytes(36)
-            guard let value = String(data: identity, encoding: .utf8), let id = UUID(uuidString: value),
+            guard let value = UTF8Text.decode(identity), let id = UUID(uuidString: value),
                 id.uuidString.utf8.elementsEqual(identity), identities.insert(id).inserted
             else {
                 throw NateError.message("剪贴板历史记录身份无效或重复。")

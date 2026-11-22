@@ -1,4 +1,5 @@
 import Foundation
+import NateCore
 
 public enum MarkupDialect: Sendable {
     case html
@@ -15,7 +16,7 @@ enum MarkupNames {
         if dialect == .xml {
             return validated(bytes, dialect: .xml) != nil
         }
-        guard !bytes.isEmpty, bytes.count <= 4096, String(bytes: bytes, encoding: .utf8) != nil else {
+        guard !bytes.isEmpty, bytes.count <= 4096, UTF8Text.decode(Data(bytes)) != nil else {
             return false
         }
         return bytes.allSatisfy {
@@ -29,7 +30,7 @@ enum MarkupNames {
     /// - dialect: HTML 或 XML 的明确解释规则。
     /// 返回：名称合法时保留原字节字符串，其它内容不成为可生成的闭合标签。
     static func validated(_ bytes: [UInt8], dialect: MarkupDialect) -> String? {
-        guard !bytes.isEmpty, bytes.count <= 4096, let text = String(bytes: bytes, encoding: .utf8) else {
+        guard !bytes.isEmpty, bytes.count <= 4096, let text = UTF8Text.decode(Data(bytes)) else {
             return nil
         }
         var first = true

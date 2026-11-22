@@ -67,7 +67,7 @@ extension RecoveryStore {
                 }
             )
             let data = try readChunk(chunk)
-            guard let text = String(data: data, encoding: .utf8), text.utf16.count == chunk.utf16Count else {
+            guard let text = UTF8Text.decode(data), text.utf16.count == chunk.utf16Count else {
                 throw NateError.message("恢复内容不是长度一致的合法 UTF-8，停止清理。")
             }
         }

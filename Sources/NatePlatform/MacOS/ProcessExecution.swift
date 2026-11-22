@@ -98,7 +98,9 @@ public enum ProcessExecution {
         _ = Darwin.kill(-child.pid, SIGKILL)
         try reap(child.pid)
         reaped = true
-        guard let exit, let text = String(data: output, encoding: .utf8) else {
+        let text = String(decoding: output, as: UTF8.self)
+        // 输出中的前导 U+FEFF 是子进程原文，只有完整回编码一致后才能交给调用者。
+        guard let exit, text.utf8.elementsEqual(output) else {
             throw ExternalProcessFailure(reason: "外部命令输出不是有效 UTF-8，未以替代字符改写内容。")
         }
         let status = exit.si_code == CLD_EXITED ? exit.si_status : 128 + exit.si_status

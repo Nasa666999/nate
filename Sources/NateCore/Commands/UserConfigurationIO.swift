@@ -85,9 +85,7 @@ struct UserConfigurationReader {
     /// 返回：逐字节回编码一致的完整字符串；非法 UTF-8 整体拒绝，不替换或删除字符。
     mutating func text(_ count: Int) throws -> String {
         let raw = try bytes(count)
-        let value = String(decoding: raw, as: UTF8.self)
-        // 直接解码保留 BOM，回编码证据同时阻止无效序列被替换字符悄悄接纳。
-        guard value.utf8.elementsEqual(raw) else {
+        guard let value = UTF8Text.decode(raw) else {
             throw NateError.invalidText
         }
         return value

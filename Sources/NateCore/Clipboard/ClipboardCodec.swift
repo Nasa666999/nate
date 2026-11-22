@@ -130,7 +130,7 @@ extension ClipboardPayload {
                 throw NateError.message("剪贴板片段的标志、原文或虚拟尾部超量。")
             }
             let raw = try reader.bytes(length)
-            guard let text = String(data: raw, encoding: .utf8) else {
+            guard let text = UTF8Text.decode(raw) else {
                 throw NateError.message("剪贴板片段不是完整有效的 UTF-8。")
             }
             fragments.append(

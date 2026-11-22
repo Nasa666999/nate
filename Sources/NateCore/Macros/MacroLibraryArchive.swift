@@ -98,7 +98,7 @@ public enum MacroLibraryArchive {
             guard nameSize <= 512 else {
                 throw NateError.message("宏名称超过 512 字节。")
             }
-            guard let name = String(data: try reader.bytes(nameSize), encoding: .utf8) else {
+            guard let name = UTF8Text.decode(try reader.bytes(nameSize)) else {
                 throw NateError.invalidText
             }
             guard names.insert(name).inserted else {
@@ -111,7 +111,7 @@ public enum MacroLibraryArchive {
             let shortcut: MacroShortcut?
             if bound == 1 {
                 let size = Int(try reader.unsigned(UInt8.self))
-                guard size <= 4, let key = String(data: try reader.bytes(size), encoding: .utf8) else {
+                guard size <= 4, let key = UTF8Text.decode(try reader.bytes(size)) else {
                     throw NateError.invalidText
                 }
                 let value = try MacroShortcut(key: key, modifiers: reader.unsigned(UInt8.self))

@@ -17,12 +17,7 @@ enum TextTools {
         let data = Data(text.utf8)
         if let operation = MIMEOperation(rawValue: name) {
             let result = try MIMECodec.transform(operation, data: data)
-            guard
-                let value = String(
-                    data: result,
-                    encoding: .utf8
-                )
-            else {
+            guard let value = UTF8Text.decode(result) else {
                 throw NateError.message("解码结果是非 UTF-8 字节，必须通过独立字节结果查看与导出。")
             }
             return value
@@ -48,7 +43,7 @@ enum TextTools {
         case "hexEncode":
             return String(decoding: try HexCodec.encode(data), as: UTF8.self)
         case "hexDecode":
-            guard let result = String(data: try HexCodec.decode(data), encoding: .utf8) else {
+            guard let result = UTF8Text.decode(try HexCodec.decode(data)) else {
                 throw NateError.message("HEX 结果不是合法 UTF-8 文本，源内容保持不变。")
             }
             return result

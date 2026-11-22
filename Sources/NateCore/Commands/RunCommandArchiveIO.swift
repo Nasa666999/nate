@@ -103,7 +103,7 @@ struct RunCommandArchiveReader {
         guard size <= NamedRunCommand.maximumFieldBytes else {
             throw NateError.message("运行配置单字段超过 1 MiB。")
         }
-        guard let value = String(data: try bytes(size), encoding: .utf8) else {
+        guard let value = UTF8Text.decode(try bytes(size)) else {
             throw NateError.invalidText
         }
         return value

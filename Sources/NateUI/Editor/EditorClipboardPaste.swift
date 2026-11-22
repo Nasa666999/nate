@@ -64,7 +64,7 @@ private enum ClipboardRead: Sendable {
                 primaryIndex: 0
             )
         case .plain(let data):
-            guard let text = String(data: data, encoding: .utf8) else {
+            guard let text = UTF8Text.decode(data) else {
                 throw NateError.message("剪贴板普通文本不是完整 UTF-8，原文保持不变。")
             }
             return try ClipboardPayload(

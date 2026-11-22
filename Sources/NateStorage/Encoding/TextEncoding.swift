@@ -87,15 +87,15 @@ public struct TextEncoding: Sendable, Codable, Equatable, Hashable {
 
     /// 业务作用：严格解码原字节，不以替代字符掩盖非法序列。
     /// 参数说明:
-    /// - data: 不包含前导 BOM 的源字节。
+    /// - data: 文件入口已处理传输标记的原始正文字节，正文中的前导 U+FEFF 仍须保留。
     /// - catalog: 随包的严格代码页映射。
-    /// 返回：合法正文；无法无损解释时明确失败。
+    /// 返回：逐字节一致的合法 UTF-8 正文或所选传统编码正文；无法无损解释时明确失败。
     public func decode(_ data: Data, catalog: LegacyCodecCatalog? = nil) throws -> String {
         if let mapped = try catalog?.decode(data, page: codePage) {
             return mapped
         }
         if codePage == 65001 {
-            guard let text = String(data: data, encoding: .utf8) else {
+            guard let text = UTF8Text.decode(data) else {
                 throw NateError.invalidText
             }
             return text

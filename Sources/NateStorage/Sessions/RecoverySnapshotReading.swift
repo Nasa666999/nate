@@ -146,7 +146,7 @@ extension RecoveryStore {
                 continue
             }
             let data = try readChunk(chunk, permit: permit)
-            guard let text = String(data: data, encoding: .utf8), text.utf16.count == chunk.utf16Count else {
+            guard let text = UTF8Text.decode(data), text.utf16.count == chunk.utf16Count else {
                 throw NateError.message("恢复分块包含非法 UTF-8 或长度不符，现有记录已保留。")
             }
             let tree = PieceTree(text)
