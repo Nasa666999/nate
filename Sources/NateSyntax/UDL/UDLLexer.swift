@@ -7,6 +7,14 @@ public struct UDLContext: Sendable, Equatable {
     var escapes: [String]
     var lineOnly: Bool
     var continues: [String] = []
+    var ruleGroup = 0
+
+    /// 业务作用：同一样式的不同开端具有各自的起止与转义证据，不能共用另一位置的匹配索引。
+    /// 参数说明: 无。
+    /// 返回：当前原始样式与对应位置组成的稳定规则身份。
+    var ruleKey: String {
+        style + ":group:" + String(ruleGroup)
+    }
 }
 
 public struct UDLState: Sendable, Equatable {
@@ -88,8 +96,10 @@ public enum UDLLexer {
         let bytes = Array(text.utf8)
         state.foldWhite = true
         try budget.consume(bytes.count)
-        let comments = indexed(definition.lists["Comments"] ?? [])
-        let delimiters = indexed(definition.lists["Delimiters"] ?? [])
+        let commentRules = try UDLForwardRules(words: definition.lists["Comments"] ?? [], budget: budget)
+        let delimiterRules = try UDLForwardRules(words: definition.lists["Delimiters"] ?? [], budget: budget)
+        let comments = commentRules.flattened
+        let delimiters = delimiterRules.flattened
         let numbers = try UDLNumberRules(definition: definition, budget: budget)
         var folders = UDLFoldRules(definition: definition)
         var numberEnds: [String: Set<UInt8>] = [:]
@@ -129,7 +139,7 @@ public enum UDLLexer {
                 } ?? UInt32.max
             if let context,
                 let escape = try budget.longest(
-                    key: context.style + ":escape",
+                    key: context.ruleKey + ":escape",
                     patterns: context.escapes,
                     bytes: bytes,
                     offset: i,
@@ -154,7 +164,7 @@ public enum UDLLexer {
             }
             if let context,
                 let end = try budget.longest(
-                    key: context.style + ":end",
+                    key: context.ruleKey + ":end",
                     patterns: context.ends,
                     bytes: bytes,
                     offset: i,
@@ -203,23 +213,25 @@ public enum UDLLexer {
             }
             var entered = false
             if nesting & 0x100 != 0,
-                let opener = try budget.longest(
+                let opener = try commentRules.match(
+                    field: 3,
                     key: "Comments3",
-                    patterns: comments[3] ?? [],
                     bytes: bytes,
                     offset: i,
-                    ignoreCase: definition.caseIgnored
+                    ignoreCase: definition.caseIgnored,
+                    budget: budget
                 )
             {
                 state.contexts.append(
                     UDLContext(
                         style: "COMMENTS",
-                        ends: comments[4] ?? [],
+                        ends: commentRules.patterns(field: 4, group: opener.group),
                         escapes: [],
-                        lineOnly: false
+                        lineOnly: false,
+                        ruleGroup: opener.group
                     )
                 )
-                i += opener.utf8.count
+                i += opener.text.utf8.count
                 entered = true
                 compactForward = true
             }
@@ -229,49 +241,49 @@ public enum UDLLexer {
                     atLineStart: state.atLineStart,
                     hasVisible: state.hasVisible
                 ),
-                let opener = try budget.longest(
+                let opener = try commentRules.match(
+                    field: 0,
                     key: "Comments0",
-                    patterns: comments[0] ?? [],
                     bytes: bytes,
                     offset: i,
-                    ignoreCase: definition.caseIgnored
+                    ignoreCase: definition.caseIgnored,
+                    budget: budget
                 )
             {
                 state.contexts.append(
                     UDLContext(
                         style: "LINE COMMENTS",
-                        ends: (comments[2] ?? []).filter {
-                            $0 != "EOL" && $0 != "((EOL))"
-                        },
+                        ends: commentRules.patterns(field: 2, group: opener.group),
                         escapes: [],
                         lineOnly: true,
-                        continues: comments[1] ?? []
+                        continues: commentRules.patterns(field: 1, group: opener.group),
+                        ruleGroup: opener.group
                     )
                 )
-                i += opener.utf8.count
+                i += opener.text.utf8.count
                 entered = true
             }
             else {
                 for group in 0..<8 where nesting & (1 << group) != 0 {
-                    if let opener = try budget.longest(
+                    if let opener = try delimiterRules.match(
+                        field: group * 3,
                         key: "Delimiter\(group)",
-                        patterns: delimiters[group * 3] ?? [],
                         bytes: bytes,
                         offset: i,
-                        ignoreCase: definition.caseIgnored
+                        ignoreCase: definition.caseIgnored,
+                        budget: budget
                     ) {
-                        let ends = delimiters[group * 3 + 2] ?? []
+                        let ends = delimiterRules.patterns(field: group * 3 + 2, group: opener.group)
                         state.contexts.append(
                             UDLContext(
                                 style: "DELIMITERS\(group + 1)",
-                                ends: ends.filter {
-                                    $0 != "EOL" && $0 != "((EOL))"
-                                },
-                                escapes: delimiters[group * 3 + 1] ?? [],
-                                lineOnly: ends.contains("EOL") || ends.contains("((EOL))")
+                                ends: ends,
+                                escapes: delimiterRules.patterns(field: group * 3 + 1, group: opener.group),
+                                lineOnly: false,
+                                ruleGroup: opener.group
                             )
                         )
-                        i += opener.utf8.count
+                        i += opener.text.utf8.count
                         entered = true
                         compactForward = true
                         break
@@ -293,8 +305,9 @@ public enum UDLLexer {
                 continue
             }
             if nesting & 0x4000000 != 0, i == 0 || !word(bytes[i - 1]) {
+                let identity = context?.ruleKey ?? "DEFAULT"
                 let key = context?.style ?? "DEFAULT"
-                let ends: Set<UInt8>
+                var ends: Set<UInt8>
                 if let existing = numberEnds[key] {
                     ends = existing
                 }
@@ -304,12 +317,25 @@ public enum UDLLexer {
                         comments: comments,
                         delimiters: delimiters,
                         nesting: nesting,
-                        contextEnds: context?.ends ?? [],
+                        contextEnds: [],
                         budget: budget
                     )
                     numberEnds[key] = ends
                 }
-                if i >= numberBlocked[key, default: 0] {
+                // 通用结束外观按样式共享，当前位置的闭合证据只在本次数值判断中补入，避免逐位置复制整份规则。
+                for marker in context?.ends ?? [] {
+                    try budget.consume()
+                    if let byte = marker.utf8.first, byte != 0 {
+                        ends.insert(byte)
+                        if definition.caseIgnored, (65...90).contains(byte) {
+                            ends.insert(byte + 32)
+                        }
+                        else if definition.caseIgnored, (97...122).contains(byte) {
+                            ends.insert(byte - 32)
+                        }
+                    }
+                }
+                if i >= numberBlocked[identity, default: 0] {
                     let candidate = UDLNumberScanner(
                         rules: numbers,
                         bytes: bytes,
@@ -328,7 +354,7 @@ public enum UDLLexer {
                         )
                         continue
                     }
-                    numberBlocked[key] = try UDLNumberRules.failedEnd(
+                    numberBlocked[identity] = try UDLNumberRules.failedEnd(
                         in: bytes,
                         from: i,
                         ends: ends,
@@ -340,10 +366,12 @@ public enum UDLLexer {
             if let folder = try folders.match(
                 bytes: bytes,
                 offset: i,
-                context: context?.style,
+                context: context?.ruleKey,
                 nesting: nesting,
                 wordStart: backwardStart,
                 contextEnds: context?.ends ?? [],
+                comments: comments,
+                delimiters: delimiters,
                 budget: budget
             ) {
                 i += folder.text.utf8.count
@@ -437,20 +465,6 @@ public enum UDLLexer {
             throw NateError.message("UDL 单行词法片段超过 65536 个。")
         }
         return tokens
-    }
-
-    /// 业务作用：解析 UDL 的两位字段编号，编号用于规则组而不是字符码。
-    /// 参数说明:
-    /// - words: 原始有序规则。
-    /// 返回：同一编号的多个候选标记。
-    static func indexed(_ words: [String]) -> [Int: [String]] {
-        var result: [Int: [String]] = [:]
-        for word in words {
-            if let index = Int(word.prefix(2)), word.count > 2 {
-                result[index, default: []].append(String(word.dropFirst(2)))
-            }
-        }
-        return result
     }
 
     /// 业务作用：连续相同样式合并输出，避免按字节生成大量呈现对象。

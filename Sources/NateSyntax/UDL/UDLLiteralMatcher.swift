@@ -58,6 +58,18 @@ final class UDLLiteralMatcher {
     /// - budget: 所有组共用的工作量和截止。
     /// 返回：最长且同长优先原顺序的候选；没有匹配时为空。
     func longest(in bytes: [UInt8], at offset: Int, budget: UDLScanBudget) throws -> String? {
+        try longestIndex(in: bytes, at: offset, budget: budget).map {
+            patterns[$0]
+        }
+    }
+
+    /// 业务作用：保留实际匹配候选的原顺序身份，让对应起止与转义组不依赖文字重查。
+    /// 参数说明:
+    /// - bytes: 当前完整行原字节。
+    /// - offset: 已确认的标量边界。
+    /// - budget: 所有组共用的工作量和截止。
+    /// 返回：最长且同长优先原顺序的候选编号，没有匹配时为空。
+    func longestIndex(in bytes: [UInt8], at offset: Int, budget: UDLScanBudget) throws -> Int? {
         var node = 0, cursor = offset
         var best: Int?
         while cursor < bytes.count {
@@ -79,6 +91,11 @@ final class UDLLiteralMatcher {
             guard count <= bytes.count - offset else {
                 continue
             }
+            // 截断的 UTF-8 不能借解码替换字符匹配规则，标记两端必须保持完整标量边界。
+            let end = offset + count
+            guard end == bytes.count || bytes[end] & 0xC0 != 0x80 else {
+                continue
+            }
             try budget.consume(count)
             let candidate = String(decoding: bytes[offset..<(offset + count)], as: UTF8.self)
             if candidate.lowercased().utf8.elementsEqual(pattern.lowercased().utf8),
@@ -88,9 +105,7 @@ final class UDLLiteralMatcher {
                 best = index
             }
         }
-        return best.map {
-            patterns[$0]
-        }
+        return best
     }
 
     /// 业务作用：ASCII 规则的大小写折叠不改变长度，非 ASCII 原字节不会被当作 ASCII 字母。

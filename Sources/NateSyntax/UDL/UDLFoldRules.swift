@@ -11,8 +11,6 @@ struct UDLFolderMatch {
 struct UDLFoldRules {
     let definition: UDLDefinition
     let enabled: Bool
-    let comments: [Int: [String]]
-    let delimiters: [Int: [String]]
     private var forwardEnds: [String: [String]] = [:]
     static let families = [
         (name: "Folders in code1", style: "FOLDER IN CODE1", mask: UInt32(0)),
@@ -27,8 +25,6 @@ struct UDLFoldRules {
     /// 返回：三组起中止规则及其是否启用的明确状态。
     init(definition: UDLDefinition) {
         self.definition = definition
-        comments = UDLLexer.indexed(definition.lists["Comments"] ?? [])
-        delimiters = UDLLexer.indexed(definition.lists["Delimiters"] ?? [])
         enabled = Self.families.contains {
             family in
             Self.actions.contains {
@@ -45,6 +41,8 @@ struct UDLFoldRules {
     /// - nesting: 当前上下文明示的嵌套位集合。
     /// - wordStart: 前一段真实空白或已识别的前向规则是否建立了整词起点。
     /// - contextEnds: 当前上下文本身的闭合候选。
+    /// - comments: 已有容量证明的注释前向候选。
+    /// - delimiters: 已有容量证明的分隔符前向候选。
     /// - budget: 所有规则索引和匹配共同持有的预算。
     /// 返回：首个允许的完整起中止标记，不匹配时为空；超量或失权时抛错。
     mutating func match(
@@ -54,6 +52,8 @@ struct UDLFoldRules {
         nesting: UInt32,
         wordStart: Bool,
         contextEnds: [String],
+        comments: [Int: [String]],
+        delimiters: [Int: [String]],
         budget: UDLScanBudget
     ) throws -> UDLFolderMatch? {
         guard enabled else {
@@ -86,7 +86,7 @@ struct UDLFoldRules {
         guard wordStart else {
             return nil
         }
-        let endKey = context ?? "DEFAULT"
+        let endKey = String(nesting) + (context == nil ? ":root" : ":nested")
         let ends: [String]
         if let existing = forwardEnds[endKey] {
             ends = existing
@@ -95,7 +95,9 @@ struct UDLFoldRules {
             ends = try terminators(
                 context: context,
                 nesting: nesting,
-                contextEnds: contextEnds,
+                contextEnds: [],
+                comments: comments,
+                delimiters: delimiters,
                 budget: budget
             )
             forwardEnds[endKey] = ends
@@ -121,6 +123,8 @@ struct UDLFoldRules {
                 mask: mask,
                 ends: ends,
                 endKey: endKey,
+                contextEnds: contextEnds,
+                contextKey: context ?? "DEFAULT",
                 budget: budget
             ) {
                 return result
@@ -134,9 +138,18 @@ struct UDLFoldRules {
     /// - context: 当前注释或分隔符身份。
     /// - nesting: 当前明确允许的规则组。
     /// - contextEnds: 当前上下文的闭合候选。
+    /// - comments: 本行已展开并校验容量的注释规则。
+    /// - delimiters: 本行已展开并校验容量的分隔符规则。
     /// - budget: 整份词法扫描的共同工作量。
     /// 返回：可建立真实整词终点的前向候选；超量时整体失败。
-    private func terminators(context: String?, nesting: UInt32, contextEnds: [String], budget: UDLScanBudget)
+    private func terminators(
+        context: String?,
+        nesting: UInt32,
+        contextEnds: [String],
+        comments: [Int: [String]],
+        delimiters: [Int: [String]],
+        budget: UDLScanBudget
+    )
         throws -> [String]
     {
         var ends = contextEnds
@@ -169,6 +182,8 @@ struct UDLFoldRules {
     /// - mask: 已确认的当前嵌套权限。
     /// - ends: 当前允许终止整词的完整前向候选。
     /// - endKey: 固定上下文的结束索引身份。
+    /// - contextEnds: 当前实际起始位置对应的闭合规则。
+    /// - contextKey: 当前样式与对应位置的固定身份。
     /// - budget: 本行共享继续资格。
     /// 返回：完整标记及原资源样式，不匹配时为空。
     private func family(
@@ -178,6 +193,8 @@ struct UDLFoldRules {
         mask: UInt32,
         ends: [String],
         endKey: String,
+        contextEnds: [String] = [],
+        contextKey: String = "DEFAULT",
         budget: UDLScanBudget
     ) throws -> UDLFolderMatch? {
         let family = Self.families[group]
@@ -195,16 +212,25 @@ struct UDLFoldRules {
                     guard end < bytes.count else {
                         continue
                     }
-                    if !(bytes[end] > 0 && bytes[end] < 33),
-                        try budget.longest(
+                    if !(bytes[end] > 0 && bytes[end] < 33) {
+                        let forward = try budget.longest(
                             key: "fold:end:" + endKey,
                             patterns: ends,
                             bytes: bytes,
                             offset: end,
                             ignoreCase: definition.caseIgnored
-                        ) == nil
-                    {
-                        continue
+                        )
+                        if forward == nil,
+                            try budget.longest(
+                                key: "fold:context:" + contextKey,
+                                patterns: contextEnds,
+                                bytes: bytes,
+                                offset: end,
+                                ignoreCase: definition.caseIgnored
+                            ) == nil
+                        {
+                            continue
+                        }
                     }
                 }
                 return UDLFolderMatch(

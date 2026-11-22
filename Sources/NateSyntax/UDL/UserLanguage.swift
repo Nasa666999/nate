@@ -155,8 +155,9 @@ public enum UDLImporter {
     /// 业务作用：UDL 的双括号短语是字面规则，不解释为通用正则。
     /// 参数说明:
     /// - text: 关键字或分隔符列表。
+    /// - preserveIndexedGroups: 注释与分隔符保留编号后双括号语法，替代项不能提前变成普通短语。
     /// 返回：保留短语内部空格的有序标记。
-    static func words(_ text: String) -> [String] {
+    static func words(_ text: String, preserveIndexedGroups: Bool = false) -> [String] {
         var result: [String] = []
         let chars = Array(text)
         var i = 0
@@ -180,9 +181,14 @@ public enum UDLImporter {
                 while i + 1 < chars.count && !(chars[i] == ")" && chars[i + 1] == ")") {
                     i += 1
                 }
-                result.append(
-                    (numbered ? String(chars[start..<(start + 2)]) : "") + String(chars[inside..<i])
-                )
+                if numbered, preserveIndexedGroups {
+                    result.append(String(chars[start..<min(chars.count, i + 2)]))
+                }
+                else {
+                    result.append(
+                        (numbered ? String(chars[start..<(start + 2)]) : "") + String(chars[inside..<i])
+                    )
+                }
                 i = min(chars.count, i + 2)
             }
             else {
@@ -402,7 +408,10 @@ private final class UDLXMLReader: NSObject, XMLParserDelegate {
             return
         }
         if elementName == "Keywords", let name = keywordName {
-            current?.lists[name] = UDLImporter.words(keywordText)
+            current?.lists[name] = UDLImporter.words(
+                keywordText,
+                preserveIndexedGroups: name == "Comments" || name == "Delimiters"
+            )
             keywordName = nil
         }
         if elementName == "UserLang", let definition = current {

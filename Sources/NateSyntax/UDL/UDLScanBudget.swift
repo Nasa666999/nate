@@ -8,6 +8,7 @@ final class UDLScanBudget {
     private var pending = 0
     private var nodes = 0
     private var matchers: [String: UDLLiteralMatcher] = [:]
+    private var candidates = 0
 
     /// 业务作用：整行 UDL 的规则构建、字面匹配与状态发布共用工作量和所属任务截止。
     /// 参数说明:
@@ -35,6 +36,7 @@ final class UDLScanBudget {
             for pattern in list {
                 try consume()
                 count += 1
+                candidates = count
                 let length = pattern.utf8.count
                 guard count <= 65_536, length <= 65_536, length <= 4_194_304 - size else {
                     throw NateError.message("UDL 规则超过 65536 项、单项 64 KiB 或合计 4 MiB。")
@@ -79,6 +81,39 @@ final class UDLScanBudget {
             throw NateError.message("UDL 字面索引超过 262144 个共享节点。")
         }
         nodes += 1
+    }
+
+    /// 业务作用：候选组展开不能绕过整份定义的候选数量限制，单条规则中的替代项同样占用容量。
+    /// 参数说明: 无。
+    /// 返回：原候选之外的额外替代项累计不超过 65536 项时继续，超量则拒绝整份扫描。
+    func reserveAlternative() throws {
+        try consume()
+        guard candidates < 65_536 else {
+            throw NateError.message("UDL 展开后的候选超过 65536 项。")
+        }
+        candidates += 1
+    }
+
+    /// 业务作用：前向起始候选保留原组编号，以同一索引发布其对应的闭合、转义和续行职责。
+    /// 参数说明:
+    /// - key: 当前固定定义内唯一的规则组身份。
+    /// - patterns: 按原顺序展开的候选。
+    /// - bytes: 当前完整行原字节。
+    /// - offset: 完整标量边界。
+    /// - ignoreCase: 当前定义的大小写选项。
+    /// 返回：最长且同长优先原顺序的候选编号，未命中时为空。
+    func longestIndex(key: String, patterns: [String], bytes: [UInt8], offset: Int, ignoreCase: Bool) throws
+        -> Int?
+    {
+        let matcher: UDLLiteralMatcher
+        if let existing = matchers[key] {
+            matcher = existing
+        }
+        else {
+            matcher = try UDLLiteralMatcher(patterns: patterns, ignoreCase: ignoreCase, budget: self)
+            matchers[key] = matcher
+        }
+        return try matcher.longestIndex(in: bytes, at: offset, budget: self)
     }
 
     /// 业务作用：逐字节匹配和候选比较都有有限工作量，长规则内部仍能响应取消。
