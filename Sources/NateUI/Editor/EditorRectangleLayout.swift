@@ -150,14 +150,15 @@ extension EditorView {
         }
     }
 
-    /// 业务作用：实际样式资源形成有边界的稳定摘要，资源往返也先收回后台视觉动作的发布权。
+    /// 业务作用：实际样式资源与视图缩放形成稳定摘要，资源往返也先收回后台视觉动作的发布权。
     /// 参数说明: 无。
-    /// 返回：更新当前原生字体样式身份，读取次数不随绘制帧数重复放大。
+    /// 返回：更新当前原生字体样式及缩放身份，读取次数不随绘制帧数重复放大。
     func updateRectangleStyleIdentity() {
         var hash = SHA256()
         hash.update(data: Data("NateRectangleStyles".utf8))
         hash.update(data: EditorNativeLayoutPolicy.identityData)
         hash.update(data: Data("tabWidth=\(tabSettings.width)".utf8))
+        hash.update(data: Data("fontZoom=\(fontZoomAdjustment)".utf8))
         for data in [languageResource ?? Data(), userLanguage?.originalXML ?? Data()] {
             hash.update(data: Data(String(data.count).utf8))
             hash.update(data: Data([0]))

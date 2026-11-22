@@ -25,7 +25,7 @@ extension EditorWindow {
     /// 业务作用：克隆视图共享正文，排版、滚动容器和输入法状态分别持有。
     /// 参数说明:
     /// - vertical: 左右分屏为真，上下分屏为假。
-    /// 返回：建立第二个编辑视图，不创建第二个磁盘写入者。
+    /// 返回：建立继承当前字体缩放的第二个编辑视图，不创建第二个磁盘写入者。
     public func splitEditor(vertical: Bool) {
         guard removeSplit() else {
             return
@@ -40,6 +40,7 @@ extension EditorWindow {
             return self.selectedTextContext(for: clone)
         }
         clone.font = editor.font
+        clone.copyFontZoom(from: editor)
         clone.setWordBoundaries(editor.wordBoundaries)
         clone.setDelimiterSelectionSettings(editor.delimiterSelectionSettings)
         clone.tabSettings = editor.tabSettings

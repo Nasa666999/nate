@@ -352,13 +352,7 @@ extension ApplicationController {
             mainWindow?.editor.showSymbols.toggle()
             mainWindow?.editor.needsDisplay = true
         case "zoomIn", "zoomOut", "zoomReset":
-            if let editor = mainWindow?.editor {
-                let size =
-                    id == "zoomReset"
-                    ? 13 : max(7, min(72, editor.font.pointSize + (id == "zoomIn" ? 1 : -1)))
-                editor.font = NSFontManager.shared.convert(editor.font, toSize: size)
-                editor.refresh()
-            }
+            mainWindow?.editor.zoomFont(by: id == "zoomReset" ? nil : (id == "zoomIn" ? 1 : -1))
         case "themeLight":
             chooseEditorAppearance(.light)
         case "themeDark":

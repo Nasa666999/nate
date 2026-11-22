@@ -31,6 +31,7 @@ final class LineLayout {
     /// - snapshot: 正文快照。
     /// - range: 完整逻辑行范围。
     /// - font: 当前视图字体。
+    /// - fontZoomAdjustment: 来源视图的实际点数差值，资源字号与继承字号分别采用同一缩放意图。
     /// - width: 排版宽度。
     /// - tokens: 当前快照语法呈现。
     /// - rtl: 段落基础方向。
@@ -44,6 +45,7 @@ final class LineLayout {
         snapshot: DocumentSnapshot,
         range: ByteRange,
         font: NSFont,
+        fontZoomAdjustment: CGFloat = 0,
         width: CGFloat,
         tokens: [SyntaxToken],
         rtl: Bool,
@@ -131,7 +133,8 @@ final class LineLayout {
                 var attributes = SyntaxPresentation.attributes(
                     token: token,
                     font: font,
-                    appearance: appearance
+                    appearance: appearance,
+                    fontZoomAdjustment: fontZoomAdjustment
                 )
                 if let color = attributes.removeValue(forKey: .backgroundColor) as? NSColor {
                     syntaxBackgrounds.append(

@@ -11,6 +11,7 @@ extension ApplicationController {
     /// - language: 作业开始时实际语言身份。
     /// - udl: 来源视图实际采用的用户语言，为空时使用内置词法。
     /// - font: 来源视图基础字体。
+    /// - fontZoomAdjustment: 来源视图已确认的资源字号缩放差值。
     /// - appearance: 来源视图实际外观。
     /// - rtl: 来源段落基础方向。
     /// - color: 黑白方案不请求语法高亮，其余沿用来源内置或 UDL 样式。
@@ -21,6 +22,7 @@ extension ApplicationController {
         language: String,
         udl: UDLDefinition? = nil,
         font: NSFont,
+        fontZoomAdjustment: CGFloat = 0,
         appearance: NSAppearance,
         rtl: Bool,
         color: PrintColorMode
@@ -105,7 +107,12 @@ extension ApplicationController {
                     throw NateError.invalidRange
                 }
                 value.addAttributes(
-                    SyntaxPresentation.attributes(token: token, font: font, appearance: appearance),
+                    SyntaxPresentation.attributes(
+                        token: token,
+                        font: font,
+                        appearance: appearance,
+                        fontZoomAdjustment: fontZoomAdjustment
+                    ),
                     range: NSRange(
                         location: native.location - projection.location,
                         length: native.length

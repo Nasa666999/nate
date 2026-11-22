@@ -66,6 +66,7 @@ extension ApplicationController {
             language: document.language,
             udl: outputUserLanguage(document, appearance: appearance),
             font: font,
+            fontZoomAdjustment: mainWindow?.editor.fontZoomAdjustment ?? 0,
             appearance: appearance,
             rtl: mainWindow?.editor.rtl ?? false,
             color: .document
