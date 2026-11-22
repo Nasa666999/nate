@@ -56,13 +56,17 @@ extension ApplicationController {
     /// 业务作用：为打印和富文本导出独立建立固定样式，不保存为原文件。
     /// 参数说明:
     /// - document: 要读取的文档。
+    /// - snapshot: 本次输出已固定的正文；为空时读取该文档当前快照。
     /// 返回：按来源外观固定语法前景、背景和字体的只读快照；词法预算失效时拒绝部分输出。
-    func styledSnapshot(_ document: WorkspaceDocument) throws -> NSAttributedString {
+    func styledSnapshot(_ document: WorkspaceDocument, snapshot: DocumentSnapshot? = nil) throws
+        -> NSAttributedString
+    {
         let font = mainWindow?.editor.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let appearance = mainWindow?.editor.effectiveAppearance ?? NSApp.effectiveAppearance
+        let source = snapshot ?? document.buffer.snapshot
         return try styledPrintSnapshot(
-            snapshot: document.buffer.snapshot,
-            range: ByteRange(0, document.buffer.text.byteCount),
+            snapshot: source,
+            range: ByteRange(0, source.text.byteCount),
             language: document.language,
             udl: outputUserLanguage(document, appearance: appearance),
             font: font,
@@ -71,50 +75,6 @@ extension ApplicationController {
             rtl: mainWindow?.editor.rtl ?? false,
             color: .document
         )
-    }
-
-    /// 业务作用：HTML/RTF 导出保留语法色，成功不改变原文件关联或保存点。
-    /// 参数说明:
-    /// - html: 是否导出 HTML，否则 RTF。
-    /// 返回：安全写入所选导出目标。
-    func exportDocument(html: Bool) {
-        guard let active,
-            let url = SystemIntegration.chooseSave(name: active.name + (html ? ".html" : ".rtf"))
-        else {
-            return
-        }
-        do {
-            let styled = try styledSnapshot(active)
-            let data = try styled.data(
-                from: NSRange(location: 0, length: styled.length),
-                documentAttributes: [
-                    .documentType: html ? NSAttributedString.DocumentType.html : .rtf,
-                    .characterEncoding: String.Encoding.utf8.rawValue,
-                ]
-            )
-            Task {
-                do {
-                    try await fileIO.run {
-                        let expected =
-                            FileManager.default.fileExists(atPath: url.path)
-                            ? try self.fileAccess.baseline(url) : nil
-                        _ = try self.fileOperations.save(
-                            using: self.fileAccess,
-                            data,
-                            to: url,
-                            expected: expected,
-                            replacing: true
-                        )
-                    }
-                }
-                catch {
-                    SystemIntegration.alert("导出失败", error.localizedDescription)
-                }
-            }
-        }
-        catch {
-            SystemIntegration.alert("导出失败", error.localizedDescription)
-        }
     }
 
     /// 业务作用：Markdown 预览只渲染本地被动 HTML，不执行脚本或加载远程资源。

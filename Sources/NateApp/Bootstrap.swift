@@ -149,6 +149,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let textTools = TextToolRuntime()
     let digests = DigestRuntime()
     let printing = PrintRuntime()
+    var choosingDocumentExport = false
     let tabPreferences = TabPreferencesRuntime()
     let indentationPreferences = IndentationPreferencesRuntime()
     let pairPreferences = PairPreferencesRuntime()
