@@ -19,32 +19,42 @@ enum UDLCompatibility {
             "name", "fgColor", "bgColor", "colorStyle", "fontStyle", "fontName", "fontSize", "nesting",
         ],
     ]
-    static let lists = Set(
-        ["Comments", "Delimiters", "Operators1", "Operators2"]
-            + (1...8).map {
-                "Keywords\($0)"
+    static let lists: Set<String> = keywordListNames()
+    static let styles: Set<String> = styleNames()
+
+    /// 业务作用：明确列出当前会执行的 UDL 规则组，未应用的名称必须进入兼容说明。
+    /// 参数说明: 无。
+    /// 返回：注释、分隔符、运算符、八组关键字、数字与折叠规则的完整名称集合。
+    private static func keywordListNames() -> Set<String> {
+        var names: Set<String> = ["Comments", "Delimiters", "Operators1", "Operators2"]
+        for group in 1...8 {
+            names.insert("Keywords\(group)")
+        }
+        for part in ["prefix1", "prefix2", "extras1", "extras2", "suffix1", "suffix2", "range"] {
+            names.insert("Numbers, " + part)
+        }
+        for family in ["Folders in code1", "Folders in code2", "Folders in comment"] {
+            for action in ["open", "middle", "close"] {
+                names.insert(family + ", " + action)
             }
-            + ["prefix1", "prefix2", "extras1", "extras2", "suffix1", "suffix2", "range"].map {
-                "Numbers, " + $0
-            }
-            + ["Folders in code1", "Folders in code2", "Folders in comment"].flatMap { family in
-                ["open", "middle", "close"].map {
-                    family + ", " + $0
-                }
-            }
-    )
-    static let styles = Set(
-        [
+        }
+        return names
+    }
+
+    /// 业务作用：样式识别与有效词法组保持一致，未知样式原文保留并提供明确说明。
+    /// 参数说明: 无。
+    /// 返回：基础样式、八组关键字和八组分隔符的完整名称集合。
+    private static func styleNames() -> Set<String> {
+        var names: Set<String> = [
             "DEFAULT", "COMMENTS", "LINE COMMENTS", "NUMBERS", "OPERATORS", "FOLDER IN CODE1",
             "FOLDER IN CODE2", "FOLDER IN COMMENT",
         ]
-            + (1...8).map {
-                "KEYWORDS\($0)"
-            }
-            + (1...8).map {
-                "DELIMITERS\($0)"
-            }
-    )
+        for group in 1...8 {
+            names.insert("KEYWORDS\(group)")
+            names.insert("DELIMITERS\(group)")
+        }
+        return names
+    }
 
     /// 业务作用：只有对应容器中的已知节点能改变有效规则，扩展子树不能借嵌套字段取得配置权限。
     /// 参数说明:
