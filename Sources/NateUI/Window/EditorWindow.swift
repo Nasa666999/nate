@@ -45,6 +45,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     var tabHeight: NSLayoutConstraint?
     var tabLayoutConstraints: [NSLayoutConstraint] = []
     let scroll = NSScrollView()
+    let scrollSynchronization = WindowScrollSynchronization()
     let split = NSSplitView()
     let editorSplit = NSSplitView()
     let workspaceSplit = NSSplitView()

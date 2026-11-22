@@ -507,6 +507,8 @@ extension ApplicationController {
             }
         case "splitVertical", "splitHorizontal": mainWindow?.splitEditor(vertical: id == "splitVertical")
         case "unsplit": mainWindow?.removeSplit()
+        case "syncVerticalScroll": toggleScrollSynchronization(vertical: true)
+        case "syncHorizontalScroll": toggleScrollSynchronization(vertical: false)
         case "symbolsList": showSymbols()
         case "refreshStructure": requestStructure(force: true)
         case "closeStructure": closeStructure()

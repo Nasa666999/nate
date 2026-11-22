@@ -12,29 +12,18 @@ extension TextComparisonWindow {
         else {
             return
         }
-        let targetScroll = source === originalScroll.contentView ? revisedScroll : originalScroll
-        let target = targetScroll.contentView
-        guard let sourceView = source.documentView, let targetView = target.documentView else {
-            return
-        }
-        var point = target.bounds.origin
-        if vertical.state == .on {
-            let sourceMaximum = max(0, sourceView.frame.height - source.bounds.height)
-            let targetMaximum = max(0, targetView.frame.height - target.bounds.height)
-            let fraction = sourceMaximum > 0 ? min(1, max(0, source.bounds.minY / sourceMaximum)) : 0
-            point.y = fraction * targetMaximum
-        }
-        if horizontal.state == .on {
-            point.x = min(max(0, source.bounds.minX), max(0, targetView.frame.width - target.bounds.width))
-        }
-        guard point.x.isFinite, point.y.isFinite else {
-            return
-        }
+        let sourceScroll = source === originalScroll.contentView ? originalScroll : revisedScroll
+        let targetScroll = sourceScroll === originalScroll ? revisedScroll : originalScroll
         synchronizing = true
         defer {
             synchronizing = false
         }
-        target.scroll(to: point)
-        targetScroll.reflectScrolledClipView(target)
+        ViewportSynchronization.apply(
+            from: sourceScroll,
+            to: targetScroll,
+            vertical: vertical.state == .on,
+            horizontal: horizontal.state == .on,
+            matchingLines: false
+        )
     }
 }

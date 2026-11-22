@@ -134,6 +134,9 @@ extension EditorWindow {
         let extent = vertical ? editorSplit.bounds.width : editorSplit.bounds.height
         editorSplit.setPosition(max(1, extent / 2), ofDividerAt: 0)
         clone.refresh()
+        if let primary = editorSplit.arrangedSubviews.first as? NSScrollView {
+            scrollSynchronization.connect(primary: primary, secondary: container)
+        }
     }
 
     /// 业务作用：剪贴板选项在同一窗口的独立克隆之间一致生效，不能留下旧视图的隐式换行规则。
@@ -177,6 +180,8 @@ extension EditorWindow {
                 return false
             }
         }
+        // 所有候选已经安全完成，先撤销旧克隆的滚动资格，再移除其原生视图。
+        scrollSynchronization.disconnect()
         for view in editorSplit.arrangedSubviews.dropFirst() {
             editorSplit.removeArrangedSubview(view)
             view.removeFromSuperview()
