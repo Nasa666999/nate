@@ -143,7 +143,7 @@ public enum UDLLexer {
             budget: budget
         )
         let numbers = try UDLNumberRules(definition: definition, budget: budget)
-        var folders = UDLFoldRules(definition: definition)
+        let folders = UDLFoldRules(definition: definition)
         var numberEnds: [String: Set<UInt8>] = [:]
         var numberBlocked: [String: Int] = [:]
         var tokens: [SyntaxToken] = []
@@ -174,6 +174,7 @@ public enum UDLLexer {
                     }
                 }
             }
+            let pendingForward = state.wordContinuation?.isForward == true
             if consumeContinuation(
                 bytes: bytes,
                 base: base,
@@ -182,6 +183,7 @@ public enum UDLLexer {
                 definition: definition,
                 tokens: &tokens
             ) {
+                forwardBoundary = pendingForward && state.wordContinuation == nil
                 continue
             }
             let context = state.contexts.last
@@ -420,7 +422,7 @@ public enum UDLLexer {
                     offset: i,
                     base: base,
                     snapshot: source,
-                    context: context?.style,
+                    context: context,
                     nesting: nesting,
                     budget: budget
                 )
@@ -446,18 +448,14 @@ public enum UDLLexer {
                     definition: definition,
                     tokens: &tokens
                 )
+                forwardBoundary = replay != nil && state.wordContinuation == nil
                 continue
             }
-            var matched = false
             if let folder = try folders.match(
                 bytes: bytes,
                 offset: i,
                 context: context?.ruleKey,
                 nesting: nesting,
-                wordStart: backwardStart,
-                contextEnds: context?.ends ?? [],
-                comments: comments,
-                delimiters: delimiters,
                 budget: budget
             ) {
                 i += folder.text.utf8.count
@@ -477,64 +475,25 @@ public enum UDLLexer {
                 )
                 continue
             }
-            for group in 1...8 where nesting & (1 << (group + 9)) != 0 {
-                if i == 0 || !word(bytes[i - 1]),
-                    let keyword = try budget.longest(
-                        key: "Keywords\(group)",
-                        patterns: definition.lists["Keywords\(group)"] ?? [],
-                        bytes: bytes,
-                        offset: i,
-                        ignoreCase: definition.caseIgnored,
-                        literalOnly: true
-                    )
-                {
-                    let end = i + keyword.utf8.count
-                    if definition.prefix.contains(group) || end == bytes.count || !word(bytes[end]) {
-                        i = end
-                        emit(
-                            &tokens,
-                            start: base + start,
-                            end: base + i,
-                            style: "KEYWORDS\(group)",
-                            definition: definition
-                        )
-                        matched = true
-                        break
-                    }
-                }
-            }
-            if matched {
-                continue
-            }
-            for group in 1...2 where nesting & (group == 1 ? 0x1000000 : 0x2000000) != 0 {
-                if let op = try budget.longest(
-                    key: "Operators\(group)",
-                    patterns: definition.lists["Operators\(group)"] ?? [],
+            if nesting & 0x1000000 != 0,
+                let op = try budget.longest(
+                    key: "Operators1",
+                    patterns: definition.lists["Operators1"] ?? [],
                     bytes: bytes,
                     offset: i,
-                    ignoreCase: definition.caseIgnored,
-                    literalOnly: group == 2
-                ) {
-                    let end = i + op.utf8.count
-                    if group == 1
-                        || (i == 0 || !word(bytes[i - 1])) && (end == bytes.count || !word(bytes[end]))
-                    {
-                        i = end
-                        forwardBoundary = group == 1
-                        compactForward = forwardBoundary
-                        emit(
-                            &tokens,
-                            start: base + start,
-                            end: base + i,
-                            style: "OPERATORS",
-                            definition: definition
-                        )
-                        matched = true
-                        break
-                    }
-                }
-            }
-            if matched {
+                    ignoreCase: definition.caseIgnored
+                )
+            {
+                i += op.utf8.count
+                forwardBoundary = true
+                compactForward = true
+                emit(
+                    &tokens,
+                    start: base + start,
+                    end: base + i,
+                    style: "OPERATORS",
+                    definition: definition
+                )
                 continue
             }
             i += 1

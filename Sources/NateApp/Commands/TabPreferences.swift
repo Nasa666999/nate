@@ -20,7 +20,7 @@ final class TabPreferencesRuntime {
 
     /// 业务作用：语言 Tab 配置独立于正文和恢复归档，读取异常不阻止原文件编辑或保存。
     /// 参数说明: 无。
-    /// 返回：尚未读取偏好、采用四列真实 Tab 的独立运行状态。
+    /// 返回：尚未读取偏好、采用四列空格 Tab 的独立运行状态。
     init() {}
 }
 
@@ -57,7 +57,7 @@ extension ApplicationController {
                 runtime.settings = archive.settings
             }
             catch {
-                runtime.warning = "Tab 设置未被读取，原归档保留；本次采用四列真实 Tab。" + error.localizedDescription
+                runtime.warning = "Tab 设置未被读取，原归档保留；本次采用四列空格 Tab。" + error.localizedDescription
             }
         }
         return runtime.settings

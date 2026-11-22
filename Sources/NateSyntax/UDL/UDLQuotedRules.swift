@@ -11,14 +11,15 @@ struct UDLQuotedRules {
     private let definition: UDLDefinition
     private let fields: [UDLQuotedField]
     private let ends: Set<UInt8>
+    private let boundaries: UDLWordBoundary
 
-    /// 业务作用：引号短语沿整词运算符、折叠起中止和八组关键字的明确优先级执行，共用前向结束证据。
+    /// 业务作用：普通整词与引号短语沿运算符、折叠起中止和八组关键字的明确优先级执行。
     /// 参数说明:
     /// - definition: 本次固定完整 UDL。
     /// - comments: 已校验容量的注释候选。
     /// - delimiters: 已校验容量的分隔符候选。
     /// - budget: 本行全部规则共用的资格。
-    /// 返回：没有引号短语时保持轻量空规则，否则建立有界字段与结束外观。
+    /// 返回：没有整词规则时保持轻量空规则，否则建立有界字段与真实结束证据。
     init(
         definition: UDLDefinition,
         comments: [Int: [String]],
@@ -26,10 +27,17 @@ struct UDLQuotedRules {
         budget: UDLScanBudget
     ) throws {
         self.definition = definition
-        let enabled = definition.lists.values.contains {
-            $0.contains {
-                $0.contains("\u{B}") || $0.contains("\u{8}")
-            }
+        boundaries = UDLWordBoundary(
+            definition: definition,
+            comments: comments,
+            delimiters: delimiters
+        )
+        let enabled = definition.lists.contains {
+            key,
+            values in
+            !values.isEmpty
+                && (key.hasPrefix("Keywords") || key == "Operators2"
+                    || key.hasPrefix("Folders in code2") || key.hasPrefix("Folders in comment"))
         }
         guard enabled else {
             fields = []
@@ -106,22 +114,22 @@ struct UDLQuotedRules {
         self.ends = ends
     }
 
-    /// 业务作用：短语只从真实词起点取得完整源证据，同位置前向符号与更高优先级字面组保持原职责。
+    /// 业务作用：整词和短语只从真实词起点取得完整源证据，同位置前向符号保持其优先职责。
     /// 参数说明:
     /// - bytes: 当前完整片段。
     /// - offset: 已确认的词起点。
     /// - base: 片段所属文档字节起点。
     /// - snapshot: 可选的固定完整正文。
-    /// - context: 当前实际注释或分隔符样式。
+    /// - context: 当前实际注释或分隔符及其对应起止位置。
     /// - nesting: 当前允许的嵌套位。
     /// - budget: 词法扫描共同资格。
-    /// 返回：最高优先级的完整短语范围，缺少匹配或应交给已有字面规则时为空。
+    /// 返回：最高优先级的完整整词或短语范围，前缀覆盖完整词；缺少证据或前向动作优先时为空。
     func match(
         bytes: [UInt8],
         offset: Int,
         base: Int,
         snapshot: DocumentSnapshot?,
-        context: String?,
+        context: UDLContext?,
         nesting: UInt32,
         budget: UDLScanBudget
     ) throws -> UDLQuotedMatch? {
@@ -153,7 +161,7 @@ struct UDLQuotedRules {
                 }
             }
         }
-        let mask = context?.contains("COMMENT") == true ? nesting | 0xE00000 : nesting
+        let mask = context?.style.contains("COMMENT") == true ? nesting | 0xE00000 : nesting
         let input = UDLWordInput(
             initial: bytes,
             offset: offset,
@@ -161,6 +169,8 @@ struct UDLQuotedRules {
             snapshot: snapshot,
             budget: budget
         )
+        var wordEnd: Int?
+        var checkedEnd = false
         for field in fields where mask & field.mask != 0 {
             if let length = try field.match(
                 bytes: bytes,
@@ -185,9 +195,40 @@ struct UDLQuotedRules {
                     literalOnly: true
                 )
             {
-                let end = offset + literal.utf8.count
-                if field.prefix || end == bytes.count || !UDLLexer.word(bytes[end]) {
-                    return nil
+                if !checkedEnd {
+                    wordEnd = try boundaries.end(
+                        bytes: bytes,
+                        offset: offset,
+                        context: context,
+                        nesting: nesting,
+                        budget: budget
+                    )
+                    checkedEnd = true
+                }
+                let end: Int?
+                if literal.utf8.contains(where: {
+                    $0 > 0 && $0 < 33
+                }) {
+                    end = try boundaries.end(
+                        bytes: bytes,
+                        offset: offset,
+                        after: offset + literal.utf8.count,
+                        context: context,
+                        nesting: nesting,
+                        budget: budget
+                    )
+                }
+                else {
+                    end = wordEnd
+                }
+                if let end, end >= offset + literal.utf8.count,
+                    field.prefix || offset + literal.utf8.count == end
+                {
+                    return UDLQuotedMatch(
+                        length: field.prefix ? end - offset : literal.utf8.count,
+                        style: field.style,
+                        action: field.action
+                    )
                 }
             }
         }

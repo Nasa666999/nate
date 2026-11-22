@@ -15,4 +15,5 @@ struct UDLWordContinuation: Sendable, Equatable {
     let revision: UInt64
     let sourceIdentity: UUID
     let tail: UDLWordTail?
+    var isForward = false
 }

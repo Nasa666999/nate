@@ -51,7 +51,8 @@ extension UDLLexer {
                 documentID: pending.documentID,
                 revision: pending.revision,
                 sourceIdentity: pending.sourceIdentity,
-                tail: nil
+                tail: nil,
+                isForward: true
             )
         }
         else {
@@ -154,7 +155,8 @@ extension UDLLexer {
                     documentID: source.id,
                     revision: source.revision,
                     sourceIdentity: source.text.sourceIdentity,
-                    tail: nil
+                    tail: nil,
+                    isForward: true
                 )
             }
         }

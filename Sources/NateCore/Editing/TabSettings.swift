@@ -4,12 +4,12 @@ public struct TabSettings: Sendable, Equatable, Codable {
     public let width: Int
     public let useSpaces: Bool
 
-    /// 业务作用：未配置的语言沿用四列真实 Tab，不在启动时重写已有正文。
+    /// 业务作用：未配置的语言采用四列空格停靠，新 Tab 输入补齐空格且不改写已有正文。
     /// 参数说明: 无。
-    /// 返回：宽度为四且保留 Tab 字符的默认输入规则。
+    /// 返回：宽度为四、使用空格的默认输入规则；行首生成四个空格，行中补齐至下一停靠位。
     public init() {
         width = 4
-        useSpaces = false
+        useSpaces = true
     }
 
     /// 业务作用：固定合法的 Tab 停靠间距及新输入方式，显示宽度与原字节分别管理。
@@ -44,7 +44,7 @@ public struct LanguageTabSettings: Sendable, Equatable, Codable {
 
     /// 业务作用：为没有偏好的工作区建立统一默认，未命名或尚未识别的语言也有明确规则。
     /// 参数说明: 无。
-    /// 返回：四列真实 Tab，尚无语言覆盖项。
+    /// 返回：四列空格 Tab，尚无语言覆盖项。
     public init() {
         defaults = TabSettings()
         languages = [:]
