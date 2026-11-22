@@ -534,7 +534,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "3780c92a44e4673a403dcc57df3e655048fb505ad9e330b93c6cdafde2e6ced7"
+      "sha256" : "78bc2a6c576df0104d1f4e26055368c9e06c6da1587995511e4ab0de8706e0d3"
     },
     {
       "path" : "licenses\/Boost-LICENSE.txt",
@@ -547,6 +547,10 @@
     {
       "path" : "licenses\/NotepadPlusPlus-GPL.txt",
       "sha256" : "eff1a5fb1d62193999db46a025232c87ef9976b9a55613439b0dd149ab97afcd"
+    },
+    {
+      "path" : "licenses\/ObjectiveC-NOTICE.txt",
+      "sha256" : "1eabe1000a542e8127e83f70bd65c56ab1cf30a08598e31f61eb3765af5c5917"
     },
     {
       "path" : "licenses\/PowerShell-NOTICE.txt",

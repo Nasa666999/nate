@@ -94,7 +94,8 @@ public struct StructuralIndentationPlan: Sendable {
             let startsInBlockComment =
                 !state.blockEnd.isEmpty || state.json.blockComment || state.c.blockComment
                 || state.rust.depth > 0 || [13, 16].contains(state.powershell.mode)
-            let startsInDirective = state.c.preprocessor
+                || [1, 3, 17, 18].contains(state.objc.mode)
+            let startsInDirective = state.c.preprocessor || state.objc.mode == 9
             let tokens = scanner.highlight(source, base: row.lower, state: &state)
             guard state.diagnostic == nil else {
                 throw NateError.message(state.diagnostic ?? "语言缩进缺少完整词法状态。")
@@ -108,7 +109,7 @@ public struct StructuralIndentationPlan: Sendable {
             let directiveLine =
                 startsInDirective
                 || tokens.contains {
-                    $0.lexicalStyle == "c:preprocessor"
+                    $0.lexicalStyle == "c:preprocessor" || $0.lexicalStyle == "objc:9"
                 }
             for token in tokens where token.isStructureOpaque {
                 let lower = token.range.lower - row.lower
@@ -152,9 +153,13 @@ public struct StructuralIndentationPlan: Sendable {
                 let last = before.map {
                     code[$0]
                 }
-                let following = snapshot.text.byte(at: target.upper)
                 let token = Self.token(before: target.lower, in: tokens)
                 let nextToken = Self.token(before: target.lower + 1, in: tokens)
+                let objcLineComment =
+                    identifier == "objc"
+                    && (token?.lexicalStyle == "objc:2" || token?.lexicalStyle == "objc:15")
+                // 行注释中的后继闭合符没有代码资格，换行只能使用注释前已经确认的标点和条件头。
+                let following = objcLineComment ? nil : snapshot.text.byte(at: target.upper)
                 let insideString =
                     token?.kind == .string
                     && ((token?.range.upper ?? 0) > target.lower || nextToken?.kind == .string)
@@ -181,20 +186,25 @@ public struct StructuralIndentationPlan: Sendable {
                 else {
                     insideBlockComment = false
                 }
-                let insidePowerShellLiteral: Bool
-                if identifier == "powershell" {
-                    insidePowerShellLiteral = try !PowerShellLexing.isCode(
+                let insideNativeLiteral: Bool
+                if objcLineComment {
+                    // 行尾注释只遮蔽自身，不能抹去注释前已成立的条件头；注释中的代码仍已从判断输入移除。
+                    insideNativeLiteral = false
+                }
+                else if identifier == "powershell" || identifier == "objc" {
+                    insideNativeLiteral = try !StructuralInsertionContext.isCode(
                         source: Array(source.utf8),
                         offset: offset,
                         base: row.lower,
                         initial: initial,
-                        scanner: scanner
+                        scanner: scanner,
+                        language: language
                     )
                 }
                 else {
-                    insidePowerShellLiteral = false
+                    insideNativeLiteral = false
                 }
-                if insideString || insideBlockComment || directiveLine || insidePowerShellLiteral {
+                if insideString || insideBlockComment || directiveLine || insideNativeLiteral {
                     output[target] = .inherit
                 }
                 else if identifier == "python" {

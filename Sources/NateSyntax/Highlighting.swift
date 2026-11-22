@@ -55,6 +55,7 @@ public struct SyntaxToken: Sendable {
     /// 返回：当前范围不应贡献代码折叠或结构缩进标点时为真。
     public var isStructureOpaque: Bool {
         kind == .string || kind == .comment || lexicalStyle == "c:preprocessor"
+            || lexicalStyle == "objc:9"
     }
 }
 
@@ -71,6 +72,7 @@ public struct SyntaxState: Sendable, Equatable {
     var rust = RustLexicalState()
     var yaml = YAMLLexicalState()
     var powershell = PowerShellLexicalState()
+    var objc = ObjCLexicalState()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -89,6 +91,7 @@ public struct SyntaxScanner: Sendable {
     let rustResource: Data?
     let yamlRules: YAMLRules?
     let powershellRules: PowerShellRules?
+    let objcRules: ObjCRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -113,15 +116,17 @@ public struct SyntaxScanner: Sendable {
         powershellRules =
             language.id == "powershell"
             ? PowerShellRules(language: language, deadline: self.deadline) : nil
+        objcRules = language.id == "objc" ? ObjCRules(language: language, deadline: self.deadline) : nil
         self.snapshot =
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
+                "objc",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
-        if ["makefile", "rust", "yaml", "powershell"].contains(language.id) {
+        if ["makefile", "rust", "yaml", "powershell", "objc"].contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
             keywords = []
             secondaryKeywords = []
@@ -151,6 +156,16 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        if language.id == "objc" {
+            return ObjCLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: objcRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         if language.id == "powershell" {
             return PowerShellLexing.highlight(
                 text,
