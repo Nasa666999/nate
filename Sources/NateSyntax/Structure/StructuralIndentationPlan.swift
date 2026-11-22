@@ -51,7 +51,7 @@ public struct StructuralIndentationPlan: Sendable {
         let identifier = language?.id ?? "normal"
         let curly: Set<String> = [
             "c", "cpp", "java", "cs", "objc", "php", "javascript", "javascript.js", "jsp", "css",
-            "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift",
+            "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r",
         ]
         usesLanguageRules = udl == nil && (identifier == "python" || curly.contains(identifier))
         guard usesLanguageRules, let language else {
@@ -114,8 +114,10 @@ public struct StructuralIndentationPlan: Sendable {
             for token in tokens where token.isStructureOpaque {
                 let lower = token.range.lower - row.lower
                 let upper = token.range.upper - row.lower
-                // 字符串是完整的不透明表达式，不能让前面的标点冒充行尾；注释与宏体不制造主代码块。
-                let replacement: UInt8 = token.kind == .string ? 127 : 32
+                // 字面与命名运算符是完整的不透明表达式，不能让前面的标点冒充行尾；注释与宏体不制造主代码块。
+                let replacement: UInt8 =
+                    token.kind == .string || token.lexicalStyle == "r:10" || token.lexicalStyle == "r:11"
+                    ? 127 : 32
                 for index in lower..<upper {
                     if index & 255 == 0 {
                         try Self.check(deadline: deadline, permit: permit)
@@ -155,11 +157,12 @@ public struct StructuralIndentationPlan: Sendable {
                 }
                 let token = Self.token(before: target.lower, in: tokens)
                 let nextToken = Self.token(before: target.lower + 1, in: tokens)
-                let objcLineComment =
+                let nativeLineComment =
                     identifier == "objc"
                     && (token?.lexicalStyle == "objc:2" || token?.lexicalStyle == "objc:15")
+                    || identifier == "r" && token?.lexicalStyle == "r:1"
                 // 行注释中的后继闭合符没有代码资格，换行只能使用注释前已经确认的标点和条件头。
-                let following = objcLineComment ? nil : snapshot.text.byte(at: target.upper)
+                let following = nativeLineComment ? nil : snapshot.text.byte(at: target.upper)
                 let insideString =
                     token?.kind == .string
                     && ((token?.range.upper ?? 0) > target.lower || nextToken?.kind == .string)
@@ -187,11 +190,11 @@ public struct StructuralIndentationPlan: Sendable {
                     insideBlockComment = false
                 }
                 let insideNativeLiteral: Bool
-                if objcLineComment {
+                if nativeLineComment {
                     // 行尾注释只遮蔽自身，不能抹去注释前已成立的条件头；注释中的代码仍已从判断输入移除。
                     insideNativeLiteral = false
                 }
-                else if identifier == "powershell" || identifier == "objc" {
+                else if identifier == "powershell" || identifier == "objc" || identifier == "r" {
                     insideNativeLiteral = try !StructuralInsertionContext.isCode(
                         source: Array(source.utf8),
                         offset: offset,

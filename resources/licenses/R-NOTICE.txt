@@ -1,0 +1,8 @@
+R 词法与折叠规则的 Swift 适配参考 Lexilla 的 LexR.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexR.cxx
+
+Copyright 1998-2002 by Neil Hodgson <neilh@scintilla.org>
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留独立词表、普通与原始字符串、转义和分隔运算符及实际物理行状态，
+使用有界原字节扫描、固定正文与资源身份和完整标量投影；不执行 R 或读取引用资源。

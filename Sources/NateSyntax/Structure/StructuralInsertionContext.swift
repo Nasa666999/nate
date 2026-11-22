@@ -19,6 +19,15 @@ enum StructuralInsertionContext {
         scanner: SyntaxScanner,
         language: LanguageDefinition
     ) throws -> Bool {
+        if language.id == "r" {
+            return try RLexing.isCode(
+                source: source,
+                offset: offset,
+                base: base,
+                initial: initial,
+                scanner: scanner
+            )
+        }
         if language.id == "objc" {
             return try ObjCLexing.isCode(
                 source: source,
