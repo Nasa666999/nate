@@ -53,6 +53,14 @@
       "sha256" : "e172737ee22f21993de3e2fc79ffa52365c59cc25200e082a57ae8c3d343157e"
     },
     {
+      "path" : "completion\/fortran.xml",
+      "sha256" : "b1b5a07e7e91404c5ea0719aac2d38439b8eaf1455f8adc6a21b4096a5a0ea82"
+    },
+    {
+      "path" : "completion\/fortran77.xml",
+      "sha256" : "cb08d87583120054ae72d826e88055a2aaa6f20c101b7dedb7ffb226c36cf5a3"
+    },
+    {
       "path" : "completion\/gdscript.xml",
       "sha256" : "52e005235a32e52009161d9bfa2ef729b2195716d50712823128daa535c04d51"
     },
@@ -546,7 +554,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "f0c103380d9664de946c12e8d45c2e6cf61fdd70667dfbd46f1c17f9a29ecd46"
+      "sha256" : "6e77be30308d44f3a8a6af72eb3d4d0e6f00e7a0461243cb39baa8b6ce2ee763"
     },
     {
       "path" : "licenses\/ASM-NOTICE.txt",
@@ -571,6 +579,10 @@
     {
       "path" : "licenses\/ChangeHistory-NOTICE.txt",
       "sha256" : "96f5604c7b0cee4495113bdc5ff7bef2d6679ce032d6dc32d02e7e74c5fda7cf"
+    },
+    {
+      "path" : "licenses\/Fortran-NOTICE.txt",
+      "sha256" : "2f0fb6368953472e339e7f857a64895a0b0422b62d091956a2f1a5322403e48a"
     },
     {
       "path" : "licenses\/Guides-NOTICE.txt",

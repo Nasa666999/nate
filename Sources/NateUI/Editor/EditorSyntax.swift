@@ -61,7 +61,8 @@ extension EditorView {
             if !language.usesSharedCLexer,
                 ![
                     "python", "registry", "latex", "rust", "yaml", "powershell", "objc", "r", "lua", "mssql",
-                    "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm",
+                    "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm", "fortran",
+                    "fortran77",
                 ]
                 .contains(
                     language.id

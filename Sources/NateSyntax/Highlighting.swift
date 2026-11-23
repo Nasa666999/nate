@@ -115,6 +115,8 @@ public struct SyntaxState: Sendable, Equatable {
     var nncrontabCache = NncronLexicalCache()
     var asm = ASMLexicalState()
     var asmCache = ASMLexicalCache()
+    var fortran = FortranLexicalState()
+    var fortranCache = FortranLexicalCache()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -146,6 +148,7 @@ public struct SyntaxScanner: Sendable {
     let pascalRules: PascalRules?
     let nncrontabRules: NncronRules?
     let asmRules: ASMRules?
+    let fortranRules: FortranRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -183,6 +186,9 @@ public struct SyntaxScanner: Sendable {
         nncrontabRules =
             language.id == "nncrontab" ? NncronRules(language: language, deadline: self.deadline) : nil
         asmRules = language.id == "asm" ? ASMRules(language: language, deadline: self.deadline) : nil
+        fortranRules =
+            ["fortran", "fortran77"].contains(language.id)
+            ? FortranRules(language: language, deadline: self.deadline) : nil
         scriptRules =
             ["javascript.js", "typescript"].contains(language.id)
             ? ScriptRules(language: language, deadline: self.deadline) : nil
@@ -191,14 +197,15 @@ public struct SyntaxScanner: Sendable {
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
                 "objc", "r", "lua", "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab",
-                "asm",
+                "asm", "fortran", "fortran77",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
         if [
             "makefile", "rust", "yaml", "powershell", "objc", "r", "lua", "javascript.js", "typescript",
-            "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm",
+            "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm", "fortran",
+            "fortran77",
         ]
         .contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
@@ -230,6 +237,21 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        // 固定列、续行及字面资格绑定格式和来源，另一语言不能继续使用此前的原文状态。
+        guard state.fortran.resource == nil || ["fortran", "fortran77"].contains(language.id) else {
+            state.diagnostic = "词法语言已改变，不能继续 Fortran 的原状态。"
+            return []
+        }
+        if ["fortran", "fortran77"].contains(language.id) {
+            return FortranLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: fortranRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         // 汇编指令、引号及续行资格属于同一完整规则，语言切换必须撤销旧状态。
         guard state.asm.resource == nil || language.id == "asm" else {
             state.diagnostic = "词法语言已改变，不能继续汇编的原状态。"

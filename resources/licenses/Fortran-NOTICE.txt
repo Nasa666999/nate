@@ -1,0 +1,8 @@
+Fortran 自由格式及固定格式词法与折叠适配参考 Lexilla 的 LexFortran.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexFortran.cxx
+
+原实现作者：Chuan-jian Shen、Neil Hodgson。
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留三组有序词表、固定原字节列、两类引号及行尾类别、
+物理续行、编译器指令、结构关键字及同列连续注释折叠，分类读取固定原文。
