@@ -38,7 +38,7 @@ public enum PairSettingsDialog {
         }
         let note = NSTextField(
             wrappingLabelWithString:
-                "最多 64 项，每端最多 64 个 UTF-8 字节，不能含空白或控制符。相同开端不能重复。普通选择被一对字符替换，光标位于两端之间；词内对称引号及反斜杠转义保留字面输入。HTML/XML 标签结束符优先使用独立闭合规则。覆盖模式、矩形、输入法候选、粘贴与工具原文不自动配对。"
+                "最多 64 项，每端最多 64 个 UTF-8 字节，不能含空白或控制符。相同开端不能重复。非空普通选区保留原文并由两端包围，光标停在闭合端前；空光标的词内对称引号及反斜杠转义保留字面输入。HTML/XML 标签结束符优先使用独立闭合规则。覆盖模式、矩形、输入法候选、粘贴与工具原文不自动配对。"
         )
         note.textColor = .secondaryLabelColor
         note.preferredMaxLayoutWidth = 520

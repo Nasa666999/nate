@@ -3,15 +3,15 @@ import Foundation
 public struct PreparedPairInsertion: Sendable {
     public let transaction: PreparedTransaction
 
-    /// 业务作用：逐普通光标准备配对或闭合越过，全部结果保留稳定身份并形成唯一撤销动作。
+    /// 业务作用：逐普通选择准备包围、空光标配对或闭合越过，原选中文本和稳定身份共同形成唯一撤销动作。
     /// 参数说明:
     /// - snapshot: 带完整源选择及控制代次的固定正文。
     /// - command: 本次固定配对定义、真实输入与越过选项。
-    /// - completeOpening: 开端是否生成完整一对；独立结构字符输入关闭此项以保留字面字符。
+    /// - completeOpening: 开端是否生成完整一对并包围非空选区；独立结构字符输入关闭此项以保留字面字符。
     /// - tabSettings: 结构前缀采用的实际 Tab 停靠规则。
     /// - indentation: 逐目标的已确认前导空白，为空时保留原行；闭合花括号或方括号前的正文按原字节保留。
     /// - permit: 范围、源字节与事务构建共用的继续资格。
-    /// 返回：全部目标完整准备时提供事务；矩形、边界、容量或资格失效时拒绝全部动作。
+    /// 返回：全部目标完整准备时提供事务；生成配对时光标位于保留文本之后及闭合端之前；矩形、边界、容量或资格失效时拒绝全部动作。
     public init(
         snapshot: DocumentSnapshot,
         command: PairInputCommand,
@@ -37,19 +37,23 @@ public struct PreparedPairInsertion: Sendable {
         let opening = command.input.utf8.elementsEqual(command.pair.opening.utf8)
         let closing = command.input.utf8.elementsEqual(command.pair.closing.utf8)
         var remaining = 1_048_576
-        let targets = try normalized.entries.map {
-            entry in
+        var intents: [(entry: SelectionEntry, range: ByteRange, paired: Bool)] = []
+        var outputBytes = 0, removedBytes = 0
+        for entry in normalized.entries {
             try budget.check()
             let selection = entry.selection
             var range = selection.range
-            var value = command.input
-            var caret = value.utf8.count
-            let escaped = try Self.escaped(
-                in: snapshot.text,
-                before: range.lower,
-                remaining: &remaining,
-                budget: budget
-            )
+            // 明确选区的包围不依赖前一个字符，转义与词内引号限制只约束空光标的自动生成。
+            let escaped =
+                range.isEmpty
+                ? try Self.escaped(
+                    in: snapshot.text,
+                    before: range.lower,
+                    remaining: &remaining,
+                    budget: budget
+                )
+                : false
+            var paired = false
             if closing, command.skipExisting, !escaped, range.isEmpty, selection.virtualColumn == 0,
                 command.pair.closing.utf8.count <= snapshot.text.byteCount - range.lower,
                 snapshot.text.bytes(in: ByteRange(range.lower, range.lower + command.pair.closing.utf8.count))
@@ -60,11 +64,42 @@ public struct PreparedPairInsertion: Sendable {
             }
             else if opening && completeOpening {
                 let symmetric = command.pair.opening.utf8.elementsEqual(command.pair.closing.utf8)
-                let word = symmetric && Self.previousIsWord(in: snapshot.text, before: range.lower)
-                if !escaped && !word {
-                    value = command.pair.opening + command.pair.closing
-                    caret = command.pair.opening.utf8.count
-                }
+                let word =
+                    range.isEmpty && symmetric && Self.previousIsWord(in: snapshot.text, before: range.lower)
+                paired = !range.isEmpty || !escaped && !word
+            }
+            let retained = paired ? selection.range.count : 0
+            let ends =
+                paired
+                ? command.pair.opening.utf8.count + command.pair.closing.utf8.count
+                : command.input.utf8.count
+            // 先确认全部选择及两端的真实输出规模，不能复制巨大原选区后才发现后续目标超量。
+            guard retained <= 67_108_864 - ends,
+                (0...1_000_000).contains(selection.virtualColumn),
+                retained + ends + selection.virtualColumn <= 268_435_456 - outputBytes
+            else {
+                throw NateError.message("配对输入超过单目标 64 MiB 或共同输出 256 MiB，原选择保持不变。")
+            }
+            outputBytes += retained + ends + selection.virtualColumn
+            removedBytes += range.count
+            intents.append((entry, range, paired))
+        }
+        if indentation == nil {
+            // 没有结构前缀调整时，最终正文规模可以在复制任何选中文字前准确确定。
+            guard snapshot.text.byteCount - removedBytes <= 1_073_741_824 - outputBytes else {
+                throw NateError.message("配对输入后的正文超过 1 GiB，原选择保持不变。")
+            }
+        }
+        let targets = try intents.map { intent in
+            try budget.check()
+            let entry = intent.entry, selection = entry.selection
+            var range = intent.range
+            var value = command.input
+            var caret = value.utf8.count
+            if intent.paired {
+                let selected = snapshot.text.text(in: selection.range)
+                value = command.pair.opening + selected + command.pair.closing
+                caret = command.pair.opening.utf8.count + selected.utf8.count
             }
             if let prefix = try indentation?(entry) {
                 let adjusted = try PairIndentationPrefix.prepare(
