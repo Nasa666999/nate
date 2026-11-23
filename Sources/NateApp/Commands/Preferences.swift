@@ -26,7 +26,8 @@ extension ApplicationController {
                 showSymbols: editor?.showSymbols ?? saved.showSymbols,
                 showIndentGuides: editor?.showIndentGuides ?? saved.showIndentGuides,
                 longLineColumn: editor?.longLineColumn ?? saved.longLineColumn,
-                showLongLineGuide: editor == nil ? saved.showLongLineGuide : editor?.longLineColumn != nil
+                showLongLineGuide: editor == nil ? saved.showLongLineGuide : editor?.longLineColumn != nil,
+                showModificationHistory: editor?.showModificationHistory ?? saved.showModificationHistory
             )) ?? saved
         let form = EditorDisplayForm(settings: initial)
         let automatic = NSButton(checkboxWithTitle: "每秒自动保存与恢复保护", target: nil, action: nil)

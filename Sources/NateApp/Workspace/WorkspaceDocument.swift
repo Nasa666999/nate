@@ -57,6 +57,8 @@ final class WorkspaceDocument {
     var targetGeneration: UInt64 = 0
     var bindingChange = false
     var closing = false
+    var modificationSaveTask: Task<Void, Never>?
+    var modificationSaveGeneration = UUID()
     var state = "临时文档 · 等待恢复保存"
     var failure: String?
     var conflict = false

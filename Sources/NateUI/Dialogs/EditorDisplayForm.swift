@@ -9,6 +9,7 @@ public final class EditorDisplayForm: NSStackView {
     let wrapping = NSButton(checkboxWithTitle: "自动换行", target: nil, action: nil)
     let symbols = NSButton(checkboxWithTitle: "显示空白与控制符号", target: nil, action: nil)
     let indentation = NSButton(checkboxWithTitle: "显示缩进参考线", target: nil, action: nil)
+    let modifications = NSButton(checkboxWithTitle: "显示修改历史边栏与正文指示", target: nil, action: nil)
     let longLine = NSButton(checkboxWithTitle: "长行参考线", target: nil, action: nil)
     let column = NSTextField(string: "80")
     private let originalColumn: Int
@@ -65,6 +66,7 @@ public final class EditorDisplayForm: NSStackView {
         wrapping.state = settings.wrapLines ? .on : .off
         symbols.state = settings.showSymbols ? .on : .off
         indentation.state = settings.showIndentGuides ? .on : .off
+        modifications.state = settings.showModificationHistory ? .on : .off
         longLine.state = settings.showLongLineGuide ? .on : .off
         column.stringValue = String(settings.longLineColumn)
         column.isEnabled = longLine.state == .on
@@ -81,6 +83,7 @@ public final class EditorDisplayForm: NSStackView {
             NSTextField(labelWithString: "正文字体"), fonts,
             NSTextField(labelWithString: "字号（7–72，可用小数）"), size,
             NSTextField(labelWithString: "外观主题"), appearances, wrapping, symbols, indentation, reference,
+            modifications,
         ] {
             addArrangedSubview(view)
         }
@@ -135,7 +138,8 @@ public final class EditorDisplayForm: NSStackView {
             showSymbols: symbols.state == .on,
             showIndentGuides: indentation.state == .on,
             longLineColumn: referenceColumn,
-            showLongLineGuide: longLine.state == .on
+            showLongLineGuide: longLine.state == .on,
+            showModificationHistory: modifications.state == .on
         )
     }
 }

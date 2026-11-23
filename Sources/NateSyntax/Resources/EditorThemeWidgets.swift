@@ -49,6 +49,9 @@ extension EditorThemeXMLReader {
             "Fold": (.foldMarker, nil),
             "Change History modified": (.modificationUnsaved, nil),
             "Change History saved": (.modificationSaved, nil),
+            "Change History revert origin": (.modificationRevertedOriginal, nil),
+            "Change History revert modified": (.modificationRevertedChange, nil),
+            "Change History margin": (nil, .modificationBackground),
             "URL hovered": (.linkForeground, nil),
         ]
         guard let (foreground, background) = mapping[name] else {

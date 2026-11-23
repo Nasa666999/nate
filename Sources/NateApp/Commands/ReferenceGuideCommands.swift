@@ -29,7 +29,8 @@ extension ApplicationController {
                 showSymbols: current.showSymbols,
                 showIndentGuides: indentation,
                 longLineColumn: column ?? current.longLineColumn,
-                showLongLineGuide: column != nil
+                showLongLineGuide: column != nil,
+                showModificationHistory: window.editor.showModificationHistory
             )
             // 单项显示意图不能据此重建无法解释的完整偏好，原归档由完整设置表单明确处理。
             if displayPreferences.sourceValid {

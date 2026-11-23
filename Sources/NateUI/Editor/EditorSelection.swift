@@ -36,7 +36,8 @@ extension EditorView {
         let point = convert(event.locationInWindow, from: nil)
         let gutterX = point.x - visibleRect.minX
         let bookmarkClick = gutterX < 18
-        let foldClick = gutterX >= gutterWidth - 19 && gutterX < gutterWidth
+        // 修改历史的最右细栏止于折叠图形左侧，点击状态列只能选择行，不能取得折叠动作。
+        let foldClick = gutterX >= gutterWidth - 16 && gutterX < gutterWidth
         // 边栏动作不拥有正文提交权，候选仍在时不能借书签或折叠点击把预编辑写入正文。
         guard composition == nil || !bookmarkClick && !foldClick else {
             onStatus?("请先确认或取消当前候选，再操作书签或折叠。")
@@ -80,7 +81,7 @@ extension EditorView {
             onSelection?()
             return
         }
-        if point.x - visibleRect.minX >= gutterWidth - 19 && point.x - visibleRect.minX < gutterWidth {
+        if foldClick {
             dragAnchor = nil
             dragColumn = nil
             if let region = folds.index?.region(at: row), region.startLine == row {

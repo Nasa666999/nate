@@ -190,6 +190,14 @@ extension ApplicationController {
             menuItem.state = selected ? .on : .off
             return !closing && mainWindow != nil
         }
+        if id == "modificationHistory" {
+            menuItem.state = mainWindow?.editor.showModificationHistory == true ? .on : .off
+            return !closing && mainWindow != nil
+        }
+        if id == "previousModification" || id == "nextModification" {
+            return quickFindContext(allowingStaleRectangle: true) != nil
+                && active?.buffer.modificationSnapshot != nil
+        }
         if id == "symbols" {
             menuItem.state = mainWindow?.editor.showSymbols == true ? .on : .off
         }

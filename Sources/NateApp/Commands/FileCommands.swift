@@ -166,6 +166,7 @@ extension ApplicationController {
         }
         rememberSelectedFileDirectory(destination)
         let snapshot = document.buffer.snapshot
+        let changeSavePoint = copy ? nil : document.buffer.changeHistorySavePoint()
         let encoding = document.encoding
         let resolved = destination.resolvingSymlinksInPath().standardizedFileURL
         if documents.contains(where: {
@@ -266,6 +267,7 @@ extension ApplicationController {
                     + recentFiles.filter {
                         !$0.utf8.elementsEqual(destination.path.utf8)
                     }
+                scheduleSavedModifications(changeSavePoint, document: document)
             }
             refreshUI()
             _ = await flushRecovery()
@@ -359,6 +361,7 @@ extension ApplicationController {
             document.conflict = false
             document.failure = nil
             document.state = monitoring ? "监视中 · 已刷新" : "已重新载入"
+            let changeSavePoint = document.buffer.changeHistorySavePoint()
             mainWindow?.refreshEditors()
             if monitoring && document.buffer.primarySelection?.head == document.buffer.text.byteCount
                 && mainWindow?.editor.document.id == document.buffer.id
@@ -366,6 +369,7 @@ extension ApplicationController {
                 mainWindow?.editor.revealSelection()
             }
             refreshUI()
+            scheduleSavedModifications(changeSavePoint, document: document)
         }
         catch is CancellationError {
             return

@@ -95,6 +95,7 @@ extension ApplicationController {
             return
         }
         let snapshot = document.buffer.snapshot
+        let changeSavePoint = document.buffer.changeHistorySavePoint()
         let encoding = document.encoding
         let catalog = codecs
         let permit = CancellationToken()
@@ -138,6 +139,7 @@ extension ApplicationController {
             document.failure = nil
             document.state = "已保存"
             document.evaluateDirty()
+            scheduleSavedModifications(changeSavePoint, document: document)
             refreshUI()
         }
         catch is CancellationError {

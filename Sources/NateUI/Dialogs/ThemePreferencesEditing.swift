@@ -59,10 +59,14 @@ extension ThemePreferencesWindow {
                 .whitespace: "空白与控制符", .indentGuide: "缩进参考线", .longLineGuide: "长行参考线",
                 .bracketMatchBackground: "匹配括号背景", .bracketMismatchBackground: "未匹配括号背景",
                 .foldMarker: "折叠标记", .bookmark: "书签", .modificationSaved: "已保存修改标记",
-                .modificationUnsaved: "修改位置标记", .linkForeground: "链接",
+                .modificationUnsaved: "未保存修改标记",
+                .modificationRevertedOriginal: "撤回原文标记",
+                .modificationRevertedChange: "撤回已有修改标记",
+                .modificationBackground: "修改历史边栏背景",
+                .linkForeground: "链接",
             ]
             choices = EditorThemeColorRole.allCases.filter {
-                ![.modificationSaved, .linkForeground].contains($0)
+                $0 != .linkForeground
             }.map {
                 SyntaxThemeChoice(key: $0.rawValue, name: names[$0] ?? $0.rawValue)
             }

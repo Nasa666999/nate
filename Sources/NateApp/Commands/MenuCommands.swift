@@ -201,6 +201,8 @@ extension ApplicationController: NSMenuItemValidation {
         for (title, id) in [
             ("自动换行", "wrap"), ("显示符号", "symbols"), ("缩进参考线", "indentGuides"),
             ("长行参考线", "longLineGuide"), ("放大", "zoomIn"), ("缩小", "zoomOut"),
+            ("修改历史边栏与指示", "modificationHistory"),
+            ("上一处修改", "previousModification"), ("下一处修改", "nextModification"),
             ("重置缩放", "zoomReset"), ("浅色主题", "themeLight"), ("深色主题", "themeDark"), ("系统主题", "themeSystem"),
             ("左右分屏 / 克隆", "splitVertical"), ("上下分屏 / 克隆", "splitHorizontal"), ("关闭分屏", "unsplit"),
             ("垂直同步滚动", "syncVerticalScroll"), ("水平同步滚动", "syncHorizontalScroll"),

@@ -32,6 +32,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 textHighlights.removeAll()
                 textHighlightDisplayStatus = nil
                 referenceGuideStatus = nil
+                modificationDisplayStatus = nil
                 cancelSelectedTextHighlights()
             }
             if let state = document.selectionState {
@@ -165,6 +166,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public internal(set) var showIndentGuides = true
     public internal(set) var longLineColumn: Int?
     public internal(set) var referenceGuideStatus: String?
+    public var showModificationHistory = true
+    public internal(set) var modificationDisplayStatus: String?
     public var indentationSettings = IndentationSettings()
     public var pairInsertionSettings = PairInsertionSettings()
     public var tabSettings = TabSettings() {

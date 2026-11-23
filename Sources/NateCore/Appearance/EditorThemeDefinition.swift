@@ -18,6 +18,9 @@ public enum EditorThemeColorRole: String, Codable, Sendable, CaseIterable {
     case bookmark
     case modificationSaved
     case modificationUnsaved
+    case modificationRevertedOriginal
+    case modificationRevertedChange
+    case modificationBackground
     case linkForeground
 }
 

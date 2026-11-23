@@ -72,6 +72,7 @@ extension ApplicationController {
             return
         }
         let snapshot = document.buffer.snapshot
+        let changeSavePoint = document.buffer.changeHistorySavePoint()
         let encoding = document.encoding
         let baseline = document.baseline
         let generation = document.targetGeneration
@@ -136,6 +137,7 @@ extension ApplicationController {
                 document.state = "已保存"
                 // 保存 B 在途时撤销回 A，完成后仍需把 A 安排到后续周期。
                 document.evaluateDirty()
+                self.scheduleSavedModifications(changeSavePoint, document: document)
                 return true
             }
             catch is CancellationError {

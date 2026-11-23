@@ -1,0 +1,12 @@
+修改历史的插入、删除、保存与撤销分类依据 Scintilla 的 ChangeHistory.cxx、RunStyles.cxx 和 SparseVector.h。
+
+Copyright 2022 by Neil Hodgson <neilh@scintilla.org>
+Copyright 1998-2007 by Neil Hodgson <neilh@scintilla.org>
+Copyright 2016 by Neil Hodgson <neilh@scintilla.org>
+
+来源：
+https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/scintilla/src/ChangeHistory.cxx
+https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/scintilla/src/RunStyles.cxx
+https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/scintilla/src/SparseVector.h
+
+许可全文见同目录的 Lexilla-LICENSE.txt。

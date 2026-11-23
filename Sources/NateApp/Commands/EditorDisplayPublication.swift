@@ -42,7 +42,8 @@ extension ApplicationController {
                 showSymbols: current.showSymbols,
                 showIndentGuides: current.showIndentGuides,
                 longLineColumn: current.longLineColumn,
-                showLongLineGuide: current.showLongLineGuide
+                showLongLineGuide: current.showLongLineGuide,
+                showModificationHistory: current.showModificationHistory
             )
             // 主题菜单只有单项外观意图，不能据此覆盖无法解释的完整字体和显示配置。
             guard displayPreferences.sourceValid else {

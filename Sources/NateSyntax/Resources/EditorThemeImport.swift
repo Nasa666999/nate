@@ -55,7 +55,7 @@ public enum EditorThemeImport {
     /// 返回：当前只保存、不改变界面的有限角色说明。
     static func retainedRoleReports(_ definition: EditorThemeDefinition) -> [String] {
         let roles: [EditorThemeColorRole] = [
-            .modificationSaved, .linkForeground,
+            .linkForeground
         ]
         return roles.compactMap {
             definition.colors[$0.rawValue] == nil ? nil : "配色定义已保留，当前尚无对应绘制：" + $0.rawValue

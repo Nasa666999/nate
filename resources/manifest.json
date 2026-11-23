@@ -557,6 +557,10 @@
       "sha256" : "361b5082fe65b118b87104f21c84bc3067ad13f5494954b09451a2464c121abf"
     },
     {
+      "path" : "licenses\/ChangeHistory-NOTICE.txt",
+      "sha256" : "96f5604c7b0cee4495113bdc5ff7bef2d6679ce032d6dc32d02e7e74c5fda7cf"
+    },
+    {
       "path" : "licenses\/Guides-NOTICE.txt",
       "sha256" : "908607459478cfe926ca503c28bfe92c6b4a09bedc3b57e44d7495d995e84729"
     },

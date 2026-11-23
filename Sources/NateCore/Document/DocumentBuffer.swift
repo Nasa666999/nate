@@ -98,7 +98,9 @@ public final class DocumentBuffer {
     public private(set) var bookmarkGeneration = UUID()
     public internal(set) var marks = DocumentMarkState()
     public internal(set) var markGeneration = UUID()
-    public var modifiedLines: Set<Int> = []
+    var changeTimeline: ChangeHistoryTimeline?
+    var changeClassificationAvailable = true
+    public internal(set) var modificationStatus: String?
     public var historyLimit = 1000
     public var historyByteLimit = 256 * 1024 * 1024
     public private(set) var discardedHistoryEntries = 0
@@ -147,6 +149,7 @@ public final class DocumentBuffer {
         self.text = PieceTree(text)
         self.format = format
         self.revision = revision
+        changeTimeline = try? ChangeHistoryTimeline(length: self.text.byteCount)
     }
 
     /// 业务作用：后台加载或恢复已经构建好的分块正文在主执行域直接接管，不再展开全文。
@@ -161,6 +164,7 @@ public final class DocumentBuffer {
         self.text = text
         self.format = format
         self.revision = revision
+        changeTimeline = try? ChangeHistoryTimeline(length: text.byteCount)
     }
 
     /// 业务作用：唯一正文提交入口，全部校验完成后一次发布历史、选区和单调修订。
@@ -347,11 +351,7 @@ public final class DocumentBuffer {
         redoEntries.removeAll()
         historyFailure = nil
         bookmarks = bookmarksAfter
-        modifiedLines.formUnion(
-            changes.map {
-                text.lineNumber(at: min($0.range.lower, text.byteCount))
-            }
-        )
+        recordDocumentModification(entry: entry, backwards: nil, undoCount: undoEntries.count)
         return true
     }
 
@@ -486,6 +486,7 @@ public final class DocumentBuffer {
         recordPositions(request.backwards ? entry.backwardPositions : entry.forwardPositions)
         revision += 1
         historyFailure = nil
+        recordDocumentModification(entry: entry, backwards: request.backwards, undoCount: undoEntries.count)
     }
 
     /// 业务作用：同步调用者复用与后台历史相同的准备和发布门禁，不产生第二套撤销行为。

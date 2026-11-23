@@ -353,6 +353,10 @@ extension ApplicationController {
             mainWindow?.editor.needsDisplay = true
         case "indentGuides", "longLineGuide":
             toggleReferenceGuide(id)
+        case "modificationHistory":
+            toggleModificationHistory()
+        case "previousModification", "nextModification":
+            navigateModification(backwards: id == "previousModification")
         case "zoomIn", "zoomOut", "zoomReset":
             mainWindow?.editor.zoomFont(by: id == "zoomReset" ? nil : (id == "zoomIn" ? 1 : -1))
         case "themeLight":

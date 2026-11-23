@@ -118,5 +118,6 @@ extension ApplicationController {
             indentation: settings.showIndentGuides,
             column: settings.showLongLineGuide ? settings.longLineColumn : nil
         )
+        window?.setModificationHistory(settings.showModificationHistory)
     }
 }

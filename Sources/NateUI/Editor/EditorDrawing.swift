@@ -29,7 +29,9 @@ extension EditorView {
         markDisplayStatus = nil
         textHighlightDisplayStatus = nil
         referenceGuideStatus = nil
+        modificationDisplayStatus = nil
         var guides = referenceGuideFrame()
+        var modifications = modificationFrame()
         for line in visibleLines {
             let layout = layoutLine(line)
             let y = projection.y(of: line) + 8
@@ -67,6 +69,7 @@ extension EditorView {
             layout.draw(at: NSPoint(x: gutterWidth, y: y), in: context)
             drawThemeSelectionForeground(in: layout, y: y, context: context)
             drawIndentationGuides(in: layout, line: line, y: y, frame: &guides, context: context)
+            drawModificationIndicators(in: layout, y: y, frame: &modifications, context: context)
             if showSymbols {
                 drawSymbols(layout: layout, y: y)
             }
@@ -138,15 +141,7 @@ extension EditorView {
                     )
                 ).fill()
             }
-            if document.modifiedLines.contains(line) {
-                themeColor(.modificationUnsaved, fallback: .systemGreen).setFill()
-                NSRect(
-                    x: visibleRect.minX + gutterWidth - 21,
-                    y: projection.y(of: line) + 8,
-                    width: 2,
-                    height: lineHeight
-                ).fill()
-            }
+            drawModificationMarker(line: line, frame: &modifications)
             drawFoldMarker(line: line)
         }
         let viewport = enclosingScrollView?.contentSize ?? bounds.size
