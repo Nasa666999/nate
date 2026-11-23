@@ -1,0 +1,8 @@
+汇编词法与折叠适配参考 Lexilla 的 LexAsm.cxx 中 MASM／NASM 模式。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexAsm.cxx
+
+原实现作者：The Black Horus、Kein-Hong Man、Udo Lechner、Neil Hodgson。
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留八组有序词表、三类引号、反斜杠物理续行、COMMENT 指令注释、
+语法及注释标记折叠；分类只读取固定原文，不执行汇编指令或展开宏。

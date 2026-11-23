@@ -113,6 +113,8 @@ public struct SyntaxState: Sendable, Equatable {
     var pascalCache = PascalLexicalCache()
     var nncrontab = NncronLexicalState()
     var nncrontabCache = NncronLexicalCache()
+    var asm = ASMLexicalState()
+    var asmCache = ASMLexicalCache()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -143,6 +145,7 @@ public struct SyntaxScanner: Sendable {
     let cmakeRules: CMakeRules?
     let pascalRules: PascalRules?
     let nncrontabRules: NncronRules?
+    let asmRules: ASMRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -179,6 +182,7 @@ public struct SyntaxScanner: Sendable {
         pascalRules = language.id == "pascal" ? PascalRules(language: language, deadline: self.deadline) : nil
         nncrontabRules =
             language.id == "nncrontab" ? NncronRules(language: language, deadline: self.deadline) : nil
+        asmRules = language.id == "asm" ? ASMRules(language: language, deadline: self.deadline) : nil
         scriptRules =
             ["javascript.js", "typescript"].contains(language.id)
             ? ScriptRules(language: language, deadline: self.deadline) : nil
@@ -187,13 +191,14 @@ public struct SyntaxScanner: Sendable {
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
                 "objc", "r", "lua", "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab",
+                "asm",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
         if [
             "makefile", "rust", "yaml", "powershell", "objc", "r", "lua", "javascript.js", "typescript",
-            "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab",
+            "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm",
         ]
         .contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
@@ -225,6 +230,21 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        // 汇编指令、引号及续行资格属于同一完整规则，语言切换必须撤销旧状态。
+        guard state.asm.resource == nil || language.id == "asm" else {
+            state.diagnostic = "词法语言已改变，不能继续汇编的原状态。"
+            return []
+        }
+        if language.id == "asm" {
+            return ASMLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: asmRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         // nnCron 环境变量及字面资格属于同一完整规则，语言切换不能延续此前的原文状态。
         guard state.nncrontab.resource == nil || language.id == "nncrontab" else {
             state.diagnostic = "词法语言已改变，不能继续 nnCron 的原状态。"

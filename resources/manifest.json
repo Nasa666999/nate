@@ -9,6 +9,10 @@
       "sha256" : "54ccb7d7cc016ffabf427ffd048fde9e580415e0b6306893307138212f43d09b"
     },
     {
+      "path" : "completion\/asm.xml",
+      "sha256" : "07bc1a67caff327d97cb9b39aae9009935abd8473a423f1fd1591e6312c192ea"
+    },
+    {
       "path" : "completion\/autoit.xml",
       "sha256" : "9c2db3e75c3b2a74b246daa9e682ec44b8f46173bc8983cae4b2554a6760ea71"
     },
@@ -542,7 +546,11 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "7e71a868d9eb9e4c0039cd96bca87c8b107fe409b7351b4b3db326e919f1173e"
+      "sha256" : "f0c103380d9664de946c12e8d45c2e6cf61fdd70667dfbd46f1c17f9a29ecd46"
+    },
+    {
+      "path" : "licenses\/ASM-NOTICE.txt",
+      "sha256" : "d9ff19b73e75309dd1a27c0dd001660f8215258c85ef07e9cd8a582fab6a3e37"
     },
     {
       "path" : "licenses\/Batch-NOTICE.txt",
