@@ -77,6 +77,7 @@ public struct SyntaxToken: Sendable {
             || lexicalStyle == "script:9"
             || lexicalStyle == "nncrontab:2"
             || lexicalStyle == "ada:11"
+            || lexicalStyle == "autoit:12"
             || ["pascal:5", "pascal:6", "pascal:14"].contains(lexicalStyle)
     }
 }
@@ -122,6 +123,8 @@ public struct SyntaxState: Sendable, Equatable {
     var adaCache = AdaLexicalCache()
     var asn1 = ASN1LexicalState()
     var asn1Cache = ASN1LexicalCache()
+    var autoit = AutoItLexicalState()
+    var autoitCache = AutoItLexicalCache()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -156,6 +159,7 @@ public struct SyntaxScanner: Sendable {
     let fortranRules: FortranRules?
     let adaRules: AdaRules?
     let asn1Rules: ASN1Rules?
+    let autoitRules: AutoItRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -198,6 +202,7 @@ public struct SyntaxScanner: Sendable {
             ? FortranRules(language: language, deadline: self.deadline) : nil
         adaRules = language.id == "ada" ? AdaRules(language: language, deadline: self.deadline) : nil
         asn1Rules = language.id == "asn1" ? ASN1Rules(language: language, deadline: self.deadline) : nil
+        autoitRules = language.id == "autoit" ? AutoItRules(language: language, deadline: self.deadline) : nil
         scriptRules =
             ["javascript.js", "typescript"].contains(language.id)
             ? ScriptRules(language: language, deadline: self.deadline) : nil
@@ -206,7 +211,7 @@ public struct SyntaxScanner: Sendable {
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
                 "objc", "r", "lua", "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab",
-                "asm", "fortran", "fortran77", "ada", "asn1",
+                "asm", "fortran", "fortran77", "ada", "asn1", "autoit",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
@@ -214,7 +219,7 @@ public struct SyntaxScanner: Sendable {
         if [
             "makefile", "rust", "yaml", "powershell", "objc", "r", "lua", "javascript.js", "typescript",
             "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm", "fortran",
-            "fortran77", "ada", "asn1",
+            "fortran77", "ada", "asn1", "autoit",
         ]
         .contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。

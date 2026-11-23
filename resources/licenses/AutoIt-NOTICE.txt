@@ -1,0 +1,9 @@
+AutoIt 词法适配参考 Lexilla 的 LexAU3.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexAU3.cxx
+
+原实现作者：Jos van der Zande。
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留 Notepad++ 已启用的七组词表、十五类样式、SendKeys、
+块注释与续行字面、控制流及区域和连续注释、预处理折叠。
+上游词法器的第八组 UDF 词表不属于该内置语言的启用范围。

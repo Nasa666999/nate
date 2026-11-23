@@ -9,6 +9,21 @@ extension SyntaxScanner {
     /// - state: 本次调用流程独立持有的完整连续状态。
     /// 返回：适用词法器的完整结果，拒绝时返回空数组及诊断；其它语言返回空值交由通用入口处理。
     func nativeHighlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken]? {
+        // AutoIt 的块注释、include 与续行字面只属于同一完整规则，语言切换必须重建原文资格。
+        guard state.autoit.resource == nil || language.id == "autoit" else {
+            state.diagnostic = "词法语言已改变，不能继续 AutoIt 的原状态。"
+            return []
+        }
+        if language.id == "autoit" {
+            return AutoItLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: autoitRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         // OID 与跨行字符串只属于同一 ASN.1 规则，语言切换必须重建连续原文资格。
         guard state.asn1.resource == nil || language.id == "asn1" else {
             state.diagnostic = "词法语言已改变，不能继续 ASN.1 的原状态。"

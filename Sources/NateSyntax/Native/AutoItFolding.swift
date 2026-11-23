@@ -1,0 +1,121 @@
+import Foundation
+import NateCore
+
+enum AutoItFolding {
+    /// 业务作用：AutoIt 将同源完整类别转换为控制流、分支、区域、预处理及连续注释折叠，原生首词与行尾资格只能引用本轮固定正文。
+    /// 参数说明:
+    /// - snapshot: 本轮固定的完整正文。
+    /// - language: 当前完整七组词表与十五种样式。
+    /// - deadline: 原文读取、词法、层级计算和范围发布共同的截止。
+    /// 返回：至多 65536 个完整多行范围；正文、行数、层级或计算证据不足时拒绝全部折叠。
+    static func regions(
+        snapshot: DocumentSnapshot,
+        language: LanguageDefinition,
+        deadline: ContinuousClock.Instant
+    ) throws -> [FoldRegion] {
+        let tree = snapshot.text
+        guard tree.byteCount <= 64 * 1024 * 1024, tree.lineCount <= 1_048_576 else {
+            throw NateError.message("AutoIt 折叠超过正文或物理行数预算。")
+        }
+        guard AutoItRules(language: language, deadline: deadline) != nil else {
+            throw NateError.message("AutoIt折叠缺少完整七组规则与样式。")
+        }
+        var budget = ANSILexingBudget(deadline: deadline, maximumSteps: 134_217_728)
+        try budget.check()
+        let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
+        var state = SyntaxState()
+        var classes = Array(repeating: UInt8(0), count: tree.byteCount)
+        var starts: [Int] = []
+        for line in 0..<tree.lineCount {
+            try budget.check()
+            let range = try ANSILexing.physicalRange(tree.lineRange(line), tree: tree, budget: &budget)
+            guard range.count <= 1_048_576 else {
+                throw NateError.message("AutoIt 折叠涉及超过 1 MiB 的物理行。")
+            }
+            starts.append(range.lower)
+            let tokens = scanner.highlight(tree.text(in: range), base: range.lower, state: &state)
+            // 未确认词法证据不能借部分关键字隐藏正文，任一物理行失败即撤销整份折叠候选。
+            guard state.diagnostic == nil else {
+                throw NateError.message(state.diagnostic ?? "AutoIt 折叠缺少完整词法证据。")
+            }
+            for token in tokens {
+                guard token.lexicalStyle.hasPrefix(language.id + ":"),
+                    let style = UInt8(token.lexicalStyle.dropFirst(language.id.utf8.count + 1)), style <= 14,
+                    token.range.lower >= range.lower, token.range.upper <= range.upper
+                else {
+                    throw NateError.message("AutoIt 折叠缺少当前物理行的明确样式身份。")
+                }
+                for position in token.range.lower..<token.range.upper {
+                    try budget.consume()
+                    classes[position] = style
+                }
+            }
+        }
+        let raw = tree.bytes(in: ByteRange(0, tree.byteCount))
+        var folding = AutoItFoldScanner(
+            bytes: raw,
+            styles: classes,
+            starts: starts,
+            budget: budget
+        )
+        let levels = try folding.levels()
+        budget = folding.budget
+        return try publish(levels, snapshot: snapshot, budget: &budget)
+    }
+
+    /// 业务作用：确认的原生层级一次转换为完整多行范围，后续容量失败不能让部分正文提前取得隐藏资格。
+    /// 参数说明:
+    /// - levels: 同一完整正文逐行确认的有限原生层级。
+    /// - snapshot: 本轮唯一固定正文。
+    /// - budget: 词法、层级及范围发布共同的预算。
+    /// 返回：至多 65536 个完整多行范围；层级字段、行数或共同预算不足时整份抛错。
+    static func publish(
+        _ levels: [Int],
+        snapshot: DocumentSnapshot,
+        budget: inout ANSILexingBudget
+    ) throws -> [FoldRegion] {
+        let tree = snapshot.text
+        guard tree.byteCount <= 67_108_864, tree.lineCount <= 1_048_576,
+            levels.count == tree.lineCount
+        else {
+            throw NateError.invalidRange
+        }
+        var ends = Array(repeating: levels.count - 1, count: levels.count)
+        var stack: [Int] = []
+        for index in levels.indices {
+            try budget.consume()
+            // 高低层级与原生头标志以外的位不能进入隐藏范围，负数或截断标志不作为结构证据。
+            guard levels[index] >= 0, levels[index] & ~0x0FFF2FFF == 0 else {
+                throw NateError.message("AutoIt 折叠缺少有效的完整层级字段。")
+            }
+            while let parent = stack.last, levels[index] & 4095 <= levels[parent] & 4095 {
+                ends[parent] = index - 1
+                stack.removeLast()
+            }
+            if levels[index] & 8192 != 0 {
+                stack.append(index)
+            }
+        }
+        var output: [FoldRegion] = []
+        for index in levels.indices where levels[index] & 8192 != 0 {
+            try budget.consume()
+            let end = ends[index]
+            if end <= index {
+                continue
+            }
+            guard output.count < 65_536 else {
+                throw NateError.message("AutoIt 折叠超过 65536 个完整范围。")
+            }
+            output.append(
+                FoldRegion(
+                    range: ByteRange(tree.lineRange(index).lower, tree.lineRange(end).upper),
+                    startLine: index,
+                    endLine: end,
+                    level: 0
+                )
+            )
+        }
+        try budget.check()
+        return output
+    }
+}
