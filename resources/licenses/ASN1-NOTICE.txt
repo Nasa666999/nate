@@ -1,0 +1,8 @@
+ASN.1 词法适配参考 Lexilla 的 LexAsn1.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexAsn1.cxx
+
+原实现作者：Herr Pfarrer (rpfarrer)，Copyright 2004。
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留四组有序原拼写词表、跨行字符串、赋值操作符及 OID 通道，
+并按完整 Unicode 标量呈现正文；原始折叠函数不产生折叠范围。

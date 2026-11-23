@@ -4102,7 +4102,195 @@
       "read-only",
       "read-write",
       "write"
-    ]
+    ],
+    "keywordGroups": {
+      "instre1": [
+        "ACCESS",
+        "AGENT",
+        "AUGMENTS",
+        "BEGIN",
+        "BITS",
+        "CAPABILITIES",
+        "CHOICE",
+        "COMPLIANCE",
+        "CONTACT",
+        "CONVENTION",
+        "DEFINITIONS",
+        "DEFVAL",
+        "DESCRIPTION",
+        "DISPLAY",
+        "END",
+        "ENTERPRISE",
+        "EXPORTS",
+        "FALSE",
+        "FROM",
+        "GROUP",
+        "GROUPS",
+        "HINT",
+        "IDENTITY",
+        "IMPLIED",
+        "IMPORTS",
+        "INCLUDES",
+        "INDEX",
+        "INFO",
+        "LAST",
+        "MANDATORY",
+        "MAX",
+        "MIN",
+        "MODULE",
+        "NOTATION",
+        "NOTIFICATION",
+        "NULL",
+        "OBJECTS",
+        "OBJECT-TYPE",
+        "OF",
+        "ORGANIZATION",
+        "PRODUCT",
+        "RELEASE",
+        "REFERENCE",
+        "REQUIRES",
+        "REVISION",
+        "SEQUENCE",
+        "SIZE",
+        "STATUS",
+        "SUPPORTS",
+        "SYNTAX",
+        "TEXTUAL",
+        "TRAP",
+        "TYPE",
+        "TRAP-TYPE",
+        "UPDATED",
+        "VALUE",
+        "VARIABLES",
+        "VARIATION",
+        "WRITE"
+      ],
+      "instre2": [
+        "accessible",
+        "create",
+        "current",
+        "deprecated",
+        "for",
+        "mandatory",
+        "not",
+        "notify",
+        "not-accessible",
+        "obsolete",
+        "only",
+        "optional",
+        "read",
+        "read-only",
+        "read-write",
+        "write"
+      ],
+      "type1": [
+        "ABSENT",
+        "ANY",
+        "APPLICATION",
+        "BIT",
+        "BOOLEAN",
+        "BY",
+        "COMPONENT",
+        "COMPONENTS",
+        "DEFAULT",
+        "DEFINED",
+        "ENUMERATED",
+        "EXPLICIT",
+        "EXTERNAL",
+        "IMPLICIT",
+        "INIFINITY",
+        "MAX",
+        "MIN",
+        "MINUS",
+        "OPTIONAL",
+        "PRESENT",
+        "PRIVATE",
+        "REAL",
+        "SET",
+        "TAGS",
+        "TRUE"
+      ],
+      "type2": [
+        "Counter",
+        "Counter32",
+        "Counter64",
+        "DisplayString",
+        "Gauge",
+        "Gauge32",
+        "IDENTIFIER",
+        "INTEGER",
+        "Integer32",
+        "IpAddress",
+        "NetworkAddress",
+        "NsapAddress",
+        "OBJECT",
+        "OCTET",
+        "Opaque",
+        "PhysAddress",
+        "STRING",
+        "TimeTicks",
+        "UInteger32",
+        "UNITS",
+        "Unsigned32"
+      ]
+    },
+    "lexicalStyles": {
+      "0": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "1": {
+        "foreground": "#007F00",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "2": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "3": {
+        "foreground": "#7F007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "4": {
+        "foreground": "#007F7F",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "5": {
+        "foreground": "#7F0000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "6": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "7": {
+        "foreground": "#F07800",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "8": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "9": {
+        "foreground": "#00007F",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "10": {
+        "foreground": "#222222",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      }
+    }
   },
   {
     "id": "asp",

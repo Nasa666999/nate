@@ -17,6 +17,10 @@
       "sha256" : "07bc1a67caff327d97cb9b39aae9009935abd8473a423f1fd1591e6312c192ea"
     },
     {
+      "path" : "completion\/asn1.xml",
+      "sha256" : "9a79f2f098b95dc441a4bf31c4636a6b4649c7b32d86223d5213608c585cf493"
+    },
+    {
       "path" : "completion\/autoit.xml",
       "sha256" : "9c2db3e75c3b2a74b246daa9e682ec44b8f46173bc8983cae4b2554a6760ea71"
     },
@@ -558,11 +562,15 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "45a4d6db8cfa2d8360eb557a90509d9f510d3ffb8f3a7e08ac7a24921b3ac811"
+      "sha256" : "367ff9ee0651b18588a0f812733ef687858ae3f678c73322c6437b6330c8e49d"
     },
     {
       "path" : "licenses\/ASM-NOTICE.txt",
       "sha256" : "d9ff19b73e75309dd1a27c0dd001660f8215258c85ef07e9cd8a582fab6a3e37"
+    },
+    {
+      "path" : "licenses\/ASN1-NOTICE.txt",
+      "sha256" : "ae3aa68c5b86c6c4e719642e695522b30c390698de8b4b573828820e168a10cb"
     },
     {
       "path" : "licenses\/Ada-NOTICE.txt",
