@@ -9,6 +9,8 @@ extension EditorView {
     public override func draw(_ dirtyRect: NSRect) {
         prepareSelectedTextHighlights()
         prepareBracketAnalysis()
+        prepareTextLinks()
+        refreshTextLinkHover()
         themeColor(.background, fallback: .textBackgroundColor).setFill()
         dirtyRect.fill()
         let tree = displayTree
@@ -32,6 +34,7 @@ extension EditorView {
         modificationDisplayStatus = nil
         var guides = referenceGuideFrame()
         var modifications = modificationFrame()
+        var links = textLinkFrame()
         for line in visibleLines {
             let layout = layoutLine(line)
             let y = projection.y(of: line) + 8
@@ -40,6 +43,7 @@ extension EditorView {
                 continue
             }
             drawSyntaxBackgrounds(in: layout, y: y, context: context, budget: &markBudget)
+            drawTextLinkBackground(in: layout, line: line, y: y, frame: &links, context: context)
             if line == active {
                 themeColor(
                     .currentLineBackground,
@@ -67,6 +71,7 @@ extension EditorView {
             drawVirtualRectangle(in: layout, line: line, y: y)
             drawBracketMatch(in: layout, y: y)
             layout.draw(at: NSPoint(x: gutterWidth, y: y), in: context)
+            drawTextLinkIndicators(in: layout, line: line, y: y, frame: &links, context: context)
             drawThemeSelectionForeground(in: layout, y: y, context: context)
             drawIndentationGuides(in: layout, line: line, y: y, frame: &guides, context: context)
             drawModificationIndicators(in: layout, y: y, frame: &modifications, context: context)

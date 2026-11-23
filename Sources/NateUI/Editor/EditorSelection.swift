@@ -57,6 +57,9 @@ extension EditorView {
             onStatus?(reason)
             return
         }
+        if composition == nil, openTextLink(with: event) {
+            return
+        }
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard finishComposition() else {
             return

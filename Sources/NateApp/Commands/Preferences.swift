@@ -27,7 +27,8 @@ extension ApplicationController {
                 showIndentGuides: editor?.showIndentGuides ?? saved.showIndentGuides,
                 longLineColumn: editor?.longLineColumn ?? saved.longLineColumn,
                 showLongLineGuide: editor == nil ? saved.showLongLineGuide : editor?.longLineColumn != nil,
-                showModificationHistory: editor?.showModificationHistory ?? saved.showModificationHistory
+                showModificationHistory: editor?.showModificationHistory ?? saved.showModificationHistory,
+                textLinks: editor?.textLinkSettings ?? saved.textLinks
             )) ?? saved
         let form = EditorDisplayForm(settings: initial)
         let automatic = NSButton(checkboxWithTitle: "每秒自动保存与恢复保护", target: nil, action: nil)
@@ -63,7 +64,7 @@ extension ApplicationController {
             }
             do {
                 let selected = try form.settings()
-                try saveDisplaySettings(selected)
+                try applyDisplayDraft(selected, initial: initial, saved: saved)
                 autosaveEnabled = automatic.state == .on
                 domain.set(autosaveEnabled, forKey: "autosaveEnabled")
                 refreshUI()

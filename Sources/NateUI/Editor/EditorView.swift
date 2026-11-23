@@ -33,6 +33,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 textHighlightDisplayStatus = nil
                 referenceGuideStatus = nil
                 modificationDisplayStatus = nil
+                textLinks.reset()
+                toolTip = nil
                 cancelSelectedTextHighlights()
             }
             if let state = document.selectionState {
@@ -68,6 +70,27 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public internal(set) var focusGeneration = UUID()
     public var selectedTextHighlightContext: (() -> SelectedTextHighlightContext?)?
     let selectedTextHighlights = SelectedTextHighlightRuntime()
+    let textLinks = EditorTextLinkRuntime()
+    /// 业务作用：链接设置只改变派生页面及呈现，配置往返也撤销旧任务的点击资格。
+    /// 参数说明: 无。
+    /// 返回：完整设置改变时清除旧页并重新安排绘制，正文、输入法、选择及排版保持。
+    public var textLinkSettings = TextLinkSettings() {
+        didSet {
+            if oldValue != textLinkSettings {
+                textLinks.reset()
+                toolTip = nil
+                updateTrackingAreas()
+                window?.invalidateCursorRects(for: self)
+                needsDisplay = true
+            }
+        }
+    }
+    /// 业务作用：工作区只读取当前视图的链接能力说明，不用其它克隆的失败掩盖本视口状态。
+    /// 参数说明: 无。
+    /// 返回：当前链接识别或绘制的说明，为空表示没有需要反馈的链接状态。
+    public var textLinkStatus: String? {
+        textLinks.status
+    }
     var observedRevision: UInt64 = 0
     var projection = VisualLineMap()
     var layoutMetrics: EditorLayoutMetrics?
@@ -141,6 +164,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var onSelection: (() -> Void)?
     public var onCommand: ((String) -> Void)?
     public var onOpenURLs: (([URL]) -> Void)?
+    public var onOpenTextLink: ((EditorView, DocumentTextLink, DocumentTextLinkPage) -> Void)?
     public var font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) {
         didSet {
             if oldValue != font {
@@ -329,6 +353,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             revealSelection()
         }
         inputContext?.invalidateCharacterCoordinates()
+        window?.invalidateCursorRects(for: self)
     }
 
     /// 业务作用：按可见逻辑行建立原生布局，限制缓存占用。
@@ -442,8 +467,12 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 返回：不再有解析任务或候选面板持有已关闭视图。
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        window?.acceptsMouseMovedEvents = true
+        updateTrackingAreas()
         observeBracketFocus()
         if window == nil {
+            textLinks.reset()
+            toolTip = nil
             boundaries.cancelDelimiterSelection()
             clipboard.cancel()
             cancelSelectedTextHighlights()

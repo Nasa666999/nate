@@ -106,7 +106,8 @@ extension ApplicationController {
             let temporary: String? = marks ?? editor.textHighlightDisplayStatus
             let selected: String? =
                 temporary ?? editor.selectedTextHighlightStatus ?? editor.referenceGuideStatus
-                ?? editor.modificationDisplayStatus ?? active.buffer.modificationStatus
+                ?? editor.modificationDisplayStatus ?? editor.textLinkStatus
+                ?? active.buffer.modificationStatus
             let preferences: String? =
                 selected ?? selectedTextPreferences.failure ?? tabPreferences.warning ?? tabPreferences
                 .layoutWarning

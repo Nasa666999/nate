@@ -1,0 +1,9 @@
+正文链接的字面扫描、查询引用与尾部裁剪依据 Notepad++ 的 Notepad_plus.cpp。
+
+Copyright (C)2021 Don HO <don.h@free.fr>
+
+来源：
+https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/PowerEditor/src/Notepad_plus.cpp
+
+此部分依据 GNU General Public License 第三版或更新版本提供。
+许可全文见同目录的 NotepadPlusPlus-GPL.txt。

@@ -51,6 +51,8 @@ extension EditorWindow {
         clone.editorTheme = editor.editorTheme
         clone.showIndentGuides = editor.showIndentGuides
         clone.showModificationHistory = editor.showModificationHistory
+        clone.textLinkSettings = editor.textLinkSettings
+        clone.onOpenTextLink = editor.onOpenTextLink
         clone.longLineColumn = editor.longLineColumn
         clone.onStatus = {
             [weak self] message in self?.status.stringValue = message

@@ -38,7 +38,7 @@ public enum EditorThemeImport {
             let definition = try EditorThemeCodec.decode(data, permit: permit)
             return EditorThemeImportResult(
                 definition: definition,
-                reports: retainedRoleReports(definition),
+                reports: [],
                 omittedReportCount: 0
             )
         }
@@ -49,18 +49,6 @@ public enum EditorThemeImport {
         return try reader.parse(data)
     }
 
-    /// 业务作用：尚无对应绘制的整体角色保留定义并明确说明，导入成功不代表所有外部部件均已呈现。
-    /// 参数说明:
-    /// - definition: 已完整校验且可保留的主题。
-    /// 返回：当前只保存、不改变界面的有限角色说明。
-    static func retainedRoleReports(_ definition: EditorThemeDefinition) -> [String] {
-        let roles: [EditorThemeColorRole] = [
-            .linkForeground
-        ]
-        return roles.compactMap {
-            definition.colors[$0.rawValue] == nil ? nil : "配色定义已保留，当前尚无对应绘制：" + $0.rawValue
-        }
-    }
 }
 
 struct EditorThemeXMLReader {
@@ -109,9 +97,6 @@ struct EditorThemeXMLReader {
             kindStyles: kinds,
             languageStyles: styles
         )
-        for message in EditorThemeImport.retainedRoleReports(definition) {
-            report(message)
-        }
         _ = try EditorThemeSnapshot(definition)
         try check()
         return EditorThemeImportResult(

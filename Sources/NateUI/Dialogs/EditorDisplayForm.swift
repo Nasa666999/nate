@@ -12,6 +12,14 @@ public final class EditorDisplayForm: NSStackView {
     let modifications = NSButton(checkboxWithTitle: "显示修改历史边栏与正文指示", target: nil, action: nil)
     let longLine = NSButton(checkboxWithTitle: "长行参考线", target: nil, action: nil)
     let column = NSTextField(string: "80")
+    let pages = NSTabView()
+    let sections = NSSegmentedControl(
+        labels: ["字体与显示", "链接"],
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
+    let linkForm: TextLinkForm
     private let originalColumn: Int
 
     /// 业务作用：原生表单保留完整显示偏好，已配置但当前不可用的字体不会因打开设置被丢弃。
@@ -20,6 +28,7 @@ public final class EditorDisplayForm: NSStackView {
     /// 返回：可独立读取和取消的设置草稿，不发布全局外观或修改正文。
     public init(settings: EditorDisplaySettings) {
         originalColumn = settings.longLineColumn
+        linkForm = TextLinkForm(settings: settings.textLinks)
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
@@ -79,17 +88,51 @@ public final class EditorDisplayForm: NSStackView {
         fonts.setAccessibilityLabel("正文字体")
         size.setAccessibilityLabel("正文字号")
         appearances.setAccessibilityLabel("外观主题")
+        let displayFields = NSStackView()
+        displayFields.orientation = .vertical
+        displayFields.alignment = .leading
+        displayFields.spacing = 8
         for view in [
             NSTextField(labelWithString: "正文字体"), fonts,
             NSTextField(labelWithString: "字号（7–72，可用小数）"), size,
             NSTextField(labelWithString: "外观主题"), appearances, wrapping, symbols, indentation, reference,
             modifications,
         ] {
-            addArrangedSubview(view)
+            displayFields.addArrangedSubview(view)
         }
-        setFrameSize(NSSize(width: 420, height: 260))
         fonts.widthAnchor.constraint(equalToConstant: 400).isActive = true
         size.widthAnchor.constraint(equalToConstant: 140).isActive = true
+        let display = NSTabViewItem(identifier: "display")
+        display.label = "字体与显示"
+        display.view = displayFields
+        let links = NSTabViewItem(identifier: "links")
+        links.label = "链接"
+        links.view = linkForm
+        pages.addTabViewItem(display)
+        pages.addTabViewItem(links)
+        pages.tabViewType = .noTabsNoBorder
+        pages.selectTabViewItem(display)
+        sections.selectedSegment = 0
+        sections.target = self
+        sections.action = #selector(changeSection(_:))
+        sections.setAccessibilityLabel("设置分类")
+        let height = max(260, max(displayFields.fittingSize.height, linkForm.fittingSize.height)) + 24
+        pages.widthAnchor.constraint(equalToConstant: 420).isActive = true
+        pages.heightAnchor.constraint(equalToConstant: height).isActive = true
+        addArrangedSubview(sections)
+        addArrangedSubview(pages)
+        setFrameSize(NSSize(width: 420, height: height))
+    }
+
+    /// 业务作用：可见分类按钮切换独立设置草稿，切换期间不提交偏好或丢弃另一页输入。
+    /// 参数说明:
+    /// - sender: 本表单实际分类按钮。
+    /// 返回：有效按钮及分类显示对应页面，外部控件或非法分类保留当前页面。
+    @objc func changeSection(_ sender: NSSegmentedControl) {
+        guard sender === sections, (0..<pages.numberOfTabViewItems).contains(sender.selectedSegment) else {
+            return
+        }
+        pages.selectTabViewItem(at: sender.selectedSegment)
     }
 
     /// 业务作用：长行参考列只在用户明确开启时参与设置，关闭不立即保存草稿或改变正文。
@@ -110,7 +153,7 @@ public final class EditorDisplayForm: NSStackView {
 
     /// 业务作用：在任何偏好或视图发布前复验整个草稿，输入错误可原地更正并重新应用。
     /// 参数说明: 无。
-    /// 返回：字号、主题和字体身份全部合法时返回完整配置，否则拒绝且保留草稿。
+    /// 返回：字号、主题、字体身份及完整链接定义全部合法时返回整份配置，否则拒绝且保留草稿。
     public func settings() throws -> EditorDisplaySettings {
         let referenceColumn: Int
         let raw = column.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -139,7 +182,8 @@ public final class EditorDisplayForm: NSStackView {
             showIndentGuides: indentation.state == .on,
             longLineColumn: referenceColumn,
             showLongLineGuide: longLine.state == .on,
-            showModificationHistory: modifications.state == .on
+            showModificationHistory: modifications.state == .on,
+            textLinks: linkForm.settings()
         )
     }
 }

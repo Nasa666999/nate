@@ -12,7 +12,7 @@ enum UserConfigurationSchema {
         "incrementalSearch.wrap", "structure.sortByName", "wrapLines", "showSymbols",
     ]
     static let dataLimits: [String: Int] = [
-        "editorDisplaySettings": 4096,
+        "editorDisplaySettings": 8192,
         "languageTabSettings": 524_288,
         "documentTabLayout": 1024,
         "indentationSettings": 1024,

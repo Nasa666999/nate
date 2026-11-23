@@ -21,7 +21,8 @@ extension ApplicationController {
                 showIndentGuides: window.editor.showIndentGuides,
                 longLineColumn: window.editor.longLineColumn ?? current.longLineColumn,
                 showLongLineGuide: window.editor.longLineColumn != nil,
-                showModificationHistory: enabled
+                showModificationHistory: enabled,
+                textLinks: current.textLinks
             )
             // 单项显示动作没有解释未知归档的权限，只有完整设置表单能明确重建这份偏好。
             if displayPreferences.sourceValid {

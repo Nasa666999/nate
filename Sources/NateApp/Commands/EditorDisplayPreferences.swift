@@ -51,8 +51,8 @@ extension ApplicationController {
         runtime.sourceValid = true
         if let object = domain.object(forKey: "editorDisplaySettings") {
             do {
-                guard let data = object as? Data, data.count <= 4096 else {
-                    throw NateError.message("显示设置不是 4 KiB 以内的完整归档。")
+                guard let data = object as? Data, data.count <= 8192 else {
+                    throw NateError.message("显示设置不是 8 KiB 以内的完整归档。")
                 }
                 runtime.settings = try JSONDecoder().decode(EditorDisplaySettings.self, from: data)
             }
@@ -119,5 +119,6 @@ extension ApplicationController {
             column: settings.showLongLineGuide ? settings.longLineColumn : nil
         )
         window?.setModificationHistory(settings.showModificationHistory)
+        window?.setTextLinks(settings.textLinks)
     }
 }

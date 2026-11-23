@@ -613,6 +613,10 @@
       "sha256" : "9d2609648599a8e390e0f62a9795c8d173fa2f4622cc20f081b35888d57df0e1"
     },
     {
+      "path" : "licenses\/TextLinks-NOTICE.txt",
+      "sha256" : "7ed426a62a87441181c933ad387d28bb7d49590ec2d375a64d309f21db3f2054"
+    },
+    {
       "path" : "licenses\/UDL-NOTICE.txt",
       "sha256" : "226bda6898a761727e05adb64256f8e07e317ff434277a81c4b8c8405954bcbb"
     },

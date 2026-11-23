@@ -63,11 +63,9 @@ extension ThemePreferencesWindow {
                 .modificationRevertedOriginal: "撤回原文标记",
                 .modificationRevertedChange: "撤回已有修改标记",
                 .modificationBackground: "修改历史边栏背景",
-                .linkForeground: "链接",
+                .linkForeground: "链接悬停颜色",
             ]
-            choices = EditorThemeColorRole.allCases.filter {
-                $0 != .linkForeground
-            }.map {
+            choices = EditorThemeColorRole.allCases.map {
                 SyntaxThemeChoice(key: $0.rawValue, name: names[$0] ?? $0.rawValue)
             }
         }

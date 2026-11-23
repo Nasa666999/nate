@@ -385,6 +385,10 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// 返回：窗口只发出意图，不执行磁盘访问。
     func connect(_ window: EditorWindow) {
         connectClipboardSource(window)
+        window.editor.onOpenTextLink = {
+            [weak self] editor, link, page in
+            self?.openTextLink(link, page: page, from: editor)
+        }
         window.projectPanels.onAction = {
             [weak self] index, action, node in
             self?.routeProjectAction(action, panel: index, node: node)

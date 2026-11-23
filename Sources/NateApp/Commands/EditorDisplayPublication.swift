@@ -13,11 +13,12 @@ extension ApplicationController {
             throw NateError.message("工作区正在关闭，显示设置未保存。")
         }
         let data = try JSONEncoder().encode(settings)
-        guard data.count <= 4096 else {
-            throw NateError.message("完整显示配置超过 4 KiB。")
+        guard data.count <= 8192 else {
+            throw NateError.message("完整显示配置超过 8 KiB。")
         }
         let runtime = displayPreferences
         let domain = runtime.defaults ?? .standard
+        // 完整协议、显示字段和归档容量已经确认，统一发布同一份配置，不能先保存部分草稿。
         domain.set(data, forKey: "editorDisplaySettings")
         runtime.loaded = false
         runtime.warning = nil
@@ -43,7 +44,8 @@ extension ApplicationController {
                 showIndentGuides: current.showIndentGuides,
                 longLineColumn: current.longLineColumn,
                 showLongLineGuide: current.showLongLineGuide,
-                showModificationHistory: current.showModificationHistory
+                showModificationHistory: current.showModificationHistory,
+                textLinks: current.textLinks
             )
             // 主题菜单只有单项外观意图，不能据此覆盖无法解释的完整字体和显示配置。
             guard displayPreferences.sourceValid else {

@@ -17,10 +17,11 @@ public struct EditorDisplaySettings: Codable, Sendable, Equatable {
     public let longLineColumn: Int
     public let showLongLineGuide: Bool
     public let showModificationHistory: Bool
+    public let textLinks: TextLinkSettings
 
     /// 业务作用：没有用户配置时采用系统等宽字体及系统外观，不在启动时改变正文。
     /// 参数说明: 无。
-    /// 返回：十三点字号、系统主题、缩进参考线及修改历史，关闭自动换行、空白符号和长行参考线。
+    /// 返回：十三点字号、系统主题、缩进参考线、修改历史及带下划线的链接，关闭自动换行、空白符号和长行参考线。
     public init() {
         format = 1
         fontName = nil
@@ -32,6 +33,7 @@ public struct EditorDisplaySettings: Codable, Sendable, Equatable {
         longLineColumn = 80
         showLongLineGuide = false
         showModificationHistory = true
+        textLinks = TextLinkSettings()
     }
 
     /// 业务作用：完整验证字体、字号和外观配置，非法值不被静默夹取为另一项用户选择。
@@ -45,6 +47,7 @@ public struct EditorDisplaySettings: Codable, Sendable, Equatable {
     /// - longLineColumn: 一至 4096 列的长行参考位置，关闭显示时继续保留。
     /// - showLongLineGuide: 是否实际显示已配置的长行参考线。
     /// - showModificationHistory: 是否显示边栏及正文修改历史，关闭显示不清除记录。
+    /// - textLinks: 独立的链接呈现方式与完整附加协议草稿。
     /// 返回：整份配置合法时建立，不合规时拒绝发布。
     public init(
         fontName: String?,
@@ -55,7 +58,8 @@ public struct EditorDisplaySettings: Codable, Sendable, Equatable {
         showIndentGuides: Bool = true,
         longLineColumn: Int = 80,
         showLongLineGuide: Bool = false,
-        showModificationHistory: Bool = true
+        showModificationHistory: Bool = true,
+        textLinks: TextLinkSettings = TextLinkSettings()
     ) throws {
         guard fontSize.isFinite, (7...72).contains(fontSize) else {
             throw NateError.message("正文字号必须为 7 到 72 点的有限数值。")
@@ -85,6 +89,7 @@ public struct EditorDisplaySettings: Codable, Sendable, Equatable {
         self.longLineColumn = longLineColumn
         self.showLongLineGuide = showLongLineGuide
         self.showModificationHistory = showModificationHistory
+        self.textLinks = textLinks
     }
 
     /// 业务作用：读取显示配置时复验协议与完整字段，损坏或未知格式不能进入原生排版。
@@ -106,7 +111,8 @@ public struct EditorDisplaySettings: Codable, Sendable, Equatable {
             longLineColumn: values.decodeIfPresent(Int.self, forKey: .longLineColumn) ?? 80,
             showLongLineGuide: values.decodeIfPresent(Bool.self, forKey: .showLongLineGuide) ?? false,
             showModificationHistory: values.decodeIfPresent(Bool.self, forKey: .showModificationHistory)
-                ?? true
+                ?? true,
+            textLinks: values.decodeIfPresent(TextLinkSettings.self, forKey: .textLinks) ?? TextLinkSettings()
         )
     }
 }
