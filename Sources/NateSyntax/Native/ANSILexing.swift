@@ -103,7 +103,7 @@ struct ANSILexing {
         }
     }
 
-    /// 业务作用：跨显示分段读取真实物理行，使 Unicode 分隔符不清除终端样式或截断转义。
+    /// 业务作用：沿持久化行索引确定物理上下文，使显示分段保留词法状态且超长行不触发逐字节回看。
     /// 参数说明:
     /// - requested: 已验证的当前显示分段。
     /// - tree: 当前不可变正文树。
@@ -114,29 +114,30 @@ struct ANSILexing {
         tree: PieceTree,
         budget: inout ANSILexingBudget
     ) throws -> ByteRange {
+        try budget.check()
+        guard requested.lower >= 0, requested.upper >= requested.lower,
+            requested.upper <= tree.byteCount
+        else {
+            throw NateError.message("词法高亮物理范围超出固定正文。")
+        }
         var lower = requested.lower
         var upper = requested.upper
-        while lower > 0, let byte = tree.byte(at: lower - 1), byte != 10 && byte != 13 {
+        let previousLower = lower > 0 ? tree.byte(at: lower - 1) : nil
+        let previousUpper = upper > 0 ? tree.byte(at: upper - 1) : nil
+        // CR/LF 后的空范围保持原边界；只有仍在行内的端点才沿索引扩展，避免扫描超长正文。
+        if lower > 0, previousLower != 10, previousLower != 13 {
             try budget.consume()
-            guard upper - lower < 1_048_576 else {
-                throw NateError.message("词法高亮物理行超过 1 MiB，正文保留。")
-            }
-            lower -= 1
+            lower = tree.lineStart(tree.lineNumber(at: lower))
         }
-        while upper < tree.byteCount, tree.byte(at: upper - 1) != 10 && tree.byte(at: upper - 1) != 13 {
+        if upper < tree.byteCount, previousUpper != 10, previousUpper != 13 {
             try budget.consume()
-            guard upper - lower < 1_048_576 else {
-                throw NateError.message("词法高亮物理行超过 1 MiB，正文保留。")
-            }
-            let byte = tree.byte(at: upper)
-            upper += 1
-            if byte == 13, tree.byte(at: upper) == 10 {
-                guard upper - lower < 1_048_576 else {
-                    throw NateError.message("词法高亮物理行超过 1 MiB，正文保留。")
-                }
-                upper += 1
-            }
+            upper = tree.lineRange(tree.lineNumber(at: upper)).upper
         }
+        // 先确认完整上下文容量，再允许调用方复制字节；拒绝时不能留下部分样式或状态。
+        guard upper - lower <= 1_048_576 else {
+            throw NateError.message("词法高亮物理行超过 1 MiB，正文保留。")
+        }
+        try budget.check()
         return ByteRange(lower, upper)
     }
 

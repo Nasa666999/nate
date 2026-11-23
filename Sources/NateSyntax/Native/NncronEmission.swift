@@ -1,0 +1,63 @@
+import Foundation
+import NateCore
+
+extension NncronLexing {
+    /// 业务作用：nnCron 原生字节类别按完整 UTF-8 标量首字节投影，任务、环境变量与字面不得拆开显示字符。
+    /// 参数说明:
+    /// - raw: 当前完整物理行的原字节。
+    /// - styles: 已完整确认的逐字节原生类别。
+    /// - base: 本物理行的原字节起点。
+    /// - budget: 分类与展示共同的步骤和截止。
+    /// 返回：最多 65536 个完整标量边界词元；超量或类别缺失时拒绝。
+    static func tokens(
+        raw: [UInt8],
+        styles: [UInt8],
+        base: Int,
+        budget: inout ANSILexingBudget
+    ) throws -> [NncronCachedToken] {
+        guard raw.count == styles.count else {
+            throw NateError.invalidRange
+        }
+        var cursor = 0, output: [NncronCachedToken] = []
+        while cursor < raw.count {
+            try budget.consume()
+            let first = raw[cursor], style = styles[cursor]
+            let width = first < 128 ? 1 : (first < 224 ? 2 : (first < 240 ? 3 : 4))
+            guard width <= raw.count - cursor, style <= 10 else {
+                throw NateError.invalidRange
+            }
+            let range = ByteRange(base + cursor, base + cursor + width)
+            let kind: SyntaxKind =
+                style == 1
+                ? .comment
+                : [8, 9].contains(style)
+                    ? .string
+                    : [2, 3, 4, 5].contains(style)
+                        ? .keyword
+                        : style == 7
+                            ? .number
+                            : style == 6 ? .punctuation : .text
+            if let last = output.last, last.style == style {
+                output[output.count - 1] = NncronCachedToken(
+                    range: ByteRange(last.range.lower, range.upper),
+                    kind: kind,
+                    style: style
+                )
+            }
+            else {
+                guard output.count < 65_536 else {
+                    throw NateError.message("nnCron 超过 65536 个完整词元。")
+                }
+                output.append(
+                    NncronCachedToken(
+                        range: range,
+                        kind: kind,
+                        style: style
+                    )
+                )
+            }
+            cursor += width
+        }
+        return output
+    }
+}

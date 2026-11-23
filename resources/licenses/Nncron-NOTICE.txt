@@ -1,0 +1,8 @@
+nnCron 词法适配参考 Lexilla 的 LexCrontab.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexCrontab.cxx
+
+原实现版权：1998–2001 Neil Hodgson。
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留三组有序词表、任务、注释、数字、字符串和环境变量的原生呈现顺序，
+使用固定原文与完整样式，不执行调度任务、脚本或环境变量展开。

@@ -81,6 +81,10 @@
       "sha256" : "f1cebecdad6da0802e344731a9611918f26fe0e8643f6897f5a8a931d5722557"
     },
     {
+      "path" : "completion\/nncrontab.xml",
+      "sha256" : "335ecc26dd11dd2d35ca335999b8e076823faa384fc147db081d9543deea97ff"
+    },
+    {
       "path" : "completion\/nsis.xml",
       "sha256" : "b236035bbf44da61f8a64a108e72d380e5e85e9e0ec06401b94fa73adb7bceb3"
     },
@@ -538,7 +542,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "fd9c3cf50169391bfed9f9e72f6d28ab1f4362009eef1475ff2566fa65d62d32"
+      "sha256" : "7e71a868d9eb9e4c0039cd96bca87c8b107fe409b7351b4b3db326e919f1173e"
     },
     {
       "path" : "licenses\/Batch-NOTICE.txt",
@@ -575,6 +579,10 @@
     {
       "path" : "licenses\/MSSQL-NOTICE.txt",
       "sha256" : "2ba1cb83fbb247e4fcd212b417262ed63c4d840866c0b9500f49c5b55b8ea235"
+    },
+    {
+      "path" : "licenses\/Nncron-NOTICE.txt",
+      "sha256" : "bf735a4851b4327e437407d22262835d038bf1feeb2a6e432f32587c2e5ff64d"
     },
     {
       "path" : "licenses\/NotepadPlusPlus-GPL.txt",

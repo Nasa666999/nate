@@ -207,17 +207,16 @@ public struct PieceTree: Sendable {
         return PieceTree(root: Self.join(Self.join(before, PieceTree(text).root), after))
     }
 
-    /// 业务作用：从原快照结构共享取得完整范围，行重排与校验不为每段正文建立完整中间字符串。
+    /// 业务作用：从原快照共享完整子树，只构造保留的边界字节，不为被丢弃正文重建节点。
     /// 参数说明:
     /// - range: 原快照中的完整 UTF-8 标量范围。
     /// 返回：只切分边界叶片的新树；非法范围拒绝，原快照保持不变。
     public func slicing(_ range: ByteRange) throws -> PieceTree {
+        // 只有完整标量范围才能进入共享树，非法字节边界不能污染后续坐标及保存内容。
         guard range.lower <= range.upper, isBoundary(range.lower), isBoundary(range.upper) else {
             throw NateError.invalidRange
         }
-        let (_, tail) = Self.split(root, at: range.lower)
-        let (selected, _) = Self.split(tail, at: range.count)
-        return PieceTree(root: selected)
+        return PieceTree(root: Self.selectedNode(root, range: range))
     }
 
     /// 业务作用：大段重排逐块验证真实字节，摘要相同不能代替完整复验，取消可在读取边界停止。
@@ -345,5 +344,37 @@ public struct PieceTree: Sendable {
             }
         }
         return PieceNode(left: left, right: right)
+    }
+}
+
+extension PieceTree {
+    /// 业务作用：完整子树直接共享，只构造保留范围的边界片段，避免为被丢弃的正文计算节点元数据。
+    /// 参数说明:
+    /// - node: 当前固定原文中的完整子树。
+    /// - range: 已确认位于子树内的 UTF-8 标量范围。
+    /// 返回：保留完整原字节、索引和树高约束的子树；空范围只建立空叶片。
+    private static func selectedNode(_ node: PieceNode, range: ByteRange) -> PieceNode {
+        if range.isEmpty {
+            return PieceNode(bytes: [])
+        }
+        if range.lower == 0, range.upper == node.count {
+            return node
+        }
+        guard let left = node.left, let right = node.right else {
+            return PieceNode(bytes: Array(node.bytes[range.lower..<range.upper]))
+        }
+        if range.upper <= left.count {
+            return selectedNode(left, range: range)
+        }
+        if range.lower >= left.count {
+            return selectedNode(
+                right,
+                range: ByteRange(range.lower - left.count, range.upper - left.count)
+            )
+        }
+        return join(
+            selectedNode(left, range: ByteRange(range.lower, left.count)),
+            selectedNode(right, range: ByteRange(0, range.upper - left.count))
+        )
     }
 }

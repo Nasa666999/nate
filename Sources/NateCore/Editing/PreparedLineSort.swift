@@ -1,11 +1,5 @@
 import Foundation
 
-private struct SortableLine {
-    let body: ByteRange
-    let ending: ByteRange
-    let endingKind: UInt8
-}
-
 public struct PreparedLineSort: Sendable {
     public let transaction: PreparedTransaction
     public let sourceLines: [Int]
@@ -41,7 +35,8 @@ public struct PreparedLineSort: Sendable {
             in: snapshot.text,
             selections: selections,
             rectangular: rectangular,
-            zeroWidthRectangle: zeroWidthRectangle
+            zeroWidthRectangle: zeroWidthRectangle,
+            budget: budget
         )
         let first = input.first
         let last = input.last
@@ -59,30 +54,33 @@ public struct PreparedLineSort: Sendable {
         guard scope.count <= 256 * 1024 * 1024 else {
             throw NateError.message("行排序范围超过 256 MiB，原正文保留。")
         }
-        var rows: [SortableLine] = []
-        for line in first...last {
-            if line & 255 == 0 {
-                try budget.check()
+        let rows = try SortLineTable.collect(
+            in: snapshot.text,
+            range: scope,
+            expectedCount: last - first + 1,
+            budget: budget
+        )
+        var keys = input.keys ?? [:]
+        if input.keys == nil {
+            // 普通范围已经授权全部行，键直接复用顺序行表，不能再次逐行扫描行首。
+            for (index, row) in rows.enumerated() {
+                if index & 255 == 0 {
+                    try budget.check()
+                }
+                keys[first + index] = row.body
             }
-            let body = snapshot.text.lineRange(line, includeEnding: false)
-            let ending = ByteRange(body.upper, snapshot.text.lineRange(line).upper)
-            let bytes = snapshot.text.bytes(in: ending)
-            rows.append(
-                SortableLine(
-                    body: body,
-                    ending: ending,
-                    endingKind: bytes.isEmpty ? 0 : bytes == [10] ? 1 : bytes == [13, 10] ? 2 : 3
-                )
-            )
         }
-        let slots = input.keys.keys.sorted().map {
-            $0 - first
-        }
+        let slots =
+            input.keys == nil
+            ? Array(rows.indices)
+            : keys.keys.sorted().map {
+                $0 - first
+            }
         var order = Array(rows.indices)
         if slots.count > 1 {
             let sorted = try Self.sorted(
                 slots,
-                keys: input.keys,
+                keys: keys,
                 first: first,
                 text: snapshot.text,
                 options: options,
@@ -176,13 +174,16 @@ public struct PreparedLineSort: Sendable {
     /// - selections: 完整实际选择。
     /// - rectangular: 是否具有矩形来源证据。
     /// - zeroWidthRectangle: 可选的真实零宽证据，未提供时按全部实际空范围判断。
-    /// 返回：首末逻辑行与逐目标完整键；交叠行、虚拟非行尾或跨行矩形时整体拒绝。
+    /// - budget: 行范围确认与后续准备共用的执行资格。
+    /// 返回：首末逻辑行与矩形完整键；普通范围的键由顺序行表提供，交叠或跨行矩形时整体拒绝。
     private static func scope(
         in text: PieceTree,
         selections: [TextSelection],
         rectangular: Bool,
-        zeroWidthRectangle: Bool?
-    ) throws -> (first: Int, last: Int, keys: [Int: ByteRange]) {
+        zeroWidthRectangle: Bool?,
+        budget: LineSortBudget
+    ) throws -> (first: Int, last: Int, keys: [Int: ByteRange]?) {
+        try budget.check()
         guard !selections.isEmpty, selections.count <= 100_000,
             selections.allSatisfy({
                 text.isBoundary($0.anchor) && text.isBoundary($0.head) && $0.virtualColumn >= 0
@@ -199,7 +200,10 @@ public struct PreparedLineSort: Sendable {
                 throw NateError.message("零宽矩形不能包含非空行内范围。")
             }
             var keys: [Int: ByteRange] = [:]
-            for selection in selections {
+            for (index, selection) in selections.enumerated() {
+                if index & 255 == 0 {
+                    try budget.check()
+                }
                 let row = text.lineNumber(at: selection.range.lower)
                 let body = text.lineRange(row, includeEnding: false)
                 guard selection.range.upper <= body.upper, keys[row] == nil,
@@ -227,13 +231,7 @@ public struct PreparedLineSort: Sendable {
         guard last - first < 100_000 else {
             throw NateError.message("行排序范围最多十万行，未创建部分键。")
         }
-        var keys: [Int: ByteRange] = [:]
-        if last >= first {
-            for row in first...last {
-                keys[row] = text.lineRange(row, includeEnding: false)
-            }
-        }
-        return (first, last, keys)
+        return (first, last, nil)
     }
 
     /// 业务作用：完整准备每个参与行的键并稳定比较，隐藏的非目标行不被借矩形范围读取为键。
