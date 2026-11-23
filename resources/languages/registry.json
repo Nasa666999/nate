@@ -1382,7 +1382,146 @@
       "while",
       "with",
       "xor"
-    ]
+    ],
+    "keywordGroups": {
+      "instre1": [
+        "abort",
+        "abs",
+        "abstract",
+        "accept",
+        "access",
+        "aliased",
+        "all",
+        "and",
+        "array",
+        "at",
+        "begin",
+        "body",
+        "case",
+        "constant",
+        "declare",
+        "delay",
+        "delta",
+        "digits",
+        "do",
+        "else",
+        "elsif",
+        "end",
+        "entry",
+        "exception",
+        "exit",
+        "for",
+        "function",
+        "generic",
+        "goto",
+        "if",
+        "in",
+        "interface",
+        "is",
+        "limited",
+        "loop",
+        "mod",
+        "new",
+        "not",
+        "null",
+        "of",
+        "or",
+        "others",
+        "out",
+        "overriding",
+        "package",
+        "pragma",
+        "private",
+        "procedure",
+        "protected",
+        "raise",
+        "range",
+        "record",
+        "rem",
+        "renames",
+        "requeue",
+        "return",
+        "reverse",
+        "select",
+        "separate",
+        "some",
+        "subtype",
+        "synchronized",
+        "tagged",
+        "task",
+        "terminate",
+        "then",
+        "type",
+        "until",
+        "use",
+        "when",
+        "while",
+        "with",
+        "xor"
+      ]
+    },
+    "lexicalStyles": {
+      "0": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "1": {
+        "foreground": "#0000FF",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "2": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "3": {
+        "foreground": "#FF8000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "4": {
+        "foreground": "#FF8080",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "5": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "6": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "7": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "8": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "9": {
+        "foreground": "#804000",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "10": {
+        "foreground": "#008000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "11": {
+        "foreground": "#FF0000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      }
+    }
   },
   {
     "id": "asm",

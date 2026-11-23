@@ -1,0 +1,8 @@
+Ada 词法适配参考 Lexilla 的 LexAda.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexAda.cxx
+
+原实现作者：Sergey Koshcheyev，Copyright 2002。
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留完整原名称、属性撇号、字符与字符串的真实行尾类别、
+标签和数值合法性分类；原始词法模块没有折叠入口。
