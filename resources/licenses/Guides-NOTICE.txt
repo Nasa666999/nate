@@ -1,0 +1,8 @@
+缩进参考线的空行延续与向前、双向规则依据 Scintilla 的 EditView.cxx。
+
+Copyright 1998-2014 by Neil Hodgson <neilh@scintilla.org>
+
+来源：
+https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/scintilla/src/EditView.cxx
+
+许可全文见同目录的 Lexilla-LICENSE.txt。

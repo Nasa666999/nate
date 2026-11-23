@@ -114,5 +114,9 @@ extension ApplicationController {
             wrapLines: settings.wrapLines,
             showSymbols: settings.showSymbols
         )
+        window?.setReferenceGuides(
+            indentation: settings.showIndentGuides,
+            column: settings.showLongLineGuide ? settings.longLineColumn : nil
+        )
     }
 }

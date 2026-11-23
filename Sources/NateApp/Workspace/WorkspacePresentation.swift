@@ -104,7 +104,8 @@ extension ApplicationController {
             let syntax: String? = structure ?? editor.syntaxAnalysisStatus
             let marks: String? = syntax ?? editor.markDisplayStatus
             let temporary: String? = marks ?? editor.textHighlightDisplayStatus
-            let selected: String? = temporary ?? editor.selectedTextHighlightStatus
+            let selected: String? =
+                temporary ?? editor.selectedTextHighlightStatus ?? editor.referenceGuideStatus
             let preferences: String? =
                 selected ?? selectedTextPreferences.failure ?? tabPreferences.warning ?? tabPreferences
                 .layoutWarning

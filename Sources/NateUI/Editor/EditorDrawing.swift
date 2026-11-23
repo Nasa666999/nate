@@ -28,6 +28,8 @@ extension EditorView {
         var markBudget = 4096
         markDisplayStatus = nil
         textHighlightDisplayStatus = nil
+        referenceGuideStatus = nil
+        var guides = referenceGuideFrame()
         for line in visibleLines {
             let layout = layoutLine(line)
             let y = projection.y(of: line) + 8
@@ -64,6 +66,7 @@ extension EditorView {
             drawBracketMatch(in: layout, y: y)
             layout.draw(at: NSPoint(x: gutterWidth, y: y), in: context)
             drawThemeSelectionForeground(in: layout, y: y, context: context)
+            drawIndentationGuides(in: layout, line: line, y: y, frame: &guides, context: context)
             if showSymbols {
                 drawSymbols(layout: layout, y: y)
             }
@@ -103,6 +106,7 @@ extension EditorView {
                 ).fill()
             }
         }
+        drawLongLineGuide(in: drawing)
         themeColor(.gutterBackground, fallback: .windowBackgroundColor).setFill()
         NSRect(x: visibleRect.minX, y: dirtyRect.minY, width: gutterWidth, height: dirtyRect.height)
             .fill()

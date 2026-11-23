@@ -62,7 +62,7 @@ extension ThemePreferencesWindow {
                 .modificationUnsaved: "修改位置标记", .linkForeground: "链接",
             ]
             choices = EditorThemeColorRole.allCases.filter {
-                ![.indentGuide, .longLineGuide, .modificationSaved, .linkForeground].contains($0)
+                ![.modificationSaved, .linkForeground].contains($0)
             }.map {
                 SyntaxThemeChoice(key: $0.rawValue, name: names[$0] ?? $0.rawValue)
             }

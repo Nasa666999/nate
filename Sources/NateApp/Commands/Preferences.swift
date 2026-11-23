@@ -23,7 +23,10 @@ extension ApplicationController {
                 fontSize: Double(editor?.font.pointSize ?? CGFloat(saved.fontSize)),
                 appearance: saved.appearance,
                 wrapLines: editor?.wrapLines ?? saved.wrapLines,
-                showSymbols: editor?.showSymbols ?? saved.showSymbols
+                showSymbols: editor?.showSymbols ?? saved.showSymbols,
+                showIndentGuides: editor?.showIndentGuides ?? saved.showIndentGuides,
+                longLineColumn: editor?.longLineColumn ?? saved.longLineColumn,
+                showLongLineGuide: editor == nil ? saved.showLongLineGuide : editor?.longLineColumn != nil
             )) ?? saved
         let form = EditorDisplayForm(settings: initial)
         let automatic = NSButton(checkboxWithTitle: "每秒自动保存与恢复保护", target: nil, action: nil)

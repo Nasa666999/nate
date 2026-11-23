@@ -557,6 +557,10 @@
       "sha256" : "361b5082fe65b118b87104f21c84bc3067ad13f5494954b09451a2464c121abf"
     },
     {
+      "path" : "licenses\/Guides-NOTICE.txt",
+      "sha256" : "908607459478cfe926ca503c28bfe92c6b4a09bedc3b57e44d7495d995e84729"
+    },
+    {
       "path" : "licenses\/Lexilla-LICENSE.txt",
       "sha256" : "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d"
     },

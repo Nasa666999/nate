@@ -49,6 +49,8 @@ extension EditorWindow {
         clone.language = editor.language
         clone.userLanguage = editor.userLanguage
         clone.editorTheme = editor.editorTheme
+        clone.showIndentGuides = editor.showIndentGuides
+        clone.longLineColumn = editor.longLineColumn
         clone.onStatus = {
             [weak self] message in self?.status.stringValue = message
         }

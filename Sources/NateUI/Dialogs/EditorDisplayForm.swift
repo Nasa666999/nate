@@ -8,12 +8,17 @@ public final class EditorDisplayForm: NSStackView {
     let appearances = NSPopUpButton(frame: .zero, pullsDown: false)
     let wrapping = NSButton(checkboxWithTitle: "自动换行", target: nil, action: nil)
     let symbols = NSButton(checkboxWithTitle: "显示空白与控制符号", target: nil, action: nil)
+    let indentation = NSButton(checkboxWithTitle: "显示缩进参考线", target: nil, action: nil)
+    let longLine = NSButton(checkboxWithTitle: "长行参考线", target: nil, action: nil)
+    let column = NSTextField(string: "80")
+    private let originalColumn: Int
 
     /// 业务作用：原生表单保留完整显示偏好，已配置但当前不可用的字体不会因打开设置被丢弃。
     /// 参数说明:
     /// - settings: 当前已验证配置及活动视图的显示值。
     /// 返回：可独立读取和取消的设置草稿，不发布全局外观或修改正文。
     public init(settings: EditorDisplaySettings) {
+        originalColumn = settings.longLineColumn
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
@@ -59,19 +64,37 @@ public final class EditorDisplayForm: NSStackView {
         }
         wrapping.state = settings.wrapLines ? .on : .off
         symbols.state = settings.showSymbols ? .on : .off
+        indentation.state = settings.showIndentGuides ? .on : .off
+        longLine.state = settings.showLongLineGuide ? .on : .off
+        column.stringValue = String(settings.longLineColumn)
+        column.isEnabled = longLine.state == .on
+        column.widthAnchor.constraint(equalToConstant: 80).isActive = true
+        column.setAccessibilityLabel("长行参考列，1 至 4096")
+        longLine.target = self
+        longLine.action = #selector(referenceChanged(_:))
+        let reference = NSStackView(views: [longLine, column, NSTextField(labelWithString: "列")])
+        reference.spacing = 8
         fonts.setAccessibilityLabel("正文字体")
         size.setAccessibilityLabel("正文字号")
         appearances.setAccessibilityLabel("外观主题")
         for view in [
             NSTextField(labelWithString: "正文字体"), fonts,
             NSTextField(labelWithString: "字号（7–72，可用小数）"), size,
-            NSTextField(labelWithString: "外观主题"), appearances, wrapping, symbols,
+            NSTextField(labelWithString: "外观主题"), appearances, wrapping, symbols, indentation, reference,
         ] {
             addArrangedSubview(view)
         }
         setFrameSize(NSSize(width: 420, height: 260))
         fonts.widthAnchor.constraint(equalToConstant: 400).isActive = true
         size.widthAnchor.constraint(equalToConstant: 140).isActive = true
+    }
+
+    /// 业务作用：长行参考列只在用户明确开启时参与设置，关闭不立即保存草稿或改变正文。
+    /// 参数说明:
+    /// - sender: 当前长行参考线开关。
+    /// 返回：列输入的编辑资格与当前草稿开关一致。
+    @objc private func referenceChanged(_ sender: NSButton) {
+        column.isEnabled = sender.state == .on
     }
 
     /// 业务作用：设置表单只允许从已验证模型建立，不通过界面归档注入其它状态。
@@ -86,6 +109,17 @@ public final class EditorDisplayForm: NSStackView {
     /// 参数说明: 无。
     /// 返回：字号、主题和字体身份全部合法时返回完整配置，否则拒绝且保留草稿。
     public func settings() throws -> EditorDisplaySettings {
+        let referenceColumn: Int
+        let raw = column.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.utf8.count <= 4, let value = Int(raw), (1...4096).contains(value) {
+            referenceColumn = value
+        }
+        else if longLine.state == .on {
+            throw NateError.message("长行参考列须为 1 至 4096 的整数。")
+        }
+        else {
+            referenceColumn = originalColumn
+        }
         guard size.stringValue.utf8.count <= 32,
             let pointSize = Double(size.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)),
             let choice = appearances.selectedItem?.representedObject as? String,
@@ -98,7 +132,10 @@ public final class EditorDisplayForm: NSStackView {
             fontSize: pointSize,
             appearance: appearance,
             wrapLines: wrapping.state == .on,
-            showSymbols: symbols.state == .on
+            showSymbols: symbols.state == .on,
+            showIndentGuides: indentation.state == .on,
+            longLineColumn: referenceColumn,
+            showLongLineGuide: longLine.state == .on
         )
     }
 }
