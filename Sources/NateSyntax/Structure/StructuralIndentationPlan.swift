@@ -56,6 +56,7 @@ public struct StructuralIndentationPlan: Sendable {
         usesLanguageRules =
             udl == nil
             && (identifier == "python" || identifier == "lua" || identifier == "mssql" || identifier == "sql"
+                || identifier == "cmake"
                 || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
@@ -66,6 +67,15 @@ public struct StructuralIndentationPlan: Sendable {
                     first,
                     _ in first
                 }
+            )
+            return
+        }
+        if identifier == "cmake" {
+            actions = try CMakeIndentationPlan.actions(
+                snapshot: snapshot,
+                ranges: ranges,
+                deadline: deadline,
+                permit: permit
             )
             return
         }
