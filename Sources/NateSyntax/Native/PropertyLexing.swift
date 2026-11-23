@@ -139,7 +139,8 @@ struct PropertyLexing {
                             foreground: token.foreground,
                             background: token.background,
                             fontStyle: token.fontStyle,
-                            lexicalStyle: token.lexicalStyle
+                            lexicalStyle: token.lexicalStyle,
+                            nativeStyle: token.nativeStyle
                         )
                     )
                 }

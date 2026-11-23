@@ -13,6 +13,7 @@ extension ApplicationController: NSMenuItemValidation {
         let application = NSMenu(title: "Nate")
         add(application, "关于 Nate", "about")
         add(application, "设置…", "preferences", key: ",")
+        add(application, "样式与主题…", "themePreferences")
         add(application, "补全与参数提示…", "assistancePreferences")
         add(application, "Tab 与缩进…", "tabPreferences")
         add(application, "自动缩进与退格…", "indentationPreferences")

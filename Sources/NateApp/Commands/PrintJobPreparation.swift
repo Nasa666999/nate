@@ -60,6 +60,7 @@ extension ApplicationController {
             udl: editor.userLanguage,
             font: editor.font,
             fontZoomAdjustment: editor.fontZoomAdjustment,
+            theme: editor.editorTheme,
             appearance: editor.effectiveAppearance,
             rtl: editor.rtl,
             color: settings.color
@@ -71,10 +72,7 @@ extension ApplicationController {
             values: printTemplateValues(document, date: date),
             showControls: editor.showSymbols,
             baseFont: editor.font,
-            background: SyntaxPresentation.resolved(
-                .textBackgroundColor,
-                appearance: editor.effectiveAppearance
-            ),
+            background: editor.presentationBackground,
             tabWidth: editor.tabSettings.width
         )
         guard let info = NSPrintInfo.shared.copy() as? NSPrintInfo else {

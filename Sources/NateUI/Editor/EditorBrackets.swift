@@ -407,7 +407,10 @@ extension EditorView {
                     xRadius: 2,
                     yRadius: 2
                 )
-                color.withAlphaComponent(0.12).setFill()
+                themeColor(
+                    match.partner == nil ? .bracketMismatchBackground : .bracketMatchBackground,
+                    fallback: color.withAlphaComponent(0.12)
+                ).setFill()
                 outline.fill()
                 color.withAlphaComponent(0.9).setStroke()
                 outline.lineWidth = 1

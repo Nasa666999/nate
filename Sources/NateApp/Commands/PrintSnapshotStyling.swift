@@ -12,6 +12,7 @@ extension ApplicationController {
     /// - udl: 来源视图实际采用的用户语言，为空时使用内置词法。
     /// - font: 来源视图基础字体。
     /// - fontZoomAdjustment: 来源视图已确认的资源字号缩放差值。
+    /// - theme: 来源视图固定的完整主题；黑白方案不采用主题颜色。
     /// - appearance: 来源视图实际外观。
     /// - rtl: 来源段落基础方向。
     /// - color: 黑白方案不请求语法高亮，其余沿用来源内置或 UDL 样式。
@@ -23,6 +24,7 @@ extension ApplicationController {
         udl: UDLDefinition? = nil,
         font: NSFont,
         fontZoomAdjustment: CGFloat = 0,
+        theme: EditorThemeSnapshot? = nil,
         appearance: NSAppearance,
         rtl: Bool,
         color: PrintColorMode
@@ -31,19 +33,24 @@ extension ApplicationController {
             throw NateError.message("独立打印样式需要至多 64 MiB 的合法源范围。")
         }
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        var baseAttributes = SyntaxPresentation.attributes(
+            token: SyntaxToken(range: ByteRange(0, 0), kind: .text, lexicalStyle: "default:0"),
+            font: font,
+            appearance: appearance,
+            fontZoomAdjustment: fontZoomAdjustment,
+            theme: color == .blackOnWhite ? nil : theme?.definition,
+            language: language
+        )
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
         paragraph.tabStops = []
         paragraph.defaultTabInterval =
-            (" " as NSString).size(withAttributes: [.font: font]).width
+            (" " as NSString).size(withAttributes: [.font: baseAttributes[.font] ?? font]).width
             * CGFloat(currentTabSettings().settings(for: language).width)
+        baseAttributes[.paragraphStyle] = paragraph
         let value = NSMutableAttributedString(
             string: snapshot.text.text(in: range),
-            attributes: [
-                .font: font,
-                .foregroundColor: SyntaxPresentation.resolved(.textColor, appearance: appearance),
-                .paragraphStyle: paragraph,
-            ]
+            attributes: baseAttributes
         )
         guard color != .blackOnWhite, !range.isEmpty else {
             return value
@@ -111,7 +118,9 @@ extension ApplicationController {
                         token: token,
                         font: font,
                         appearance: appearance,
-                        fontZoomAdjustment: fontZoomAdjustment
+                        fontZoomAdjustment: fontZoomAdjustment,
+                        theme: theme?.definition,
+                        language: language
                     ),
                     range: NSRange(
                         location: native.location - projection.location,

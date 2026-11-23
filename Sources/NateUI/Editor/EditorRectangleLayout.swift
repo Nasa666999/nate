@@ -157,6 +157,9 @@ extension EditorView {
         hash.update(data: EditorNativeLayoutPolicy.identityData)
         hash.update(data: Data("tabWidth=\(tabSettings.width)".utf8))
         hash.update(data: Data("fontZoom=\(fontZoomAdjustment)".utf8))
+        if let editorTheme {
+            hash.update(data: Data(editorTheme.identity.utf8))
+        }
         for data in [languageResource ?? Data(), userLanguage?.originalXML ?? Data()] {
             hash.update(data: Data(String(data.count).utf8))
             hash.update(data: Data([0]))

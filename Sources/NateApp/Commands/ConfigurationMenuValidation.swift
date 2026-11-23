@@ -7,6 +7,8 @@ extension ApplicationController {
     /// 返回：已管理入口的实际可用性，其它命令交还已有菜单规则。
     func validateConfigurationAndComparisonMenu(_ id: String) -> Bool? {
         switch id {
+        case "themePreferences":
+            return !closing && mainWindow != nil && mainWindow?.hasMarkedEditorInput != true
         case "exportHTML", "exportRTF":
             return canPrepareDocumentExport
         case "importUserConfiguration":

@@ -1,4 +1,5 @@
 import AppKit
+import NateCore
 import NateSyntax
 
 @MainActor
@@ -9,12 +10,16 @@ public enum SyntaxPresentation {
     /// - font: 当前正文实际基础字体。
     /// - appearance: 来源编辑器真实外观，输出期间不重新读取活动窗口主题。
     /// - fontZoomAdjustment: 来源视图的点数缩放差值，只叠加到资源显式字号。
+    /// - theme: 来源视图固定的完整主题，为空时沿用资源与系统呈现。
+    /// - language: 来源语言身份，用于隔离逐语言覆盖。
     /// 返回：在来源外观中固定的纯文本呈现属性，不包含附件、链接或正文编辑。
     public static func attributes(
         token: SyntaxToken,
         font: NSFont,
         appearance: NSAppearance,
-        fontZoomAdjustment: CGFloat = 0
+        fontZoomAdjustment: CGFloat = 0,
+        theme: EditorThemeDefinition? = nil,
+        language: String? = nil
     )
         -> [NSAttributedString.Key: Any]
     {
@@ -41,6 +46,17 @@ public enum SyntaxPresentation {
         }
         if token.fontStyle & 4 != 0 {
             result[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        }
+        if let theme {
+            return EditorThemePresentation.applying(
+                result,
+                token: token,
+                font: font,
+                adjustment: fontZoomAdjustment,
+                appearance: appearance,
+                theme: theme,
+                language: language
+            )
         }
         return result
     }

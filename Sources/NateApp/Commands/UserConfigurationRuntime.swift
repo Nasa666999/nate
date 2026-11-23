@@ -45,6 +45,12 @@ extension ApplicationController {
         recoveryStorage.loaded = false
         recoveryStorage.generation = UUID()
         displayPreferences.defaults = domain
+        themePreferences.defaults = domain
+        themePreferences.loaded = false
+        themePreferences.generation = UUID()
+        themePreferences.watchGeneration = UUID()
+        themePreferences.watchTask?.cancel()
+        themePreferences.watchTask = nil
         tabPreferences.defaults = domain
         indentationPreferences.defaults = domain
         pairPreferences.defaults = domain

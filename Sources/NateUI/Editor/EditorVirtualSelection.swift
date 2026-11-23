@@ -69,7 +69,10 @@ extension EditorView {
                 )
             )
         }
-        NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6).setFill()
+        themeColor(
+            .selectionBackground,
+            fallback: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6)
+        ).setFill()
         for piece in pieces {
             for rect in layout.selectionRects(piece) {
                 rect.offsetBy(dx: gutterWidth, dy: y).fill()
@@ -179,7 +182,10 @@ extension EditorView {
         }
         let end = layout.caret(at: layout.characterCount)
         let width = CGFloat(layout.virtualColumnWidth)
-        NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6).setFill()
+        themeColor(
+            .selectionBackground,
+            fallback: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6)
+        ).setFill()
         NSRect(
             x: gutterWidth + end.minX + CGFloat(edge.leadingColumns) * width,
             y: y + end.minY,

@@ -84,6 +84,7 @@ extension ApplicationController {
         autosaveEnabled =
             domain.object(forKey: "autosaveEnabled") == nil || domain.bool(forKey: "autosaveEnabled")
         applyDisplaySettings(currentDisplaySettings(), to: window)
+        window.setEditorTheme(themePreferences.compiled)
     }
 
     /// 业务作用：字体与外观只改变呈现，当前不可用字体保留身份并回退到系统等宽字体。

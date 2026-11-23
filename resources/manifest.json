@@ -629,6 +629,10 @@
       "sha256" : "b1db578d82bc472c4116c699fd7b525eb62a462b5ad7494f50f063674bcc9219"
     },
     {
+      "path" : "themes\/style-names.json",
+      "sha256" : "9b49c5414177f16083343171e3b2159ece924308cf42d55e54f02613fb0976fe"
+    },
+    {
       "path" : "udl\/markdown._preinstalled.udl.xml",
       "sha256" : "46398e328ae4b180ee4632530c9b30d1820d402312c61f8a562f263be419a14c"
     },

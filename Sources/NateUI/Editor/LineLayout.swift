@@ -18,6 +18,8 @@ final class LineLayout {
     private var orderedPositions = true
     private var orderedHeights = true
     private let virtualFont: NSFont
+    private let appearance: NSAppearance
+    private var foregroundVariant: LineForegroundVariant?
     var syntaxBackgrounds: [(range: ByteRange, color: NSColor, fillsLineEnd: Bool)] = []
 
     var renderedRange: ByteRange {
@@ -42,6 +44,8 @@ final class LineLayout {
     /// - nativeASCII: 已证明独立 ASCII 的有界内部段落，关闭上下文连字与字距调整。
     /// - tabWidth: 当前语言的合法 Tab 停靠间距。
     /// - showSequences: 是否显示 ANSI 控制范围的原始占位与参数文字。
+    /// - theme: 当前来源视图的完整固定主题。
+    /// - language: 来源语言身份，用于隔离逐语言样式。
     /// 返回：只读 TextKit 2 布局缓存，控制字符只在呈现副本中使用等长占位，原文与坐标保持一致。
     init(
         snapshot: DocumentSnapshot,
@@ -56,23 +60,34 @@ final class LineLayout {
         viewport: NSRect? = nil,
         nativeASCII: Bool = false,
         tabWidth: Int = 4,
-        showSequences: Bool = false
+        showSequences: Bool = false,
+        theme: EditorThemeDefinition? = nil,
+        language: String? = nil
     ) {
         self.range = range
+        self.appearance = appearance
+        let baseFont = EditorThemePresentation.baseFont(
+            font,
+            theme: theme,
+            language: language,
+            adjustment: fontZoomAdjustment
+        )
         let ending = range.isEmpty ? range.lower : range.upper - 1
         if let token = tokens.first(where: {
             $0.range.lower <= ending && $0.range.upper > ending
         }) {
-            virtualFont = SyntaxPresentation.resolvedFont(
-                name: token.fontName,
-                size: token.fontSize,
-                style: token.fontStyle,
-                base: font,
-                adjustment: fontZoomAdjustment
-            )
+            virtualFont =
+                SyntaxPresentation.attributes(
+                    token: token,
+                    font: font,
+                    appearance: appearance,
+                    fontZoomAdjustment: fontZoomAdjustment,
+                    theme: theme,
+                    language: language
+                )[.font] as? NSFont ?? baseFont
         }
         else {
-            virtualFont = virtualSpaceFont ?? font
+            virtualFont = virtualSpaceFont ?? baseFont
         }
         horizontallyOrderedASCII = !rtl && snapshot.text.isPrintableASCII(in: range)
         let origin = snapshot.text.utf16Offset(byte: range.lower) ?? 0
@@ -82,7 +97,10 @@ final class LineLayout {
                 snapshot: snapshot,
                 range: range,
                 font: font,
-                appearance: appearance
+                appearance: appearance,
+                theme: theme,
+                language: language,
+                fontZoomAdjustment: fontZoomAdjustment
             )
         }
         else {
@@ -111,14 +129,25 @@ final class LineLayout {
         let paragraph = NSMutableParagraphStyle()
         paragraph.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
         paragraph.defaultTabInterval =
-            max(1, NSAttributedString(string: " ", attributes: [.font: font]).size().width)
+            max(1, NSAttributedString(string: " ", attributes: [.font: baseFont]).size().width)
             * CGFloat(tabWidth)
         paragraph.tabStops = []
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: ThemePalette.resolved(.textColor, appearance: appearance),
+            .font: baseFont,
+            .foregroundColor: EditorThemePresentation.color(
+                .foreground,
+                fallback: .textColor,
+                theme: theme,
+                appearance: appearance,
+                language: language
+            ),
             .paragraphStyle: paragraph,
         ]
+        if let theme {
+            let defaults = SyntaxThemeSelection.defaults(theme: theme, language: language)
+            attributes[.underlineStyle] =
+                (defaults.fontStyle ?? 0) & 4 != 0 ? NSUnderlineStyle.single.rawValue : 0
+        }
         if nativeASCII {
             attributes[.ligature] = 0
             attributes[.kern] = 0
@@ -152,7 +181,9 @@ final class LineLayout {
                     token: token,
                     font: font,
                     appearance: appearance,
-                    fontZoomAdjustment: fontZoomAdjustment
+                    fontZoomAdjustment: fontZoomAdjustment,
+                    theme: theme,
+                    language: language
                 )
                 if let color = attributes.removeValue(forKey: .backgroundColor) as? NSColor {
                     syntaxBackgrounds.append(
@@ -446,54 +477,29 @@ final class LineLayout {
             context.restoreGState()
         }
     }
-}
 
-@MainActor
-enum ThemePalette {
-    /// 业务作用：提前排版时按真实视图外观解析动态颜色，缓存不携带其他窗口的深浅状态。
+    /// 业务作用：明确选择前景沿原行字体和容器绘制，长 ASCII 行仍只处理原生窗口。
     /// 参数说明:
-    /// - color: 系统或资源颜色。
-    /// - appearance: 所属编辑视图的外观。
-    /// 返回：已经在目标外观中解析的 RGB 颜色。
-    static func resolved(_ color: NSColor, appearance: NSAppearance) -> NSColor {
-        var result = color
-        appearance.performAsCurrentDrawingAppearance {
-            result = color.usingColorSpace(.sRGB) ?? color
+    /// - origin: 原行实际绘制原点。
+    /// - color: 来源主题的明确选择前景。
+    /// - context: 调用方已按原选择字形裁剪的上下文。
+    /// 返回：仅改变选中区域文字颜色，不修改原布局、正文或历史。
+    func drawForeground(at origin: NSPoint, color: NSColor, in context: CGContext) {
+        guard unavailableReason == nil else {
+            return
         }
-        return result
-    }
-
-    /// 业务作用：语法样式跟随系统深浅主题，与正文状态独立。
-    /// 参数说明:
-    /// - kind: 语法分类。
-    /// 返回：可辨识的系统适配颜色。
-    static func color(_ kind: SyntaxKind) -> NSColor {
-        switch kind {
-        case .keyword: return .systemPurple
-        case .string: return .systemGreen
-        case .comment: return .secondaryLabelColor
-        case .number: return .systemBlue
-        case .heading: return .systemBlue
-        case .tag: return .systemTeal
-        case .punctuation: return .secondaryLabelColor
-        case .text: return .textColor
+        if let ascii {
+            ascii.drawForeground(at: origin, color: color, in: context)
+            return
         }
-    }
-
-    /// 业务作用：资源颜色只作为呈现值使用，非法格式继承主题。
-    /// 参数说明:
-    /// - hex: 六位 RGB 资源色。
-    /// 返回：有效颜色或继承状态。
-    static func hexColor(_ hex: String) -> NSColor? {
-        let hex = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard hex.count == 6, let value = UInt32(hex, radix: 16) else {
-            return nil
+        if foregroundVariant?.color != color {
+            foregroundVariant = LineForegroundVariant(
+                source: content,
+                color: color,
+                width: manager.textContainer?.size.width ?? width,
+                appearance: appearance
+            )
         }
-        return NSColor(
-            srgbRed: CGFloat((value >> 16) & 255) / 255,
-            green: CGFloat((value >> 8) & 255) / 255,
-            blue: CGFloat(value & 255) / 255,
-            alpha: 1
-        )
+        foregroundVariant?.draw(at: origin, in: context)
     }
 }

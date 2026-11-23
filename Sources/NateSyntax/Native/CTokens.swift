@@ -254,7 +254,7 @@ extension CLexing {
             style: style
         )
         if let last = tokens.last, last.range.upper == base + start, last.kind == kind,
-            last.lexicalStyle == token.lexicalStyle
+            last.lexicalStyle == token.lexicalStyle, last.nativeStyle == token.nativeStyle
         {
             tokens[tokens.count - 1] = try makeToken(
                 range: ByteRange(last.range.lower, base + end),

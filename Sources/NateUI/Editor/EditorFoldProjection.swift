@@ -16,6 +16,7 @@ struct EditorLayoutMetrics: Equatable {
     let rightToLeft: Bool
     let tabWidth: Int
     let showSequences: Bool
+    var themeIdentity: String? = nil
 }
 
 extension EditorView {
@@ -123,7 +124,7 @@ extension EditorView {
             height: 10
         )
         let outline = NSBezierPath(roundedRect: rect, xRadius: 1, yRadius: 1)
-        NSColor.secondaryLabelColor.setStroke()
+        themeColor(.foldMarker, fallback: .secondaryLabelColor).setStroke()
         outline.lineWidth = 1
         outline.stroke()
         let marks = NSBezierPath()

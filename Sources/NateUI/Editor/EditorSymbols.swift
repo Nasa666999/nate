@@ -28,7 +28,7 @@ extension EditorView {
                             string: ch == " " ? "·" : "→",
                             attributes: [
                                 .font: font,
-                                .foregroundColor: NSColor.tertiaryLabelColor,
+                                .foregroundColor: themeColor(.whitespace, fallback: .tertiaryLabelColor),
                             ]
                         ).draw(at: marker.origin)
                     }
@@ -44,7 +44,7 @@ extension EditorView {
             string: "¬",
             attributes: [
                 .font: font,
-                .foregroundColor: NSColor.tertiaryLabelColor,
+                .foregroundColor: themeColor(.whitespace, fallback: .tertiaryLabelColor),
             ]
         ).draw(
             at: NSPoint(

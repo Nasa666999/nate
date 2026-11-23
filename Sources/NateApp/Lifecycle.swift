@@ -48,6 +48,10 @@ extension ApplicationController {
             return .terminateCancel
         }
         closing = true
+        themePreferences.watchGeneration = UUID()
+        themePreferences.watchTask?.cancel()
+        themePreferences.presentationTask?.cancel()
+        themePreferences.form?.cancelEditing()
         cancelPausedWorkspaceImport()
         cancelMultipleSelection()
         cancelColumnInsertion()

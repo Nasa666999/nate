@@ -8,6 +8,9 @@ final class ASCIILineWindow {
     let advance: CGFloat
     let font: NSFont
     let appearance: NSAppearance
+    let theme: EditorThemeDefinition?
+    let language: String?
+    let fontZoomAdjustment: CGFloat
     private(set) var renderedRange: ByteRange
     private var native: LineLayout
     private static var advances: [NSFont: CGFloat] = [:]
@@ -38,14 +41,31 @@ final class ASCIILineWindow {
     /// - range: 完整逻辑行原字节范围。
     /// - font: 当前视图真实字体。
     /// - appearance: 当前视图实际外观。
+    /// - theme: 来源视图固定主题。
+    /// - language: 当前来源语言身份。
+    /// - fontZoomAdjustment: 原字体的实际缩放差值，主题字号只叠加一次。
     /// 返回：符合安全条件时保留有界原生窗口，否则不授予等宽坐标资格。
-    init?(snapshot: DocumentSnapshot, range: ByteRange, font: NSFont, appearance: NSAppearance) {
+    init?(
+        snapshot: DocumentSnapshot,
+        range: ByteRange,
+        font: NSFont,
+        appearance: NSAppearance,
+        theme: EditorThemeDefinition? = nil,
+        language: String? = nil,
+        fontZoomAdjustment: CGFloat = 0
+    ) {
+        let actualFont = EditorThemePresentation.baseFont(
+            font,
+            theme: theme,
+            language: language,
+            adjustment: fontZoomAdjustment
+        )
         // 整行字节与原生步距必须同时得到证明，缺少任一证据都不能沿等宽前缀计算正文坐标。
         guard range.lower >= 0, range.upper >= range.lower, range.upper <= snapshot.text.byteCount,
             range.count >= EditorNativeLayoutPolicy.asciiMinimumBytes,
             range.count <= EditorNativeLayoutPolicy.maximumDocumentBytes,
             snapshot.text.isPrintableASCII(in: range),
-            let advance = Self.uniformAdvance(font, appearance: appearance)
+            let advance = Self.uniformAdvance(actualFont, appearance: appearance)
         else {
             return nil
         }
@@ -53,6 +73,9 @@ final class ASCIILineWindow {
         self.range = range
         self.font = font
         self.appearance = appearance
+        self.theme = theme
+        self.language = language
+        self.fontZoomAdjustment = fontZoomAdjustment
         self.advance = advance
         renderedRange = ByteRange(range.lower, min(range.upper, range.lower + 8192))
         native = Self.project(
@@ -60,7 +83,10 @@ final class ASCIILineWindow {
             range: renderedRange,
             font: font,
             appearance: appearance,
-            advance: advance
+            advance: advance,
+            theme: theme,
+            language: language,
+            fontZoomAdjustment: fontZoomAdjustment
         )
     }
 
@@ -152,6 +178,20 @@ final class ASCIILineWindow {
         )
     }
 
+    /// 业务作用：长行选择前景只重绘当前有限原生窗口，未请求的完整行不展开。
+    /// 参数说明:
+    /// - origin: 完整行的来源绘制原点。
+    /// - color: 当前来源主题的明确选择前景。
+    /// - context: 已按真实选择范围裁剪的上下文。
+    /// 返回：窗口字形沿同一横向投影绘制，其它行和原坐标保持。
+    func drawForeground(at origin: NSPoint, color: NSColor, in context: CGContext) {
+        native.drawForeground(
+            at: NSPoint(x: origin.x + offsetX, y: origin.y),
+            color: color,
+            in: context
+        )
+    }
+
     /// 业务作用：同一视口中的多个光标与背景共用当前段落，不逐项反复排版。
     /// 参数说明:
     /// - column: 已收束到完整行内的真实字符偏移。
@@ -186,7 +226,10 @@ final class ASCIILineWindow {
             range: next,
             font: font,
             appearance: appearance,
-            advance: advance
+            advance: advance,
+            theme: theme,
+            language: language,
+            fontZoomAdjustment: fontZoomAdjustment
         )
     }
 
@@ -205,23 +248,32 @@ final class ASCIILineWindow {
     /// - font: 实际原生字体。
     /// - appearance: 实际视图外观。
     /// - advance: 已验证的真实原生步距。
+    /// - theme: 来源固定主题。
+    /// - language: 来源语言身份。
+    /// - fontZoomAdjustment: 主题字号的原视图缩放差值。
     /// 返回：已完成 TextKit 2 排版的只读片段，不强制排版未请求正文。
     private static func project(
         snapshot: DocumentSnapshot,
         range: ByteRange,
         font: NSFont,
         appearance: NSAppearance,
-        advance: CGFloat
+        advance: CGFloat,
+        theme: EditorThemeDefinition?,
+        language: String?,
+        fontZoomAdjustment: CGFloat
     ) -> LineLayout {
         LineLayout(
             snapshot: snapshot,
             range: range,
             font: font,
+            fontZoomAdjustment: fontZoomAdjustment,
             width: CGFloat(range.count) * advance + 64,
             tokens: [],
             rtl: false,
             appearance: appearance,
-            nativeASCII: true
+            nativeASCII: true,
+            theme: theme,
+            language: language
         )
     }
 

@@ -48,6 +48,7 @@ extension EditorWindow {
         clone.pairInsertionSettings = editor.pairInsertionSettings
         clone.language = editor.language
         clone.userLanguage = editor.userLanguage
+        clone.editorTheme = editor.editorTheme
         clone.onStatus = {
             [weak self] message in self?.status.stringValue = message
         }

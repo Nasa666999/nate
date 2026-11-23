@@ -529,6 +529,7 @@ extension ApplicationController {
         case "characterConverter": characterConverter()
         case "hexConversionSettings": showHexConversionSettings()
         case "preferences": showPreferences()
+        case "themePreferences": showThemePreferences()
         case "saveBackupPreferences": showSaveBackupPreferences()
         case "recoveryStoragePreferences": showRecoveryStoragePreferences()
         case "savedBackups": showSavedBackups()

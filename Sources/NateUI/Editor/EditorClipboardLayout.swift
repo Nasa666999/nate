@@ -48,6 +48,7 @@ extension EditorView {
             temporary.tabSettings = tabSettings
             temporary.language = language
             temporary.userLanguage = userLanguage
+            temporary.editorTheme = editorTheme
             temporary.wrapLines = wrapLines
             temporary.geometryLayoutWidth = nativeBodyLayoutWidth
             temporary.showSymbols = showSymbols

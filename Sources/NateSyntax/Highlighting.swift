@@ -14,6 +14,7 @@ public struct SyntaxToken: Sendable {
     public let fontName: String?
     public let fontSize: Int?
     public let lexicalStyle: String
+    public let nativeStyle: UInt8?
     public let foldMarker: SyntaxFoldMarker?
 
     /// 业务作用：携带可配置语法呈现，样式不进入正文历史。
@@ -26,6 +27,7 @@ public struct SyntaxToken: Sendable {
     /// - fontName: 资源指定的字体名称，为空时继承编辑器字体。
     /// - fontSize: 资源指定的一至五百一十二点字号，为空时继承编辑器字号。
     /// - lexicalStyle: 原词法样式身份，为空时采用基础类别；颜色相同不代表词法作用域相同。
+    /// - nativeStyle: 已确认的原生数字样式，为空时从有限数字词法身份读取；不改变结构类别。
     /// - foldMarker: 词法过程明确确认的折叠动作及其实际上下文，没有标记时为空。
     /// 返回：独立呈现属性。
     public init(
@@ -37,6 +39,7 @@ public struct SyntaxToken: Sendable {
         fontName: String? = nil,
         fontSize: Int? = nil,
         lexicalStyle: String? = nil,
+        nativeStyle: UInt8? = nil,
         foldMarker: SyntaxFoldMarker? = nil
     ) {
         self.range = range
@@ -47,7 +50,21 @@ public struct SyntaxToken: Sendable {
         self.fontName = fontName
         self.fontSize = fontSize
         self.lexicalStyle = lexicalStyle ?? kind.rawValue
+        self.nativeStyle = nativeStyle ?? Self.numericStyle(lexicalStyle)
         self.foldMarker = foldMarker
+    }
+
+    /// 业务作用：数字样式保留独立的主题覆盖身份，语义词法名称继续用于结构匹配。
+    /// 参数说明:
+    /// - identity: 当前已经确认的完整词法身份。
+    /// 返回：至多 256 UTF-8 字节且末段为原生数字类别时提供编号，其它身份保持为空。
+    private static func numericStyle(_ identity: String?) -> UInt8? {
+        guard let identity, identity.utf8.count <= 256,
+            let separator = identity.lastIndex(of: ":")
+        else {
+            return nil
+        }
+        return UInt8(identity[identity.index(after: separator)...])
     }
 
     /// 业务作用：代码结构只使用真实代码标点，字符串、注释和宏体不能制造主代码块。

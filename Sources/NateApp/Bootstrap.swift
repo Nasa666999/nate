@@ -30,6 +30,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let historyAction = HistoryActionRuntime()
     let lineSorting = LineSortingRuntime()
     let displayPreferences = EditorDisplayPreferencesRuntime()
+    let themePreferences = ThemePreferencesRuntime()
     let wordPreferences = WordBoundaryRuntime()
     let delimiterPreferences = DelimiterSelectionRuntime()
     let dateTimePreferences = DateTimePreferencesRuntime()
@@ -266,6 +267,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             )
             registry = try LanguageRegistry(
                 directory: SystemIntegration.resourceDirectory().appendingPathComponent("languages")
+            )
+            await configureEditorThemes(
+                directory: SystemIntegration.resourceDirectory().appendingPathComponent("themes")
             )
             let restored = try await recoveryIO.read {
                 let result = try store.restoreSnapshots()

@@ -77,7 +77,8 @@ extension CLexing {
             return SyntaxToken(
                 range: range,
                 kind: kind,
-                lexicalStyle: "c:" + style
+                lexicalStyle: "c:" + style,
+                nativeStyle: CThemeStyleIdentity.nativeID(style, state: state)
             )
         }
         let (identifier, attributes) = try scriptRules.presentation(style, state: state)
