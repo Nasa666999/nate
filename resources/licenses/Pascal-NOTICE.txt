@@ -1,0 +1,8 @@
+Pascal 词法与折叠适配参考 Lexilla 的 LexPascal.cxx。
+来源：https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexPascal.cxx
+
+原实现作者：Laurent le Tynevez、Simon Steele、Mathias Rauen、Marko Njezic。
+完整许可见同目录 Lexilla-LICENSE.txt。
+
+Swift 适配保留属性和导出关键字上下文、内联汇编、注释与预处理、字符代码、
+普通及多引号字面和声明例外折叠；使用固定来源与完整样式，不执行源程序或指令。

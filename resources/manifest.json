@@ -538,7 +538,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "882eb05efaa62769fd0b0f6a379a12488ca96ebba2ca99b74aa3756d5930d385"
+      "sha256" : "fd9c3cf50169391bfed9f9e72f6d28ab1f4362009eef1475ff2566fa65d62d32"
     },
     {
       "path" : "licenses\/Batch-NOTICE.txt",
@@ -583,6 +583,10 @@
     {
       "path" : "licenses\/ObjectiveC-NOTICE.txt",
       "sha256" : "1eabe1000a542e8127e83f70bd65c56ab1cf30a08598e31f61eb3765af5c5917"
+    },
+    {
+      "path" : "licenses\/Pascal-NOTICE.txt",
+      "sha256" : "95dee4336320b20e6084dba1e10de77b267f2527347baac93a2e086a09325974"
     },
     {
       "path" : "licenses\/PowerShell-NOTICE.txt",

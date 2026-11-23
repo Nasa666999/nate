@@ -25,7 +25,7 @@ public struct FoldIndex: Sendable {
         }
         return [
             "python", "ini", "props", "diff", "registry", "ihex", "tex", "latex", "yaml", "lua", "mssql",
-            "sql", "toml", "cmake",
+            "sql", "toml", "cmake", "pascal",
         ]
         .contains(
             language?.id ?? ""
@@ -55,7 +55,7 @@ public struct FoldIndex: Sendable {
             by: [
                 "python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex", "lisp",
                 "scheme", "rust", "yaml", "powershell", "objc", "r", "lua", "mssql", "sql", "css", "toml",
-                "cmake",
+                "cmake", "pascal",
             ].contains(
                 language?.id ?? ""
             ) || language?.usesSharedCLexer == true || udl != nil
@@ -70,6 +70,9 @@ public struct FoldIndex: Sendable {
         }
         else if let language, language.id == "r" {
             candidates = try RFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
+        }
+        else if let language, language.id == "pascal" {
+            candidates = try PascalFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
         }
         else if let language, language.id == "cmake" {
             candidates = try CMakeFolding.regions(snapshot: snapshot, language: language, deadline: deadline)

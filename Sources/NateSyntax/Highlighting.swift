@@ -75,6 +75,7 @@ public struct SyntaxToken: Sendable {
             || lexicalStyle == "objc:9"
             || lexicalStyle == "r:10" || lexicalStyle == "r:11" || lexicalStyle == "lua:9"
             || lexicalStyle == "script:9"
+            || ["pascal:5", "pascal:6", "pascal:14"].contains(lexicalStyle)
     }
 }
 
@@ -107,6 +108,8 @@ public struct SyntaxState: Sendable, Equatable {
     var tomlCache = TOMLLexicalCache()
     var cmake = CMakeLexicalState()
     var cmakeCache = CMakeLexicalCache()
+    var pascal = PascalLexicalState()
+    var pascalCache = PascalLexicalCache()
 
     /// 业务作用：为行间词法传播建立中性状态。
     /// 参数说明: 无。
@@ -135,6 +138,7 @@ public struct SyntaxScanner: Sendable {
     let batchRules: BatchRules?
     let tomlRules: TOMLRules?
     let cmakeRules: CMakeRules?
+    let pascalRules: PascalRules?
 
     /// 业务作用：一次后台分析固定语言资源并复用关键字集合，逐行传播不重复构建整份资源。
     /// 参数说明:
@@ -168,6 +172,7 @@ public struct SyntaxScanner: Sendable {
         batchRules = language.id == "batch" ? BatchRules(language: language, deadline: self.deadline) : nil
         tomlRules = language.id == "toml" ? TOMLRules(language: language, deadline: self.deadline) : nil
         cmakeRules = language.id == "cmake" ? CMakeRules(language: language, deadline: self.deadline) : nil
+        pascalRules = language.id == "pascal" ? PascalRules(language: language, deadline: self.deadline) : nil
         scriptRules =
             ["javascript.js", "typescript"].contains(language.id)
             ? ScriptRules(language: language, deadline: self.deadline) : nil
@@ -175,14 +180,14 @@ public struct SyntaxScanner: Sendable {
             [
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
-                "objc", "r", "lua", "mssql", "sql", "css", "batch", "toml", "cmake",
+                "objc", "r", "lua", "mssql", "sql", "css", "batch", "toml", "cmake", "pascal",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
             ? snapshot : nil
         if [
             "makefile", "rust", "yaml", "powershell", "objc", "r", "lua", "javascript.js", "typescript",
-            "mssql", "sql", "css", "batch", "toml", "cmake",
+            "mssql", "sql", "css", "batch", "toml", "cmake", "pascal",
         ]
         .contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。
@@ -214,6 +219,21 @@ public struct SyntaxScanner: Sendable {
     /// - state: 当前流程独立持有的行首状态，结束后推进到下一行。
     /// 返回：当前片段的语法呈现范围，不修改正文。
     public func highlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken] {
+        // Pascal 声明、汇编及多行字面属于同一完整规则，语言变化必须撤销旧状态资格。
+        guard state.pascal.resource == nil || language.id == "pascal" else {
+            state.diagnostic = "词法语言已改变，不能继续 Pascal 的原状态。"
+            return []
+        }
+        if language.id == "pascal" {
+            return PascalLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: pascalRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         // CMake 引号及变量资格属于同一完整规则，语言变化必须重建连续证据。
         guard state.cmake.resource == nil || language.id == "cmake" else {
             state.diagnostic = "词法语言已改变，不能继续 CMake 的原状态。"
