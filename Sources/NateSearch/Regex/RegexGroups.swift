@@ -20,6 +20,13 @@ extension RegexParser {
         if take(63) {
             if take(58) {
             }
+            else if take(124) {
+                let inside = try expression(depth: depth + 1, resettingCaptures: true)
+                guard take(41) else {
+                    throw diagnostic("分支重置组未闭合")
+                }
+                return inside
+            }
             else if take(61) {
                 assertion = (true, false)
             }
@@ -157,7 +164,10 @@ extension RegexParser {
             return .atomic(inside)
         }
         if let group {
-            groups[group] = inside
+            // 重置分支可以复用捕获编号；子程序始终指向该编号的首个定义，而实际捕获由当前匹配路径确认。
+            if groups[group] == nil {
+                groups[group] = inside
+            }
             return .capture(group, inside)
         }
         return inside

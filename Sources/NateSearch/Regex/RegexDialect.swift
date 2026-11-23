@@ -11,6 +11,7 @@ indirect enum RegexNode: Sendable {
     case characterClass(String, Bool, [ClosedRange<UInt16>])
     case sequence([RegexNode])
     case alternate([RegexNode])
+    case resetAlternate([RegexNode])
     case capture(Int, RegexNode)
     case reference(Int)
     case namedReference(String)
@@ -131,8 +132,9 @@ struct RegexParser {
     /// 业务作用：解析分支和串联，限制表达式嵌套避免栈耗尽。
     /// 参数说明:
     /// - depth: 当前语法嵌套深度。
-    /// 返回：保留左到右匹配优先级的语法树。
-    mutating func expression(depth: Int) throws -> RegexNode {
+    /// - resettingCaptures: 当前组的各分支是否从相同捕获编号继续。
+    /// 返回：保留左到右匹配优先级的语法树；分支重置组之后的编号沿全部分支的最大值继续。
+    mutating func expression(depth: Int, resettingCaptures: Bool = false) throws -> RegexNode {
         guard depth < 128 else {
             throw NateError.message("正则嵌套超过 128 层。")
         }
@@ -142,6 +144,8 @@ struct RegexParser {
         }
         var branches: [RegexNode] = []
         var sequence: [RegexNode] = []
+        let captureBase = count
+        var captureMaximum = count
         while index < units.count {
             try checkpoint()
             try skipTrivia()
@@ -151,6 +155,10 @@ struct RegexParser {
             if take(124) {
                 branches.append(.sequence(sequence))
                 sequence = []
+                if resettingCaptures {
+                    captureMaximum = max(captureMaximum, count)
+                    count = captureBase
+                }
                 continue
             }
             var node = try atom(depth: depth)
@@ -211,6 +219,12 @@ struct RegexParser {
             sequence.append(.flags(modes.sensitive, modes.dot, modes.multiline, node))
         }
         branches.append(.sequence(sequence))
+        if resettingCaptures {
+            count = max(captureMaximum, count)
+        }
+        if resettingCaptures && branches.count > 1 {
+            return .resetAlternate(branches)
+        }
         return branches.count == 1 ? branches[0] : .alternate(branches)
     }
 
@@ -336,7 +350,7 @@ struct RegexParser {
                 total = sum.partialValue
             }
             return total
-        case .alternate(let nodes):
+        case .alternate(let nodes), .resetAlternate(let nodes):
             let widths = nodes.compactMap(fixedWidth)
             return widths.count == nodes.count && Set(widths).count == 1 ? widths.first : nil
         case .repeatNode(let n, let a, let b, _, _):

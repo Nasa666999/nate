@@ -43,11 +43,54 @@ extension CancellableMatcher {
     mutating func trim(_ choices: inout [RegexPath], throughAlternative: Bool) {
         while let removed = choices.popLast() {
             release(removed)
-            if throughAlternative, let instruction = removed.pending.last,
-                case .alternative = instruction
-            {
-                break
+            if throughAlternative, let instruction = removed.pending.last {
+                switch instruction {
+                case .alternative, .resetAlternative:
+                    return
+                default:
+                    break
+                }
             }
+        }
+    }
+
+    /// 业务作用：分支重置组提前接受后仍按原声明顺序处理后续复用编号，已闭合捕获不能保留另一分支的旧起点。
+    /// 参数说明:
+    /// - node: 提前接受后不再消费正文的后续分支。
+    /// - state: 当前成功路径的捕获与真实接受位置。
+    /// - depth: 当前有界语法遍历深度。
+    /// 返回：已参与的复用捕获沿接受位置重置；捕获将形成反向范围或共同预算不足时整次搜索失败。
+    mutating func resetAcceptedCaptures(_ node: RegexNode, state: inout MatchState, depth: Int = 0) throws {
+        try checkpoint()
+        guard depth < 256 else {
+            throw NateError.message("正则接受时的捕获遍历超过 256 层。")
+        }
+        switch node {
+        case .capture(let id, let child):
+            if let previous = state.captures[id] {
+                let end = previous.location + previous.length
+                // 后续分支不能把已结束的捕获改成反向范围；拒绝不发布命中，也不准备可能丢失正文的替换。
+                guard end >= state.position else {
+                    throw NateError.message("分支重置后的提前接受产生反向捕获范围，未发布搜索结果。")
+                }
+                state.captures[id] = NSRange(location: state.position, length: end - state.position)
+            }
+            try resetAcceptedCaptures(child, state: &state, depth: depth + 1)
+        case .sequence(let children), .alternate(let children), .resetAlternate(let children):
+            for child in children {
+                try resetAcceptedCaptures(child, state: &state, depth: depth + 1)
+            }
+        case .repeatNode(let child, _, _, _, _), .assertion(let child, _, _), .atomic(let child),
+            .flags(_, _, _, let child):
+            try resetAcceptedCaptures(child, state: &state, depth: depth + 1)
+        case .conditional(let condition, let yes, let no):
+            if case .assertion(let child) = condition {
+                try resetAcceptedCaptures(child, state: &state, depth: depth + 1)
+            }
+            try resetAcceptedCaptures(yes, state: &state, depth: depth + 1)
+            try resetAcceptedCaptures(no, state: &state, depth: depth + 1)
+        default:
+            break
         }
     }
 }

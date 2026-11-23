@@ -18,6 +18,8 @@ enum RegexInstruction {
     case repetition(RegexRepeat)
     case repeated(RegexRepeat, Int)
     case alternative([RegexNode], Int, Int)
+    case resetAlternative([RegexNode], Int, Int)
+    case acceptedBranches([RegexNode], Int)
     case subroutine([Int: NSRange], Int?, Int?)
 }
 
@@ -62,7 +64,7 @@ extension CancellableMatcher {
                 try checkpoint()
                 if path.state.accepted {
                     switch instruction {
-                    case .capture, .modes, .subroutine:
+                    case .capture, .modes, .subroutine, .acceptedBranches:
                         break
                     default:
                         continue
@@ -95,6 +97,18 @@ extension CancellableMatcher {
                         try fork([.alternative(nodes, index + 1, depth)], from: path, into: &choices)
                     }
                     try push(.node(nodes[index], depth), onto: &path)
+                case .resetAlternative(let nodes, let index, let depth):
+                    if index + 1 < nodes.count {
+                        try fork([.resetAlternative(nodes, index + 1, depth)], from: path, into: &choices)
+                        try push(.acceptedBranches(nodes, index + 1), onto: &path)
+                    }
+                    try push(.node(nodes[index], depth), onto: &path)
+                case .acceptedBranches(let nodes, let index):
+                    if path.state.accepted {
+                        for child in nodes[index...] {
+                            try resetAcceptedCaptures(child, state: &path.state)
+                        }
+                    }
                 case .node(let node, let depth):
                     guard depth < 256 else {
                         throw NateError.message("正则递归超过 256 层。")
@@ -121,6 +135,15 @@ extension CancellableMatcher {
                         }
                         if nodes.count > 1 {
                             try fork([.alternative(nodes, 1, depth + 1)], from: path, into: &choices)
+                        }
+                        try push(.node(first, depth + 1), onto: &path)
+                    case .resetAlternate(let nodes):
+                        guard let first = nodes.first else {
+                            continue backtrack
+                        }
+                        if nodes.count > 1 {
+                            try fork([.resetAlternative(nodes, 1, depth + 1)], from: path, into: &choices)
+                            try push(.acceptedBranches(nodes, 1), onto: &path)
                         }
                         try push(.node(first, depth + 1), onto: &path)
                     case .capture(let id, let child):
