@@ -67,7 +67,8 @@ private enum UserConfigurationLabels {
     static let names: [String: String] = [
         "adaptClipboardLineEndings": "粘贴换行适配",
         "autosaveEnabled": "每秒自动保存",
-        "completion.enabled": "自动补全",
+        "completion.enabled": "自动补全候选",
+        AutomaticCompletionOptions.signaturePreferenceKey: "自动显示函数参数提示",
         "completion.words": "正文词补全",
         "completion.language": "语言资源补全",
         "completion.tab": "Tab 确认补全",

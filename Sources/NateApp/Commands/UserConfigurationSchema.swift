@@ -10,6 +10,7 @@ enum UserConfigurationSchema {
         "completion.tab", "completion.enter", "copyLineWithoutSelection", "adaptClipboardLineEndings",
         "incrementalSearch.caseSensitive", "incrementalSearch.wholeWord", "incrementalSearch.highlightAll",
         "incrementalSearch.wrap", "structure.sortByName", "wrapLines", "showSymbols",
+        AutomaticCompletionOptions.signaturePreferenceKey,
     ]
     static let dataLimits: [String: Int] = [
         "editorDisplaySettings": 8192,
@@ -46,11 +47,12 @@ enum UserConfigurationSchema {
         if fields == keys {
             return configuration
         }
-        let beforeTabSwitching = keys.filter { $0 != WorkspaceTabSwitchOrder.preferenceKey }
+        let beforeSignature = keys.filter { $0 != AutomaticCompletionOptions.signaturePreferenceKey }
+        let beforeTabSwitching = beforeSignature.filter { $0 != WorkspaceTabSwitchOrder.preferenceKey }
         let beforeRecoveryPolicy = beforeTabSwitching.filter { $0 != "recoveryStoragePolicy" }
         // 只迁移已发布的完整字段集合，未知字段或其它遗漏不能取得部分发布资格。
         guard source.entries.map(\.key) == keys,
-            fields == beforeTabSwitching || fields == beforeRecoveryPolicy
+            fields == beforeSignature || fields == beforeTabSwitching || fields == beforeRecoveryPolicy
         else {
             throw NateError.message("用户配置字段集合不受支持，未采用部分设置。")
         }

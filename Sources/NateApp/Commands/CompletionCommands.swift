@@ -26,10 +26,8 @@ extension ApplicationController {
             return
         }
         let defaults = configurationDefaults()
-        let enabled =
-            defaults.object(forKey: "completion.enabled") == nil
-            || defaults.bool(forKey: "completion.enabled")
-        guard !automatic || enabled else {
+        let automaticOptions = AutomaticCompletionOptions(defaults: defaults)
+        guard !automatic || automaticOptions.words || automaticOptions.signatures else {
             cancelCompletion()
             return
         }
@@ -77,7 +75,9 @@ extension ApplicationController {
                         additional: definition?.additionalWordCharacters ?? "",
                         wordBoundaries: wordBoundaries
                     )
-                    let showWords = mode != "signature" && (!automatic || context.prefix.count >= threshold)
+                    let showWords =
+                        mode != "signature"
+                        && (!automatic || automaticOptions.words && context.prefix.count >= threshold)
                     let result = try CompletionEngine.suggest(
                         snapshot: snapshot,
                         context: context,
@@ -87,13 +87,15 @@ extension ApplicationController {
                         languageWords: showWords && mode != "completeWords" && languageWords,
                         wordBoundaries: wordBoundaries
                     )
-                    let hint = try definition.flatMap {
-                        try CompletionEngine.signature(
-                            snapshot: snapshot,
-                            caret: context.range.upper,
-                            definition: $0
-                        )
-                    }
+                    let hint =
+                        !automatic || automaticOptions.signatures
+                        ? try definition.flatMap {
+                            try CompletionEngine.signature(
+                                snapshot: snapshot,
+                                caret: context.range.upper,
+                                definition: $0
+                            )
+                        } : nil
                     return (result, hint)
                 }
                 let (result, hint) = try await withTaskCancellationHandler(
