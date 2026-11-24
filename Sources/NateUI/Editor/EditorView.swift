@@ -18,6 +18,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 dragRevision = nil
                 dragSelectionID = nil
                 dragAppending = false
+                dropIntent = nil
                 layouts.removeAll()
                 hiddenLines.removeAll()
                 syntaxTask?.cancel()
@@ -229,6 +230,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var dragRevision: UInt64?
     var dragSelectionID: UUID?
     var dragAppending = false
+    var dropIntent: EditorDropIntent?
     var blinkTimer: Timer?
     var caretVisible = true
     public internal(set) var markDisplayStatus: String?

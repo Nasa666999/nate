@@ -90,6 +90,10 @@ extension EditorView {
             guard let range else {
                 return
             }
+            // 候选取得正文目标后撤销正在等待的文本落点，取消候选也不会恢复旧拖动权限。
+            if dropIntent?.kind == .text {
+                dropIntent = nil
+            }
             composition = CompositionSession(
                 revision: document.revision,
                 originalRange: range,

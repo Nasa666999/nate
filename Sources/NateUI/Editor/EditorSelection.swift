@@ -7,13 +7,26 @@ extension EditorView {
     /// - point: 本视图坐标。
     /// 返回：有效正文位置，超出行尾时停在行尾；缺少字形时保留原光标并反馈原因。
     func bytePosition(at point: NSPoint) -> Int {
+        if let position = laidOutBytePosition(at: point) {
+            return position
+        }
+        let tree = displayTree
+        let line = projection.line(at: max(0, point.y - 8))
+        return min(tree.byteCount, primarySelection?.head ?? tree.lineStart(line))
+    }
+
+    /// 业务作用：以真实字形证据确认输入落点，供不能沿用原光标的动作使用。
+    /// 参数说明:
+    /// - point: 本视图坐标。
+    /// 返回：对应的完整字节边界，排版不可用时反馈原因并返回空。
+    func laidOutBytePosition(at point: NSPoint) -> Int? {
         let tree = displayTree
         let line = projection.line(at: max(0, point.y - 8))
         let layout = layoutLine(line)
         // 没有实际字形时不能把占位起点当成用户新选择，保留原光标并交付具体原因。
         if let reason = layout.unavailableReason {
             onStatus?(reason)
-            return min(tree.byteCount, primarySelection?.head ?? tree.lineStart(line))
+            return nil
         }
         let local = layout.character(
             at: NSPoint(x: max(0, point.x - gutterWidth), y: point.y - projection.y(of: line) - 8)
