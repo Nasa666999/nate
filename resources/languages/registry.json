@@ -70850,7 +70850,194 @@
       "when",
       "while",
       "yield"
-    ]
+    ],
+    "lexicalStyles": {
+      "0": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "1": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "2": {
+        "foreground": "#008000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "3": {
+        "foreground": "#004000",
+        "background": "#C0FFC0",
+        "fontStyle": 0
+      },
+      "4": {
+        "foreground": "#FF8000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "5": {
+        "foreground": "#0000FF",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "6": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "7": {
+        "foreground": "#808000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "8": {
+        "foreground": "#0080C0",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "9": {
+        "foreground": "#8080FF",
+        "background": "#FFFFCC",
+        "fontStyle": 1
+      },
+      "10": {
+        "foreground": "#000080",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "11": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "12": {
+        "foreground": "#0080FF",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "13": {
+        "foreground": "#000080",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "14": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "15": {
+        "foreground": "#804000",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "16": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "17": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "18": {
+        "foreground": "#FFFF00",
+        "background": "#A08080",
+        "fontStyle": 0
+      },
+      "19": {
+        "foreground": "#600000",
+        "background": "#FFF0D8",
+        "fontStyle": 0
+      },
+      "20": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "21": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "22": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "23": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "24": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "25": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "26": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "27": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "28": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "29": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "30": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "31": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "40": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "41": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "42": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "43": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      },
+      "44": {
+        "foreground": null,
+        "background": null,
+        "fontStyle": 0
+      }
+    }
   },
   {
     "id": "rust",

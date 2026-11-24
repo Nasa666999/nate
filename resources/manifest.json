@@ -562,7 +562,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "1f0f668a0ca21fd4ec62ff6cb6b77755ef116753058d092eb426e3348ca34017"
+      "sha256" : "193c32aebebb9c9464b13c363e786c5905131bc2047ae3e3af20ff51e8a4606e"
     },
     {
       "path" : "licenses\/ASM-NOTICE.txt",

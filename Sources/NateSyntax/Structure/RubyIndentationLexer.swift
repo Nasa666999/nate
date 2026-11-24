@@ -1,6 +1,6 @@
 import NateCore
 
-struct RubyIndentationLexer {
+struct RubyIndentationLexer: Equatable, Sendable {
     enum Word: String {
         case conditional = "if"
         case unless, elsif
@@ -31,7 +31,14 @@ struct RubyIndentationLexer {
 
         let kind: Kind
         let span: ByteRange
-        var literal = false
+        var highlightStyle: RubyHighlightStyle? = nil
+
+        /// 业务作用：结构操作只接受不属于原始字面范围的代码词元。
+        /// 参数说明: 无。
+        /// 返回：原词元为字面的任意组成部分时为真。
+        var literal: Bool {
+            highlightStyle != nil
+        }
     }
 
     struct Row {
@@ -40,12 +47,16 @@ struct RubyIndentationLexer {
         let holdsLiteral: Bool
         let commentStart: Int?
         let entirelyOpaque: Bool
+        var opaqueStyle: RubyHighlightStyle? = nil
+        var endingStyle: RubyHighlightStyle? = nil
+        var heredocEnd: Int? = nil
     }
 
     private var literal = RubyLiteralState()
     private var heredocs: [RubyHeredoc] = []
     private var documentation = false
     private var dataSection = false
+    private var literalStyle: RubyHighlightStyle? = nil
 
     /// 业务作用：逐行保持 Ruby 真实字面、文档注释和数据边界，只向结构缩进交付可消费的代码词元。
     /// 参数说明:
@@ -55,27 +66,31 @@ struct RubyIndentationLexer {
     mutating func row(_ bytes: [UInt8], check: () throws -> Void) throws -> Row {
         try check()
         if let document = heredocs.first {
-            if document.ends(in: bytes) {
+            let close = document.closingOffset(in: bytes)
+            if close != nil {
                 heredocs.removeFirst()
             }
-            return Self.opaqueRow
+            var row = Self.opaqueRow(document.style, ending: close == nil ? document.style : nil)
+            row.heredocEnd = close
+            return row
         }
         if dataSection {
-            return Self.opaqueRow
+            return Self.opaqueRow(.data, ending: .data)
         }
         if documentation {
-            if Self.directive("=end", in: bytes) {
+            let ends = Self.directive("=end", in: bytes)
+            if ends {
                 documentation = false
             }
-            return Self.opaqueRow
+            return Self.opaqueRow(.documentation, ending: ends ? nil : .documentation)
         }
         if !literal.isOpen, Self.directive("=begin", in: bytes) {
             documentation = true
-            return Self.opaqueRow
+            return Self.opaqueRow(.documentation, ending: .documentation)
         }
         if !literal.isOpen, bytes.elementsEqual("__END__".utf8) {
             dataSection = true
-            return Self.opaqueRow
+            return Self.opaqueRow(.data, ending: .data)
         }
         let beginsInLiteral = literal.isOpen
         var tokens: [Token] = []
@@ -86,7 +101,10 @@ struct RubyIndentationLexer {
         if beginsInLiteral {
             try literal.advance(in: bytes, from: &index, check: check)
             if index > 0 {
-                tokens.append(Token(kind: .operand, span: ByteRange(0, index), literal: true))
+                tokens.append(Token(kind: .operand, span: ByteRange(0, index), highlightStyle: literalStyle))
+            }
+            if !literal.isOpen {
+                literalStyle = nil
             }
         }
         while index < bytes.count, !literal.isOpen {
@@ -110,6 +128,13 @@ struct RubyIndentationLexer {
                 index > 0 && Self.blank(bytes[index - 1]) && !Self.blank(following)
                 && following != 0 && following != 61
             let acceptsLiteral = expectsOperand || possibleArgument
+            if byte == 58, let after = try RubyHighlightWords.symbolEnd(in: bytes, at: index, check: check) {
+                index = after
+                tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .symbol))
+                expectsOperand = false
+                qualified = false
+                continue
+            }
             if acceptsLiteral,
                 let (document, after) = try RubyHeredoc.opening(in: bytes, at: index, check: check)
             {
@@ -118,7 +143,9 @@ struct RubyIndentationLexer {
                 }
                 heredocs.append(document)
                 index = after
-                tokens.append(Token(kind: .operand, span: ByteRange(start, index), literal: true))
+                tokens.append(
+                    Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .heredocDelimiter)
+                )
                 expectsOperand = false
                 qualified = false
                 continue
@@ -127,8 +154,10 @@ struct RubyIndentationLexer {
             {
                 literal.begin(delimiter)
                 index = after
+                let style = RubyHighlightStyle.literal(bytes[start..<after])
                 try literal.advance(in: bytes, from: &index, check: check)
-                tokens.append(Token(kind: .operand, span: ByteRange(start, index), literal: true))
+                literalStyle = literal.isOpen ? style : nil
+                tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: style))
                 expectsOperand = false
                 qualified = false
                 continue
@@ -139,7 +168,7 @@ struct RubyIndentationLexer {
                     index += 1
                 }
                 index = min(bytes.count, index + Self.scalarLength(bytes[index]))
-                tokens.append(Token(kind: .operand, span: ByteRange(start, index), literal: true))
+                tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .number))
                 expectsOperand = false
                 qualified = false
                 continue
@@ -207,17 +236,27 @@ struct RubyIndentationLexer {
             beginsInLiteral: beginsInLiteral,
             holdsLiteral: literal.isOpen,
             commentStart: commentStart,
-            entirelyOpaque: false
+            entirelyOpaque: false,
+            endingStyle: literalStyle ?? heredocs.first?.style
         )
     }
 
-    private static let opaqueRow = Row(
-        tokens: [],
-        beginsInLiteral: true,
-        holdsLiteral: true,
-        commentStart: nil,
-        entirelyOpaque: true
-    )
+    /// 业务作用：完全处于文档注释、heredoc 或数据段的行只发布着色资格，不发布结构词。
+    /// 参数说明:
+    /// - style: 当前物理正文的原生样式。
+    /// - ending: 原始行结束字节的样式。
+    /// 返回：保留隔离状态且没有代码词元的完整物理行。
+    private static func opaqueRow(_ style: RubyHighlightStyle, ending: RubyHighlightStyle?) -> Row {
+        Row(
+            tokens: [],
+            beginsInLiteral: true,
+            holdsLiteral: true,
+            commentStart: nil,
+            entirelyOpaque: true,
+            opaqueStyle: style,
+            endingStyle: ending
+        )
+    }
 
     /// 业务作用：Ruby 文档注释只有在真实行首和合法后继处改变跨行状态。
     /// 参数说明:
@@ -249,7 +288,7 @@ struct RubyIndentationLexer {
     /// 参数说明:
     /// - byte: 当前原字节。
     /// 返回：空格或水平 Tab 时为真。
-    private static func blank(_ byte: UInt8) -> Bool {
+    static func blank(_ byte: UInt8) -> Bool {
         byte == 9 || byte == 32
     }
 

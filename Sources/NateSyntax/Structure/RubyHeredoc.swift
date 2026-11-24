@@ -1,8 +1,9 @@
 import NateCore
 
-struct RubyHeredoc {
+struct RubyHeredoc: Equatable, Sendable {
     private let delimiter: [UInt8]
     private let allowsIndent: Bool
+    let style: RubyHighlightStyle
 
     /// 业务作用：仅从当前位置已确认的字面开端取得 heredoc 名称，普通左移运算继续按代码处理。
     /// 参数说明:
@@ -47,20 +48,26 @@ struct RubyHeredoc {
         guard index > name, !quoted || index < bytes.count && bytes[index] == mark else {
             return nil
         }
-        let document = RubyHeredoc(delimiter: Array(bytes[name..<index]), allowsIndent: indented)
+        let style: RubyHighlightStyle =
+            mark == 39 ? .heredocLiteral : (mark == 96 ? .heredocCommand : .heredocString)
+        let document = RubyHeredoc(
+            delimiter: Array(bytes[name..<index]),
+            allowsIndent: indented,
+            style: style
+        )
         return (document, index + (quoted ? 1 : 0))
     }
 
     /// 业务作用：heredoc 只在同一真实分隔符结束，缩进及代码关键词不能提前打开后续正文。
     /// 参数说明:
     /// - bytes: 当前候选物理行的原字节，排除实际结束符。
-    /// 返回：当前整行是原声明允许的结束标记时为真。
-    func ends(in bytes: [UInt8]) -> Bool {
+    /// 返回：真实结束标记的起点，正文内容或不匹配时为空。
+    func closingOffset(in bytes: [UInt8]) -> Int? {
         let body =
             allowsIndent
             ? bytes.drop(while: {
                 $0 == 9 || $0 == 32
             }) : bytes[...]
-        return body.elementsEqual(delimiter)
+        return body.elementsEqual(delimiter) ? body.startIndex : nil
     }
 }

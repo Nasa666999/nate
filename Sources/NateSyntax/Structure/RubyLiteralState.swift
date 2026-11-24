@@ -1,7 +1,7 @@
 import NateCore
 
-struct RubyLiteralState {
-    struct Delimiter {
+struct RubyLiteralState: Equatable, Sendable {
+    struct Delimiter: Equatable, Sendable {
         let closer: UInt8
         let pairedOpener: UInt8?
         let interpolates: Bool
@@ -10,7 +10,7 @@ struct RubyLiteralState {
         var characterClass = false
     }
 
-    private enum Region {
+    private enum Region: Equatable, Sendable {
         case literal(Delimiter)
         case interpolation(Int)
     }
