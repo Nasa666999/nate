@@ -161,13 +161,15 @@ struct FortranIndentationLine {
     /// 业务作用：只在当前实际选区之后仍有一条完整关闭声明时，授权对齐被保留的结构。
     /// 参数说明:
     /// - position: 用户真实替换范围的结束字节。
+    /// - boundary: 当前语句的实际终止边界，不能越过语句分隔符。
     /// 返回：后续完整语句及第一字节位置，词元被部分选中时为空。
-    func suffixAtoms(at position: Int) -> ArraySlice<Atom>? {
+    func suffixAtoms(at position: Int, endingAt boundary: Int) -> ArraySlice<Atom>? {
         let index = Self.firstEnding(after: position, count: atoms.count) { atoms[$0].range.upper }
-        guard index < atoms.count, atoms[index].range.lower >= position else {
+        let end = Self.firstEnding(after: boundary, count: atoms.count) { atoms[$0].range.upper }
+        guard index < end, atoms[index].range.lower >= position else {
             return nil
         }
-        return atoms[index...]
+        return atoms[index..<end]
     }
 
     /// 业务作用：只用词法器确认的完整首语句识别块、分支和闭合，Fortran 同名变量、标签循环及调用不会打开结构。

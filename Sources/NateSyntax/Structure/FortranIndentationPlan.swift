@@ -130,6 +130,35 @@ enum FortranIndentationPlan {
             return value
         }
 
+        /// 业务作用：当前语句自身与同一已确认外层决定下一行的原始前缀，关闭发生前保留开端证据。
+        /// 参数说明:
+        /// - event: 按真实原词元完成的本语句角色。
+        /// - origin: 本语句首个物理行的原空白。
+        /// - scope: 处理本语句前实际可用的最内层结构。
+        /// 返回：能确切求得的语言动作；语句和当前块不吻合时为空。
+        func indentation(
+            after event: FortranIndentationLine.Event,
+            origin: ByteRange,
+            scope: Frame?
+        ) throws -> NewlineIndentationAction? {
+            switch event {
+            case .opening:
+                return .align(prefix: try prefix(origin), levels: 1)
+            case .branch(let block, let name, let levels):
+                guard let scope, scope.matches(block, name: name, closing: false) else {
+                    return nil
+                }
+                return .align(prefix: try prefix(scope.prefix), levels: levels)
+            case .closing(let block, let name):
+                guard let scope, scope.matches(block, name: name) else {
+                    return nil
+                }
+                return .align(prefix: try prefix(scope.prefix), levels: 0)
+            case .neutral:
+                return nil
+            }
+        }
+
         for line in 0...last {
             try check()
             let physical = text.lineRange(line)
@@ -168,8 +197,11 @@ enum FortranIndentationPlan {
                     continue
                 }
             }
-            if row.crossesStatements || row.directive || (row.beginsContinuation && continuation == nil) {
-                // 同行多语句、预处理或没有已知出处的续接会改变实际块关系，先撤回旧缩进资格。
+            let ambiguousSeparator =
+                row.crossesStatements
+                && (fixedFormat || continuation != nil || row.endsContinuation)
+            if ambiguousSeparator || row.directive || (row.beginsContinuation && continuation == nil) {
+                // 预处理或来源不确定的续接可能改变原语句关系，不能沿用旧块作为缩进来源。
                 scopes.removeAll()
                 continuation = nil
                 for target in targets {
@@ -207,65 +239,88 @@ enum FortranIndentationPlan {
             else {
                 logical.atoms = row.atoms
             }
-            for target in targets {
-                try check()
-                guard let before = row.prefixAtoms(at: min(target.lower, content.upper)) else {
-                    result[target] = .inherit
-                    continue
-                }
-                let leading = row.beginsContinuation ? 1 : 0
-                let count = earlier + max(0, before.count - leading)
-                let event = try FortranIndentationLine.classify(logical.atoms.prefix(count), check: check)
-                switch event {
-                case .opening:
-                    result[target] = .align(prefix: try prefix(origin), levels: 1)
-                case .branch(let block, let name, let levels):
-                    if let scope = scopes.last, scope.matches(block, name: name, closing: false) {
-                        result[target] = .align(prefix: try prefix(scope.prefix), levels: levels)
-                    }
-                    else {
-                        result[target] = .inherit
-                    }
-                case .closing(let block, let name):
-                    if let scope = scopes.last, scope.matches(block, name: name) {
-                        result[target] = .align(prefix: try prefix(scope.prefix), levels: 0)
-                    }
-                    else {
-                        result[target] = .inherit
-                    }
-                case .neutral:
-                    if earlier == 0, before.isEmpty, target.upper < content.upper,
-                        let tail = row.suffixAtoms(at: target.upper),
-                        case .closing(let block, let name) = try FortranIndentationLine.classify(
-                            tail,
-                            check: check
-                        ),
-                        let scope = scopes.last, scope.matches(block, name: name)
-                    {
-                        result[target] = .align(prefix: try prefix(scope.prefix), levels: 0)
-                    }
-                    else {
-                        result[target] = .inherit
-                    }
+            let ordered = targets.sorted { $0.lower < $1.lower }
+            var targetIndex = 0
+            var start = 0
+            var boundaries: [Int] = []
+            if row.crossesStatements {
+                for index in logical.atoms.indices where logical.atoms[index].value == ";" {
+                    try check()
+                    boundaries.append(index)
                 }
             }
-            let event = try FortranIndentationLine.classify(logical.atoms[...], check: check)
-            switch event {
-            case .opening(let block, let name):
-                guard scopes.count < 4096 else {
-                    throw NateError.message("Fortran 结构缩进超过 4096 层活动块。")
+            boundaries.append(logical.atoms.count)
+            var prior: (event: FortranIndentationLine.Event, origin: ByteRange, scope: Frame?)?
+            for boundary in boundaries {
+                try check()
+                let supplied = boundary < logical.atoms.count
+                let limit = supplied ? logical.atoms[boundary].range.lower : content.upper
+                let statementOrigin = start == 0 ? origin : row.prefix
+                while targetIndex < ordered.count, min(ordered[targetIndex].lower, content.upper) <= limit {
+                    try check()
+                    let target = ordered[targetIndex]
+                    targetIndex += 1
+                    guard let before = row.prefixAtoms(at: min(target.lower, content.upper)) else {
+                        result[target] = .inherit
+                        continue
+                    }
+                    let leading = row.beginsContinuation ? 1 : 0
+                    let count = earlier + max(0, before.count - leading)
+                    let statement = logical.atoms[start..<max(start, min(count, boundary))]
+                    let event = try FortranIndentationLine.classify(statement, check: check)
+                    if let found = try indentation(after: event, origin: statementOrigin, scope: scopes.last)
+                    {
+                        result[target] = found
+                        continue
+                    }
+                    if case .neutral = event, earlier == 0, statement.isEmpty,
+                        target.upper < limit, let tail = row.suffixAtoms(at: target.upper, endingAt: limit)
+                    {
+                        let actual = try FortranIndentationLine.classify(tail, check: check)
+                        if case .closing = actual,
+                            let indent = try indentation(
+                                after: actual,
+                                origin: statementOrigin,
+                                scope: scopes.last
+                            )
+                        {
+                            result[target] = indent
+                            continue
+                        }
+                    }
+                    if start == boundary, let prior {
+                        result[target] =
+                            try indentation(after: prior.event, origin: prior.origin, scope: prior.scope)
+                            ?? .inherit
+                    }
+                    else {
+                        result[target] = .inherit
+                    }
                 }
-                scopes.append(Frame(block: block, name: name, prefix: origin))
-            case .closing(let block, let name):
-                if let scope = scopes.last, scope.matches(block, name: name) {
-                    scopes.removeLast()
+                let complete = logical.atoms[start..<boundary]
+                let event = try FortranIndentationLine.classify(complete, check: check)
+                if supplied, !complete.isEmpty {
+                    prior = (event, statementOrigin, scopes.last)
                 }
-                else {
-                    // 未匹配的关闭可能已经结束外层的语义范围，后续输入不能再沿这个不确定的栈对齐。
-                    scopes.removeAll()
+                // 本语句全部目标先取得先前的块证据，再把当前完整语句的开闭关系推进给后继语句。
+                switch event {
+                case .opening(let block, let name):
+                    guard scopes.count < 4096 else {
+                        throw NateError.message("Fortran 结构缩进超过 4096 层活动块。")
+                    }
+                    scopes.append(Frame(block: block, name: name, prefix: statementOrigin))
+                case .closing(let block, let name):
+                    if let scope = scopes.last, scope.matches(block, name: name) {
+                        scopes.removeLast()
+                    }
+                    else {
+                        // 未匹配的关闭可能已经结束外层的语义范围，后续输入不能再沿这个不确定的栈对齐。
+                        scopes.removeAll()
+                    }
+                case .branch, .neutral:
+                    break
                 }
-            case .branch, .neutral:
-                break
+                start = boundary + 1
             }
         }
         try check()
