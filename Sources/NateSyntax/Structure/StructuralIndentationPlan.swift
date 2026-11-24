@@ -71,6 +71,16 @@ public struct StructuralIndentationPlan: Sendable {
             )
             return
         }
+        if identifier == "python" {
+            actions = try PythonIndentationPlan.actions(
+                snapshot: snapshot,
+                language: language,
+                ranges: ranges,
+                deadline: deadline,
+                permit: permit
+            )
+            return
+        }
         if identifier == "autoit" {
             actions = try AutoItIndentationPlan.actions(
                 snapshot: snapshot,
@@ -139,8 +149,7 @@ public struct StructuralIndentationPlan: Sendable {
         let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
         let rust = identifier == "rust"
         let supportsControlLines =
-            identifier != "python"
-            && !["perl", "rust", "powershell", "json", "json5", "lua", "sql", "css"].contains(identifier)
+            !["perl", "rust", "powershell", "json", "json5", "lua", "sql", "css"].contains(identifier)
         var state = SyntaxState()
         var output: [ByteRange: NewlineIndentationAction] = [:]
         var consumed = 0
@@ -407,9 +416,6 @@ public struct StructuralIndentationPlan: Sendable {
                 }
                 if insideString || insideBlockComment || directiveLine || insideNativeLiteral {
                     output[target] = .inherit
-                }
-                else if identifier == "python" {
-                    output[target] = last == 58 ? .increase : .inherit
                 }
                 else if let lua {
                     output[target] = lua.action(
