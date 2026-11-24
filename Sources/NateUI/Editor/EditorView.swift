@@ -47,6 +47,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             observedRevision = document.revision
             projection.measured.removeAll()
             refresh()
+            if oldValue !== document, window != nil {
+                NSAccessibility.post(element: self, notification: .valueChanged)
+            }
         }
     }
     public var viewSelections = [TextSelection(anchor: 0, head: 0)] {
@@ -290,7 +293,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 业务作用：使文档高度随逻辑行增长，布局缓存有界且不生成全文字形。
     /// 参数说明:
     /// - reveal: 是否显示当前光标；后台更新不抢视口。
-    /// 返回：刷新呈现，不制造编辑或保存状态。
+    /// 返回：刷新呈现并向系统报告真实正文变化，不制造编辑或保存状态。
     public func refresh(reveal: Bool = false) {
         synchronizeBracketContext()
         if reveal || (window?.isKeyWindow == true && window?.firstResponder === self) {
@@ -304,7 +307,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         else {
             synchronizeViewSelectionRevision()
         }
-        if observedRevision != document.revision {
+        let committedTextChanged = observedRevision != document.revision
+        if committedTextChanged {
             // 临时匹配仅属于原正文，不按普通锚点移动后冒充重新搜索的结果。
             textHighlights.removeAll()
             projection.measured.removeAll()
@@ -356,6 +360,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         }
         inputContext?.invalidateCharacterCoordinates()
         window?.invalidateCursorRects(for: self)
+        if committedTextChanged, window != nil {
+            NSAccessibility.post(element: self, notification: .valueChanged)
+        }
     }
 
     /// 业务作用：按可见逻辑行建立原生布局，限制缓存占用。

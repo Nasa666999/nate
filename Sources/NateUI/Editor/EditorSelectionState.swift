@@ -61,6 +61,9 @@ extension EditorView {
             viewSelectionState = nil
             onStatus?(error.localizedDescription)
         }
+        if window != nil {
+            NSAccessibility.post(element: self, notification: .selectedTextChanged)
+        }
     }
 
     /// 业务作用：只有本视图的当前完整状态才能成为实际输入来源，不能沿先前文档光标继续编辑。
@@ -101,6 +104,9 @@ extension EditorView {
             rectangleProjectionGeneration = nil
             rectangleProjectionCache = [:]
             selectionGeneration = UUID()
+            if window != nil {
+                NSAccessibility.post(element: self, notification: .selectedTextChanged)
+            }
         }
         needsDisplay = true
     }

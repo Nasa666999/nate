@@ -2,6 +2,8 @@ import AppKit
 import NateCore
 
 extension EditorView {
+    static let maximumSystemSelections = 4_096
+
     /// 业务作用：VoiceOver 读取唯一已提交正文，长文档可通过原生范围接口按需读取。
     /// 参数说明: 无。
     /// 返回：容量允许时返回完整正文；超量时使用范围接口，避免复制整份大文件。
@@ -27,6 +29,28 @@ extension EditorView {
             return NSRange(location: NSNotFound, length: 0)
         }
         return accessibilityRange(forBytes: primarySelection.range)
+    }
+
+    /// 业务作用：系统辅助功能读取此视图的完整多选范围，首项表示实际主项。
+    /// 参数说明: 无。
+    /// 返回：完整有序的 UTF-16 范围；超出交互容量或原选区过期时为空。
+    public override func accessibilitySelectedTextRanges() -> [NSValue]? {
+        guard selectionStateRevision == document.revision, let state = viewSelectionState,
+            state.entries.count <= Self.maximumSystemSelections
+        else {
+            return nil
+        }
+        let entries = [state.primary] + state.entries.filter { $0.id != state.primaryID }
+        var values: [NSValue] = []
+        values.reserveCapacity(entries.count)
+        for entry in entries {
+            let range = accessibilityRange(forBytes: entry.selection.range)
+            guard range.location != NSNotFound else {
+                return nil
+            }
+            values.append(NSValue(range: range))
+        }
+        return values
     }
 
     /// 业务作用：读取主选择的已提交文本，不以多选角色推测额外正文。
@@ -88,7 +112,7 @@ extension EditorView {
     /// 参数说明:
     /// - range: 正文 UTF-8 字节区间。
     /// 返回：相同正文的 UTF-16 范围；非法边界返回无效值。
-    private func accessibilityRange(forBytes range: ByteRange) -> NSRange {
+    func accessibilityRange(forBytes range: ByteRange) -> NSRange {
         guard let lower = document.text.utf16Offset(byte: range.lower),
             let upper = document.text.utf16Offset(byte: range.upper)
         else {
@@ -102,23 +126,86 @@ extension EditorView {
     /// - range: 系统提供的严格正文 UTF-16 范围。
     /// 返回：仅焦点、候选和保护均合法时更新选择，失败保留正文和原选区。
     public override func setAccessibilitySelectedTextRange(_ range: NSRange) {
-        guard ownsSystemTextTarget, let bytes = document.text.byteRange(range),
-            let primary = viewSelectionState?.primary
+        applyAccessibilitySelection([range])
+    }
+
+    /// 业务作用：把系统明确提供的全部范围一次应用到正在编辑的视图。
+    /// 参数说明:
+    /// - values: UTF-16 多选范围，首项表示主选择。
+    /// 返回：任何一项无效或没有当前选择权限时保持原选择。
+    public override func setAccessibilitySelectedTextRanges(_ values: [NSValue]?) {
+        guard let values, (1...Self.maximumSystemSelections).contains(values.count),
+            ownsSystemTextTarget
         else {
             return
         }
-        do {
-            try setSelectionState(
-                SelectionState(entries: [
-                    SelectionEntry(
-                        id: primary.id,
-                        selection: TextSelection(anchor: bytes.lower, head: bytes.upper)
-                    )
-                ])
+        var ranges: [NSRange] = []
+        ranges.reserveCapacity(values.count)
+        let rangeType = String(cString: NSValue(range: NSRange()).objCType)
+        for value in values {
+            // 非范围 NSValue 不能直接取 rangeValue，否则系统对象可能抛出 Objective-C 异常。
+            guard String(cString: value.objCType) == rangeType else {
+                return
+            }
+            ranges.append(value.rangeValue)
+        }
+        applyAccessibilitySelection(ranges)
+    }
+
+    /// 业务作用：在辅助客户端查询可写性时使用真实选择和正文编辑权限。
+    /// 参数说明:
+    /// - selector: 系统欲调用的辅助功能访问器。
+    /// 返回：系统读操作沿原有规则判断；写操作需要当前焦点和对应编辑条件。
+    public override func isAccessibilitySelectorAllowed(_ selector: Selector) -> Bool {
+        switch NSStringFromSelector(selector) {
+        case "setAccessibilityValue:":
+            return ownsSystemTextTarget && !document.isReadOnly
+        case "setAccessibilitySelectedText:":
+            return ownsSystemTextTarget && !document.isReadOnly && systemTextSelection != nil
+        case "setAccessibilitySelectedTextRange:", "setAccessibilitySelectedTextRanges:":
+            return ownsSystemTextTarget && selectionStateRevision == document.revision
+                && viewSelectionState != nil
+        default:
+            return super.isAccessibilitySelectorAllowed(selector)
+        }
+    }
+
+    /// 业务作用：把原生主项优先的坐标转换为一次完整选择发布，保留已有稳定身份。
+    /// 参数说明:
+    /// - ranges: 有界且有明确主项的原始 UTF-16 范围。
+    /// 返回：仍持有当前发布权且全部范围合法时更新；同一范围列表保留原方向、虚拟列及矩形形态。
+    private func applyAccessibilitySelection(_ ranges: [NSRange]) {
+        // 焦点和预编辑拥有当前选择；不允许旧窗口用上一修订的辅助请求替换该状态。
+        guard ownsSystemTextTarget, selectionStateRevision == document.revision,
+            let previous = viewSelectionState
+        else {
+            return
+        }
+        let secondary = previous.entries.lazy.filter { $0.id != previous.primaryID }
+        let sources = [previous.primary] + Array(secondary.prefix(ranges.count - 1))
+        if ranges.count == previous.entries.count,
+            zip(ranges, sources).allSatisfy({ $0 == accessibilityRange(forBytes: $1.selection.range) })
+        {
+            return
+        }
+        var entries: [SelectionEntry] = []
+        entries.reserveCapacity(ranges.count)
+        for (index, range) in ranges.enumerated() {
+            guard let bytes = document.text.byteRange(range) else {
+                return
+            }
+            let source = sources.indices.contains(index) ? sources[index] : nil
+            entries.append(
+                SelectionEntry(
+                    id: source?.id ?? UUID(),
+                    selection: TextSelection(anchor: bytes.lower, head: bytes.upper)
+                )
             )
+        }
+        do {
+            try setSelectionState(SelectionState(entries: entries))
             refresh(reveal: true)
             onSelection?()
-            NSAccessibility.post(element: self, notification: .selectedTextChanged)
         }
         catch {
             onStatus?(error.localizedDescription)
@@ -133,9 +220,7 @@ extension EditorView {
         guard let value, let range = systemTextSelection else {
             return
         }
-        if replaceSystemTextSelection(value, range: range, name: "辅助功能选择编辑") {
-            NSAccessibility.post(element: self, notification: .valueChanged)
-        }
+        replaceSystemTextSelection(value, range: range, name: "辅助功能选择编辑")
     }
 
     /// 业务作用：显式辅助功能写入可以整份替换实际正文，原候选和编辑保护优先。
@@ -157,7 +242,6 @@ extension EditorView {
             }
             refresh(reveal: true)
             onChange?()
-            NSAccessibility.post(element: self, notification: .valueChanged)
         }
         catch {
             onStatus?(error.localizedDescription)
