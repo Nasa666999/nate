@@ -82,6 +82,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var lastExternalOutput: String?
     var recovery: RecoveryStore?
     let recoveryStorage = RecoveryStorageRuntime()
+    let windowRecovery = WorkspaceWindowRecovery()
     let recoveryProgress = RecoveryProgressLedger()
     var saveBackupStore: SaveBackupStore?
     var saveBackupPolicy = SaveBackupPolicy()
@@ -357,13 +358,14 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         guard let active else {
             return
         }
-        let window = EditorWindow(document: active.buffer)
-        loadEditorPreferences(into: window)
-        mainWindow = window
-        connect(window)
+        let layout = await loadWorkspaceWindowLayout()
+        let window = makeRestoredWorkspaceWindows(from: layout, fallback: active)
         await loadSidebarRecovery()
         buildMenus()
         refreshUI()
+        for restored in editorWindows where restored !== window {
+            restored.window?.orderFront(nil)
+        }
         window.showWindow(nil)
         window.window?.makeKeyAndOrderFront(nil)
         window.window?.makeFirstResponder(window.editor)

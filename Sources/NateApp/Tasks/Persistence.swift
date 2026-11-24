@@ -50,6 +50,7 @@ extension ApplicationController {
                 if self.autosaveEnabled || self.closing {
                     self.scheduleRecovery(force: self.initialRecoveryConfirmation)
                     self.scheduleSidebarRecovery()
+                    self.scheduleWorkspaceWindowLayout()
                 }
                 self.refreshUI()
                 next = next.advanced(by: .seconds(1))
