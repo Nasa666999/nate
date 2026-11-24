@@ -39,12 +39,14 @@ enum FortranIndentationPlan {
         /// - bytes: 当前片段的原字节数，含所属物理结束符或语句分隔符。
         /// - leading: 当前片段之前真实存在的自由格式续行标记。
         /// - pending: 当前片段之后真实存在的自由格式续行标记。
+        /// - fixedJoin: 当前片段通过固定格式真实第六列接到前一段。
         /// 返回：安全的完整原词元顺序；跨行拆开的名称标为未确认，超限拒绝整批。
         mutating func append(
             _ content: ArraySlice<FortranIndentationLine.Atom>,
             bytes: Int,
             leading: FortranIndentationLine.Atom?,
-            pending: FortranIndentationLine.Atom?
+            pending: FortranIndentationLine.Atom?,
+            fixedJoin: Bool
         ) throws {
             guard bytes <= 1_048_576 - sourceBytes, content.count <= 65_536 - atoms.count else {
                 throw NateError.message("Fortran 续接语句超过 1 MiB 或 65536 个词元。")
@@ -53,12 +55,18 @@ enum FortranIndentationPlan {
             if let leading, let pending, leading.range == pending.range {
                 unresolved = true
             }
-            // 无间隔写在两个物理续行符旁的名称可能是同一个词，部分结果不能冒充语义关键字。
-            if let trailing, let previous = atoms.last, let first = content.first, let leading,
-                previous.range.upper == trailing.range.lower, first.range.lower == leading.range.upper,
+            // 固定格式忽略水平空白，自由格式仅在续行标记紧邻时可能把两段原词拼成另一个名称。
+            if let previous = atoms.last, let first = content.first,
                 Self.wordPart(previous), Self.wordPart(first)
             {
-                unresolved = true
+                if fixedJoin {
+                    unresolved = true
+                }
+                else if let trailing, let leading,
+                    previous.range.upper == trailing.range.lower, first.range.lower == leading.range.upper
+                {
+                    unresolved = true
+                }
             }
             if !content.isEmpty || pending != nil {
                 trailing = pending
@@ -180,30 +188,20 @@ enum FortranIndentationPlan {
                 throw NateError.message(error)
             }
             let bytes = Array(source.utf8.prefix(content.count))
+            let fixed = fixedFormat ? FortranFixedIndentationSource.classify(bytes[...]) : nil
+            let checkedColumns = fixed == .initial || fixed == .continuation
             let row = try FortranIndentationLine(
                 bytes: bytes,
                 range: content,
                 tokens: tokens,
                 languageID: language.id,
+                minimumCodeOffset: checkedColumns ? 6 : 0,
                 check: check
             )
             let targets = byLine[line] ?? []
-            if fixedFormat, !row.atoms.isEmpty {
-                // 前五列只能承担标签，第六列可能续接上一语句。仅六个连续的原空格取得普通结构缩进资格。
-                let ordinaryColumns = bytes.count >= 6 && bytes.prefix(6).allSatisfy { $0 == 32 }
-                let followingContinuation =
-                    ordinaryColumns
-                    ? try fixedContinuationFollows(after: line, text: text, check: check) : false
-                if !ordinaryColumns || followingContinuation {
-                    scopes.removeAll()
-                    for target in targets {
-                        try check()
-                        result[target] = .inherit
-                    }
-                    continue
-                }
-            }
-            if (fixedFormat && row.crossesStatements) || row.directive
+            if (fixedFormat && row.crossesStatements) || fixed == .unconfirmed
+                || fixed == .unconfirmedContinuation || row.directive
+                || (fixed == .continuation && continuation == nil)
                 || (row.beginsContinuation && continuation == nil)
             {
                 // 预处理或来源不确定的续接可能改变原语句关系，不能沿用旧块作为缩进来源。
@@ -215,6 +213,9 @@ enum FortranIndentationPlan {
                 }
                 continue
             }
+            let fixedContinues =
+                checkedColumns
+                ? try FortranFixedIndentationSource.follows(line, text: text, check: check) : false
             let ordered = targets.sorted { $0.lower < $1.lower }
             var targetIndex = 0
             var start = row.beginsContinuation ? 1 : 0
@@ -242,8 +243,10 @@ enum FortranIndentationPlan {
                 let local = row.atoms[start..<boundary]
                 let leading = startByte == physical.lower && row.beginsContinuation ? row.atoms.first : nil
                 let pending = separator == nil && row.endsContinuation ? row.atoms.last : nil
-                let waitsForMore = pending != nil || incoming && row.atoms.isEmpty
-                if incoming || pending != nil {
+                let waitsForMore =
+                    fixedContinues || pending != nil
+                    || incoming && row.atoms.isEmpty && fixed != .continuation
+                if incoming || pending != nil || fixedContinues {
                     if continuation == nil {
                         continuation = Continuation(prefix: statementOrigin)
                     }
@@ -251,7 +254,8 @@ enum FortranIndentationPlan {
                         local,
                         bytes: nextByte - startByte,
                         leading: leading,
-                        pending: pending
+                        pending: pending,
+                        fixedJoin: fixed == .continuation
                     )
                 }
                 // 只有分隔符之前的完整语句可以改变后继结构；拆开的词使本语句的原前缀证据失效。
@@ -271,6 +275,7 @@ enum FortranIndentationPlan {
                     targetIndex += 1
                     let position = min(target.lower, content.upper)
                     guard !waitsForMore, !uncertain, leading.map({ $0.range.upper <= position }) != false,
+                        !checkedColumns || position - physical.lower >= 6,
                         let before = row.prefixAtoms(at: position)
                     else {
                         result[target] = .inherit
@@ -345,42 +350,6 @@ enum FortranIndentationPlan {
         }
         try check()
         return result
-    }
-
-    /// 业务作用：固定格式必须看清下一条有效记录的真实第六列，不能把后续续接的上一行当成完整声明。
-    /// 参数说明:
-    /// - line: 正在确认的实际物理行号。
-    /// - text: 本次输入固定的完整正文。
-    /// - check: 全部目标共同拥有的继续资格。
-    /// 返回：下一条有效记录的第六列是有效续接标记时为真，文件尾或新语句时为假。
-    private static func fixedContinuationFollows(
-        after line: Int,
-        text: PieceTree,
-        check: () throws -> Void
-    ) throws -> Bool {
-        var visited = 0
-        for next in (line + 1)..<text.lineCount {
-            try check()
-            let row = text.lineRange(next, includeEnding: false)
-            let length = min(72, row.count)
-            guard visited <= 64 * 1_048_576 - length, next < 1_048_576 else {
-                throw NateError.message("Fortran 固定格式续接前瞻超过原文或行数预算。")
-            }
-            visited += length
-            let bytes = text.bytes(in: ByteRange(row.lower, row.lower + length))
-            if bytes.first.map({ [67, 99, 42].contains($0) }) == true {
-                continue
-            }
-            guard let first = bytes.firstIndex(where: { !FortranCharacters.space(UInt32($0)) }),
-                bytes[first] != 33
-            else {
-                continue
-            }
-            // 以原字节计算列，不把用户配置的可见 Tab 停靠位当作固定格式的字段位置。
-            return bytes.count >= 6 && !FortranCharacters.space(UInt32(bytes[5])) && bytes[5] != 48
-                && bytes[5] != 33
-        }
-        return false
     }
 
 }

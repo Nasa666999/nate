@@ -46,6 +46,7 @@ struct FortranIndentationLine {
     /// - range: 与原字节一致的真实物理行范围。
     /// - tokens: 同一原始范围的原生词法结果。
     /// - languageID: 当前确定的自由格式或固定格式语言身份。
+    /// - minimumCodeOffset: 固定格式已确认的标签和续接栏，普通输入为零。
     /// - check: 本次各行和光标共用的继续资格。
     /// 返回：有界词元及原始前缀；没有完整词法或超量时不交付部分结构。
     init(
@@ -53,6 +54,7 @@ struct FortranIndentationLine {
         range: ByteRange,
         tokens: [SyntaxToken],
         languageID: String,
+        minimumCodeOffset: Int,
         check: () throws -> Void
     ) throws {
         var leading = 0
@@ -63,13 +65,18 @@ struct FortranIndentationLine {
             leading += 1
         }
         prefix = ByteRange(range.lower, range.lower + leading)
-        directive = leading < bytes.count && bytes[leading] == 35
+        let directiveStyle = languageID + ":11"
+        directive =
+            leading < bytes.count && bytes[leading] == 35
+            || tokens.contains {
+                $0.lexicalStyle == directiveStyle
+            }
         opaque = tokens.filter(\.isStructureOpaque)
         let keywordStyle = languageID + ":8"
         let identifierStyle = languageID + ":7"
         let freeForm = languageID == "fortran"
         var atoms: [Atom] = []
-        var index = leading
+        var index = max(leading, minimumCodeOffset)
         var tokenIndex = 0
         while index < bytes.count {
             try check()
