@@ -122,7 +122,7 @@
     },
     {
       "path" : "completion\/python.xml",
-      "sha256" : "c81edad313a851f7ab72f7daee2a9186df904ea977eb1f82e24521164308607f"
+      "sha256" : "f4c2caa9d892676c3fe33d1ada6344bec1626f5e41e85f1c961f54fba5b28489"
     },
     {
       "path" : "completion\/raku.xml",

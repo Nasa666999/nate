@@ -364,7 +364,9 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="enumerate" func="yes">
-			<Overload retVal="" descr="enumerate(iterable[, start]) -&gt; iterator for index, value of iterable&#10;&#10;Return an enumerate object.  iterable must be another object that supports&#10;iteration.  The enumerate object yields pairs containing a count (from&#10;start, which defaults to zero) and a value yielded by the iterable argument.&#10;enumerate is useful for obtaining an indexed list:&#10;    (0, seq[0]), (1, seq[1]), (2, seq[2]), ...">
+			<Overload retVal="enumerate" descr="从起始编号起逐项返回编号与元素。">
+				<Param name="iterable" />
+				<Param name="start=0" />
 			</Overload>
 		</KeyWord>
 		<KeyWord name="eval" func="yes">
@@ -394,7 +396,9 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="filter" func="yes">
-			<Overload retVal="" descr="filter(function or None, sequence) -&gt; list, tuple, or string&#10;&#10;Return those items of sequence for which function(item) is true.  If&#10;function is None, return the items that are true.  If sequence is a tuple&#10;or string, return the same type, else return a list.">
+			<Overload retVal="iterator" descr="惰性返回谓词判断为真的元素。function 为 None 时按元素本身的真值筛选。">
+				<Param name="function" />
+				<Param name="iterable" />
 			</Overload>
 		</KeyWord>
 		<KeyWord name="finally" />
@@ -477,7 +481,10 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="input" func="yes">
-			<Overload retVal="" descr="input([prompt]) -&gt; value&#10;&#10;Equivalent to eval(raw_input(prompt)).">
+			<Overload retVal="str" descr="从标准输入读取一行并去掉末尾换行。读到文件结束时抛出 EOFError。">
+			</Overload>
+			<Overload retVal="str" descr="先输出不带换行的提示，再读取一行文本。读到文件结束时抛出 EOFError。">
+				<Param name="prompt" />
 			</Overload>
 		</KeyWord>
 		<KeyWord name="insert" func="yes">
@@ -595,7 +602,8 @@
 		</KeyWord>
 		<KeyWord name="lambda" />
 		<KeyWord name="len" func="yes">
-			<Overload retVal="" descr="len(object) -&gt; integer&#10;&#10;Return the number of items of a sequence or mapping.">
+			<Overload retVal="int" descr="返回序列、映射或其它支持长度的对象所包含的元素数量。">
+				<Param name="object" />
 			</Overload>
 		</KeyWord>
 		<KeyWord name="list" func="yes">
@@ -623,7 +631,10 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="map" func="yes">
-			<Overload retVal="" descr="map(function, sequence[, sequence, ...]) -&gt; list&#10;&#10;Return a list of the results of applying the function to the items of&#10;the argument sequence(s).  If more than one sequence is given, the&#10;function is called with an argument list consisting of the corresponding&#10;item of each sequence, substituting None for missing values when not all&#10;sequences have the same length.  If the function is None, return a list of&#10;the items of the sequence (or a list of tuples if more than one sequence).">
+			<Overload retVal="iterator" descr="惰性地对各组元素调用 function。多条输入并行取值，在最短输入结束时停止。">
+				<Param name="function" />
+				<Param name="iterable" />
+				<Param name="*iterables" />
 			</Overload>
 		</KeyWord>
 		<KeyWord name="max" func="yes">
@@ -656,7 +667,15 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="open" func="yes">
-			<Overload retVal="" descr="open(name[, mode[, buffering]]) -&gt; file object&#10;&#10;Open a file using the file() type, returns a file object.  This is the&#10;preferred way to open a file.  See file.__doc__ for further information.">
+			<Overload retVal="TextIO | BinaryIO" descr="打开路径或包装文件描述符，返回对应的文本或二进制流。打开失败时抛出 OSError。">
+				<Param name="file" />
+				<Param name="mode='r'" />
+				<Param name="buffering=-1" />
+				<Param name="encoding=None" />
+				<Param name="errors=None" />
+				<Param name="newline=None" />
+				<Param name="closefd=True" />
+				<Param name="opener=None" />
 			</Overload>
 		</KeyWord>
 		<KeyWord name="or" />
@@ -681,14 +700,28 @@
 			<Overload retVal="" descr="pow(x, y[, z]) -&gt; number&#10;&#10;With two arguments, equivalent to x**y.  With three arguments,&#10;equivalent to (x**y) % z, but may be more efficient (e.g. for longs).">
 			</Overload>
 		</KeyWord>
-		<KeyWord name="print" />
+		<KeyWord name="print" func="yes">
+			<Overload retVal="None" descr="把对象转成文本并输出到指定流。sep、end、file 和 flush 通过关键字传入。">
+				<Param name="*objects" />
+				<Param name="sep=' '" />
+				<Param name="end='\n'" />
+				<Param name="file=None" />
+				<Param name="flush=False" />
+			</Overload>
+		</KeyWord>
 		<KeyWord name="property" func="yes">
 			<Overload retVal="" descr="property(fget=None, fset=None, fdel=None, doc=None) -&gt; property attribute&#10;&#10;fget is a function to be used for getting an attribute value, and likewise&#10;fset is a function for setting, and fdel a function for del'ing, an&#10;attribute.  Typical use is to define a managed attribute x:&#10;class C(object):&#10;    def getx(self): return self._x&#10;    def setx(self, value): self._x = value&#10;    def delx(self): del self._x&#10;    x = property(getx, setx, delx, &quot;I'm the 'x' property.&quot;)&#10;&#10;Decorators make defining new properties or modifying existing ones easy:&#10;class C(object):&#10;    @property&#10;    def x(self): return self._x&#10;    @x.setter&#10;    def x(self, value): self._x = value&#10;    @x.deleter&#10;    def x(self): del self._x">
 			</Overload>
 		</KeyWord>
 		<KeyWord name="raise" />
 		<KeyWord name="range" func="yes">
-			<Overload retVal="" descr="range([start,] stop[, step]) -&gt; list of integers&#10;&#10;Return a list containing an arithmetic progression of integers.&#10;range(i, j) returns [i, i+1, i+2, ..., j-1]; start (!) defaults to 0.&#10;When step is given, it specifies the increment (or decrement).&#10;For example, range(4) returns [0, 1, 2, 3].  The end point is omitted!&#10;These are exactly the valid indices for a list of 4 elements.">
+			<Overload retVal="range" descr="建立从零开始、步长为一的不可变整数序列，终点不包含在内。">
+				<Param name="stop" />
+			</Overload>
+			<Overload retVal="range" descr="建立指定起点、终点及步长的不可变整数序列。终点不包含在内，零步长抛出 ValueError。">
+				<Param name="start" />
+				<Param name="stop" />
+				<Param name="step=1" />
 			</Overload>
 		</KeyWord>
 		<KeyWord name="raw_input" func="yes">
@@ -935,7 +968,9 @@
 			</Overload>
 		</KeyWord>
 		<KeyWord name="zip" func="yes">
-			<Overload retVal="" descr="zip(seq1 [, seq2 [...]]) -&gt; [(seq1[0], seq2[0] ...), (...)]&#10;&#10;Return a list of tuples, where each tuple contains the i-th element&#10;from each of the argument sequences.  The returned list is truncated&#10;in length to the length of the shortest argument sequence.">
+			<Overload retVal="iterator" descr="并行取各可迭代对象的元素并生成元组。默认以最短输入为准，strict=True 在长度不同时抛出 ValueError。">
+				<Param name="*iterables" />
+				<Param name="strict=False" />
 			</Overload>
 		</KeyWord>
 	</AutoComplete>

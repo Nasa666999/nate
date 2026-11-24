@@ -406,6 +406,8 @@ Tab 默认按当前字体的四个空格宽度停靠。矩形边缘位于 Tab �
 
 Python 字符串支持单引号、三引号、字面前缀、反斜杠续行及 f-string、t-string 的嵌套插值和格式区域；行间状态随快照和检查点传播。字符串与表达式保留各自词法身份，文档字符串中的代码外观不会冒充真实代码。保留字与内置名称采用独立资源分组，类名、函数名、装饰器、属性和 `match`、`case` 的上下文分别分类；数值边界和 Unicode 标识符范围采用固定词法规则。Unicode 范围随语言资源载入，系统 Unicode 数据变化不会改变名称边界。
 
+Python 补全中的 `print`、`input`、`open`、`range`、`enumerate`、`len`、`map`、`filter` 和 `zip` 提供 Python 3.13 参数和返回说明。`input` 与 `range` 可切换两种签名。 [Python 内置函数](https://docs.python.org/3.13/library/functions.html) [range 类型](https://docs.python.org/3.13/library/stdtypes.html#range)
+
 JSON 与 JSON5 使用独立词法规则，属性、字符串、转义、数字、常量及非法词元分别呈现。JSON 按 [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259.html) 识别双引号字符串和严格十进制数字；JSON5 按 [JSON5 规范](https://spec.json5.org/) 另支持单引号、行与块注释、反斜杠续行、十六进制、带符号的 Infinity/NaN 及非引号属性名。JSON5 名称按 ECMAScript IdentifierName 类别使用随包固定的 Unicode 17.0.0 范围，转义后的码点同样验证；不随系统字符数据库变化。嵌套属性上下文与跨行字面状态随检查点传播，字符串和注释中的括号不参与代码折叠，也不与代码括号互相配对。词法着色不替代完整 JSON 文档校验。
 
 JSON 每行最多 1 MiB、65536 个词法片段和 1024 层对象或数组；字符处理与数字验证共用 4194304 步及所属高亮任务五秒截止。容量、取消或状态身份不一致时不发布部分行状态，正文与编辑历史保持原状。
