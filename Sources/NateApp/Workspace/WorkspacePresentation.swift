@@ -27,20 +27,7 @@ extension ApplicationController {
             refreshVisibleIncrementalHighlights()
         }
         window.refreshSelectedTextHighlights()
-        window.updateTabs(
-            documents.map {
-                TabPresentation(
-                    id: $0.buffer.id,
-                    title: $0.name,
-                    path: $0.url?.path,
-                    selected: $0.buffer.id == activeID,
-                    pinned: $0.pinned,
-                    dirty: $0.isDirty,
-                    failed: $0.failure != nil || $0.recoveryError != nil,
-                    readOnly: $0.buffer.isReadOnly
-                )
-            }
-        )
+        renderWorkspaceTabs()
         window.window?.title = active.name + " — Nate"
         window.window?.representedURL = active.url
         window.editor.language = registry?.language(active.language)
@@ -139,6 +126,38 @@ extension ApplicationController {
             } ?? "")
         if window.isStructureVisible {
             requestStructure()
+        }
+    }
+
+    /// 业务作用：各窗口共享标签的文档状态，活动标记依据各自显示的正文。
+    /// 参数说明: 无。
+    /// 返回：同步标签及窗口标题，后台窗口仍保留自身编辑视图与焦点。
+    private func renderWorkspaceTabs() {
+        let presentations = documents.map {
+            TabPresentation(
+                id: $0.buffer.id,
+                title: $0.name,
+                path: $0.url?.path,
+                selected: false,
+                pinned: $0.pinned,
+                dirty: $0.isDirty,
+                failed: $0.failure != nil || $0.recoveryError != nil,
+                readOnly: $0.buffer.isReadOnly
+            )
+        }
+        for window in editorWindows {
+            let id = window === mainWindow ? activeID : window.editor.document.id
+            window.updateTabs(
+                presentations.map {
+                    var tab = $0
+                    tab.selected = tab.id == id
+                    return tab
+                }
+            )
+            if window !== mainWindow, let document = documents.first(where: { $0.buffer.id == id }) {
+                window.window?.title = document.name + " — Nate"
+                window.window?.representedURL = document.url
+            }
         }
     }
 }

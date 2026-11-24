@@ -25,7 +25,14 @@ extension ApplicationController {
         runtime.sourceValid = true
         runtime.generation = UUID()
         // 字体与外观没有正文写入权限，重建排版后仍使用各视图自己的修订和选择证据。
-        applyDisplaySettings(settings, to: updateViews ? mainWindow : nil)
+        if updateViews && !editorWindows.isEmpty {
+            for window in editorWindows {
+                applyDisplaySettings(settings, to: window)
+            }
+        }
+        else {
+            applyDisplaySettings(settings, to: nil)
+        }
     }
 
     /// 业务作用：主题菜单保存明确选择并同步语言外观，不把当前临时缩放重置为持久化字号。

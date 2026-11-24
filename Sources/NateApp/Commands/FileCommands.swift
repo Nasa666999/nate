@@ -2,12 +2,14 @@ import AppKit
 import NateCore
 import NatePlatform
 import NateStorage
+import NateUI
 
 extension ApplicationController {
     /// 业务作用：所有打开入口先验证文件 URL，再按真实身份去重，避免错误路径访问和竞争自动保存。
     /// 参数说明:
     /// - url: Finder、对话框或 CLI 提供的路径。
     /// - explicitEncoding: 用户选择的重新解释代码页。
+    /// - targetWindow: 明确发起打开的编辑窗口，省略时捕获请求开始时的当前窗口。
     /// - activateOnOpen: 是否在读取完成后立即激活；异步结果导航可先建立后台标签再复验自己的焦点权限。
     /// - permit: 主执行域中的发布权限，失效时不添加标签、改变焦点或发布迟到错误。
     /// 返回：实际打开的文档；无效 URL 在类型探测前拒绝，失败返回空，不误用先前活动标签。
@@ -15,20 +17,28 @@ extension ApplicationController {
     func openFile(
         _ url: URL,
         explicitEncoding: TextEncoding? = nil,
+        in targetWindow: EditorWindow? = nil,
         activateOnOpen: Bool = true,
         permit: @MainActor () -> Bool = {
             true
         }
     ) async -> WorkspaceDocument? {
+        let window = targetWindow ?? mainWindow
+        /// 业务作用：读取和解码中的每个挂起点共用原窗口的发布门禁。
+        /// 参数说明: 无。
+        /// 返回：原窗口和调用权仍有效，且应用没有进入退出时为真。
+        func mayPublish() -> Bool {
+            permit() && !closing && !Task.isCancelled && isWorkspaceWindowAvailable(window)
+        }
         // 打开请求的调用权也可能被后来的导航撤销，读取前不能先改变原视图。
-        guard !closing, !Task.isCancelled, permit() else {
+        guard mayPublish() else {
             return nil
         }
         let catalog = codecs
         do {
             // 文件类型探测也会访问目标，必须先验证原始 URL，不能先查询被转义成另一名称的路径。
             try FileStorage.validateFileURL(url)
-            mainWindow?.status.stringValue = "正在读取 · " + url.lastPathComponent + " · 可在工具菜单取消读取"
+            window?.status.stringValue = "正在读取 · " + url.lastPathComponent + " · 可在工具菜单取消读取"
             // 类型探测也可能等待外置盘或系统授权，必须使用有界读取通道而不阻塞主事件循环。
             let directory = try await readIO.readCancellable {
                 token in
@@ -38,12 +48,12 @@ extension ApplicationController {
                 return value
             }
             // 类型证据返回时原导航可能已经撤销，目录和文件都先复验调用权再进入后续流程。
-            guard !closing, !Task.isCancelled, permit() else {
+            guard mayPublish() else {
                 return nil
             }
             if directory {
                 if activateOnOpen {
-                    await showFolder(url)
+                    await showFolder(url, in: window)
                 }
                 return nil
             }
@@ -59,7 +69,7 @@ extension ApplicationController {
                 )
             }
             // 系统读取完成不代表原调用仍有发布权，失效请求不得添加标签或切换活动文档。
-            guard !closing, !Task.isCancelled, permit() else {
+            guard mayPublish() else {
                 return nil
             }
             if let existing = documents.first(where: {
@@ -67,8 +77,13 @@ extension ApplicationController {
                     || $0.baseline?.resolvedPath == loaded.baseline.resolvedPath
                     || $0.url?.standardizedFileURL == loaded.url.standardizedFileURL
             }) {
+                guard !existing.closing else {
+                    throw NateError.message("该文档正在确认关闭，请稍后重新打开。")
+                }
                 if activateOnOpen {
-                    activate(existing.buffer.id)
+                    guard activate(existing.buffer.id, in: window) else {
+                        return nil
+                    }
                 }
                 return existing
             }
@@ -100,32 +115,30 @@ extension ApplicationController {
                 + recentFiles.filter {
                     !$0.utf8.elementsEqual(url.path.utf8)
                 }
-            if activateOnOpen {
-                activate(document.buffer.id)
-            }
-            else {
+            let displayed = !activateOnOpen || activate(document.buffer.id, in: window)
+            if !activateOnOpen || !displayed {
                 refreshUI()
             }
             buildMenus()
-            return document
+            return displayed ? document : nil
         }
         catch {
             if error is CancellationError {
                 return nil
             }
             // 迟到错误同样需要原调用权，不能用旧读取的提示覆盖新窗口或新查询。
-            guard !closing, !Task.isCancelled, permit() else {
+            guard mayPublish() else {
                 return nil
             }
             if !activateOnOpen {
-                mainWindow?.status.stringValue = "无法打开结果文件：" + error.localizedDescription
+                window?.status.stringValue = "无法打开结果文件：" + error.localizedDescription
                 return nil
             }
             if error is ReadDeadlineExceeded {
-                mainWindow?.showResults("读取未完成：" + url.path + "\n" + error.localizedDescription)
+                window?.showResults("读取未完成：" + url.path + "\n" + error.localizedDescription)
             }
             else if error is FileDecodingFailure, explicitEncoding == nil {
-                await offerDecode(url, reason: error.localizedDescription)
+                await offerDecode(url, reason: error.localizedDescription, in: window, permit: mayPublish)
             }
             else {
                 SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
@@ -150,7 +163,7 @@ extension ApplicationController {
         }
         let catalog = codecs
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
-        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+        guard finishWorkspaceCompositions(documentID: document.buffer.id) else {
             return
         }
         guard await waitForOriginalSave(document) else {
@@ -296,7 +309,7 @@ extension ApplicationController {
     /// 返回：旧正文仍可撤销；基线只取新读取内容。
     func reload(_ document: WorkspaceDocument, encoding: TextEncoding? = nil) async {
         // 重新载入会替换已提交正文，先确认目标全部候选，失败不能撤去覆盖层后改用磁盘旧内容。
-        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+        guard finishWorkspaceCompositions(documentID: document.buffer.id) else {
             return
         }
         guard !document.bindingChange else {
@@ -362,7 +375,9 @@ extension ApplicationController {
             document.failure = nil
             document.state = monitoring ? "监视中 · 已刷新" : "已重新载入"
             let changeSavePoint = document.buffer.changeHistorySavePoint()
-            mainWindow?.refreshEditors()
+            for window in editorWindows {
+                window.refreshEditors()
+            }
             if monitoring && document.buffer.primarySelection?.head == document.buffer.text.byteCount
                 && mainWindow?.editor.document.id == document.buffer.id
             {
@@ -397,7 +412,7 @@ extension ApplicationController {
         }
         // 先完成该正文所有克隆的候选，再取得关闭保护；失败不能归档不含候选的旧正文后移除窗口。
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
-        guard mainWindow?.finishCompositions(documentID: id) != false else {
+        guard finishWorkspaceCompositions(documentID: id) else {
             return
         }
         document.closing = true
@@ -494,17 +509,13 @@ extension ApplicationController {
                 name: document.name
             )
         )
-        mainWindow?.retireDocument(id)
         externalStamps.removeValue(forKey: id)
         if recentClosed.count > 20 {
             recentClosed.removeFirst()
         }
-        if documents.isEmpty {
-            _ = newDocument()
-        }
-        else if let activeID {
-            activate(activeID)
-        }
+        let fallback = active ?? documents.first ?? newDocument(activateOnCreate: false)
+        activeID = fallback.buffer.id
+        retireWorkspaceDocument(id, fallback: fallback)
         refreshUI()
     }
 }

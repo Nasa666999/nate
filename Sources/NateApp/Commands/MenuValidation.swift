@@ -40,6 +40,10 @@ extension ApplicationController {
         if id == "documentList" {
             return !closing && mainWindow != nil && !documents.isEmpty
         }
+        if id == "newWindow" || id == "cloneToWindow" {
+            return !closing && editorWindows.count < 32
+                && (id == "newWindow" ? documents.count < 1024 : active?.closing == false)
+        }
         if id.hasPrefix("tabLayout:") {
             guard let mode = DocumentTabLayout(rawValue: String(id.dropFirst("tabLayout:".count))) else {
                 return false

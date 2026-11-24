@@ -1,6 +1,7 @@
 import Foundation
 import NateCore
 import NatePlatform
+import NateUI
 
 struct CLIArguments: Codable, Sendable {
     var files: [URL] = []
@@ -124,20 +125,21 @@ extension ApplicationController {
     func handleCLI(_ request: CLIArguments? = nil) async {
         do {
             let arguments = try request ?? CLIArguments(Array(CommandLine.arguments.dropFirst()))
+            let window = mainWindow
             for url in arguments.files {
-                guard let document = await openFile(url) else {
+                guard let document = await openFile(url, in: window) else {
                     continue
                 }
-                try await applyCLISelection(arguments, to: document)
+                try await applyCLISelection(arguments, to: document, in: window)
             }
-            if arguments.files.isEmpty, arguments.language != nil, let active {
-                try await applyCLISelection(arguments, to: active)
+            if arguments.files.isEmpty, arguments.language != nil, let active, mainWindow === window {
+                try await applyCLISelection(arguments, to: active, in: window)
             }
             if let session = arguments.session {
                 await loadSession(session)
             }
             if let folder = arguments.folders.first {
-                await showFolder(folder)
+                await showFolder(folder, in: window)
             }
             refreshUI()
         }
@@ -150,8 +152,13 @@ extension ApplicationController {
     /// 参数说明:
     /// - arguments: 已验证的启动请求。
     /// - document: 本次成功打开或明确选择的文档。
+    /// - window: 打开请求选定的窗口。
     /// 返回：语言和位置明确生效；非法字节边界拒绝，打开失败不会误改其他标签。
-    func applyCLISelection(_ arguments: CLIArguments, to document: WorkspaceDocument) async throws {
+    func applyCLISelection(
+        _ arguments: CLIArguments,
+        to document: WorkspaceDocument,
+        in window: EditorWindow?
+    ) async throws {
         if let language = arguments.language {
             let id =
                 registry?.language(language)?.id
@@ -165,7 +172,7 @@ extension ApplicationController {
             document.languageExplicit = true
         }
         if arguments.monitor && !document.monitoring {
-            await toggleMonitoring()
+            await toggleMonitoring(document)
         }
         else if arguments.readOnly {
             setReadOnly(document, value: true)
@@ -179,6 +186,9 @@ extension ApplicationController {
         guard document.buffer.text.isBoundary(position) else {
             throw NateError.message("启动位置不在文件范围内，或位于 UTF-8 标量内部。")
         }
-        mainWindow?.editor.setCaret(position)
+        // 等待监视保护期间同一窗口也可能换页，只定位仍显示当次正文的原编辑视图。
+        if let window, isWorkspaceWindowAvailable(window), window.editor.document === document.buffer {
+            window.editor.setCaret(position)
+        }
     }
 }

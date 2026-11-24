@@ -18,6 +18,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         }
     }
     var mainWindow: EditorWindow?
+    var workspaceWindows: [EditorWindow] = []
     var registry: LanguageRegistry?
     var completionCatalog: CompletionCatalog?
     var functionListCatalog: FunctionListCatalog?
@@ -381,7 +382,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
 
     /// 业务作用：所有界面入口统一委派给应用命令与文件协调。
     /// 参数说明:
-    /// - window: 待连接主窗口。
+    /// - window: 待连接的编辑窗口。
     /// 返回：窗口只发出意图，不执行磁盘访问。
     func connect(_ window: EditorWindow) {
         connectClipboardSource(window)
@@ -431,25 +432,47 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return pending
         }
         window.onCommand = {
-            [weak self] in self?.route($0)
+            [weak self, weak window] command in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.route(command)
         }
         window.onSelect = {
-            [weak self] in self?.activate($0)
+            [weak self, weak window] id in
+            guard let window else {
+                return
+            }
+            self?.activate(id, in: window)
         }
         window.onCloseTab = {
-            [weak self] id in
+            [weak self, weak window] id in
             Task {
-                await self?.closeDocument(id)
+                guard let self, let window, self.isWorkspaceWindowAvailable(window) else {
+                    return
+                }
+                await self.closeDocument(id)
             }
         }
         window.onTabAction = {
-            [weak self] id, action in self?.tabAction(id, action)
+            [weak self, weak window] id, action in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.tabAction(id, action)
         }
         window.onTabReorder = {
-            [weak self] move in self?.reorderTabs(move) ?? false
+            [weak self, weak window] move in
+            guard let self, self.mainWindow === window else {
+                return false
+            }
+            return self.reorderTabs(move)
         }
         window.onEdit = {
-            [weak self] in self?.didEdit()
+            [weak self, weak window] in
+            if let window {
+                self?.workspaceWindowDidEdit(window)
+            }
         }
         window.onTextInput = {
             [weak self] in self?.recordTextInput($0)
@@ -474,13 +497,25 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             adaptEndings: adaptClipboardLineEndings
         )
         window.onWindowClose = {
-            NSApp.terminate(nil)
+            [weak self, weak window] in
+            if let window {
+                self?.closeWorkspaceWindow(window)
+            }
+        }
+        window.onWorkspaceFocus = {
+            [weak self, weak window] in
+            if let window {
+                self?.selectWorkspaceWindow(window)
+            }
         }
         window.onOpenURLs = {
-            [weak self] urls in
+            [weak self, weak window] urls in
+            guard let window else {
+                return
+            }
             Task {
                 for url in urls {
-                    await self?.openFile(url)
+                    await self?.openFile(url, in: window)
                 }
             }
         }
@@ -522,66 +557,35 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// 业务作用：激活既有文档并同步当前语言和保存状态。
     /// 参数说明:
     /// - id: 稳定文档身份。
-    /// 返回：正常工作区中切换正文视口；退出收束期间拒绝新的活动身份。
-    func activate(_ id: UUID) {
+    /// - targetWindow: 需要显示正文的原窗口，省略时使用当前编辑窗口。
+    /// 返回：正文成功显示时为真；退出、旧窗口或未确认输入拒绝切换。
+    @discardableResult
+    func activate(_ id: UUID, in targetWindow: EditorWindow? = nil) -> Bool {
+        let window = targetWindow ?? mainWindow
         // 退出已经固定工作区保护集合，标签选择不能在最终索引发布期间改变活动身份。
-        guard !closing else {
-            return
-        }
-        guard
-            let document = documents.first(where: {
-                $0.buffer.id == id
-            })
+        guard !closing, isWorkspaceWindowAvailable(window),
+            let document = documents.first(where: { $0.buffer.id == id })
         else {
-            return
+            return false
         }
-        // 切换标签结束原视图的增量会话，旧计算不能沿稳定 UUID 导航到新活动正文。
-        cancelIncrementalSearch(resetOrigin: true)
-        // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
-        guard mainWindow?.editor.finishComposition() != false else {
-            return
+        let isCurrent = window === mainWindow
+        if isCurrent {
+            // 切换标签结束原视图的增量会话，旧计算不能沿稳定 UUID 导航到新活动正文。
+            cancelIncrementalSearch(resetOrigin: true)
+            cancelCompletion()
+            cancelTextTool()
         }
-        cancelCompletion()
-        cancelTextTool()
-        activeID = id
-        mainWindow?.showDocument(document.buffer)
-        if mainWindow?.isIncrementalSearchVisible == true {
-            mainWindow?.incrementalSearch.feedback.stringValue = "文档已切换，可继续查找。"
+        // 候选尚未安全进入正文时保留原窗口与活动文档，不能发布指向未显示正文的命令身份。
+        guard window?.showDocument(document.buffer, focus: isCurrent) != false else {
+            return false
+        }
+        if isCurrent {
+            activeID = id
+            if window?.isIncrementalSearchVisible == true {
+                window?.incrementalSearch.feedback.stringValue = "文档已切换，可继续查找。"
+            }
         }
         refreshUI()
+        return true
     }
-
-    /// 业务作用：编辑通知只标记待保存，不把每次输入排成全文 I/O。
-    /// 参数说明: 无。
-    /// 返回：标签立即反映修改，保存周期独立推进。
-    func didEdit() {
-        guard let active else {
-            return
-        }
-        cancelBookmarkAction()
-        cancelMultipleSelection()
-        cancelQuickFind()
-        cancelColumnInsertion()
-        cancelHistoryAction()
-        cancelLineSort()
-        cancelTextTool()
-        // 新正文撤销旧源行复制，等待读取不能再发布先前修订的剪贴板内容。
-        cancelSearchResultExport()
-        cancelSearchResultPathOpen()
-        cancelDocumentMarkCopy()
-        cancelSearchMarking()
-        // 新正文已提交，原目录打开不再拥有旧修订与原光标的发布资格。
-        directoryWorkspace?.cancelOpen()
-        cancelCompletion()
-        // 正文已经进入新修订，原增量快照和起点都不能继续发布。
-        cancelIncrementalSearch(resetOrigin: true)
-        if mainWindow?.isIncrementalSearchVisible == true {
-            mainWindow?.incrementalSearch.feedback.stringValue = "正文已改变，可继续查找。"
-        }
-        active.dirtyHint = true
-        mainWindow?.refreshEditors()
-        refreshUI()
-        refreshVisibleIncrementalHighlights()
-    }
-
 }

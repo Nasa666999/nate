@@ -23,6 +23,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
     public var onClipboardCopy: ((Bool, Bool) -> Void)?
     public var onWindowClose: (() -> Void)?
+    public var onWorkspaceFocus: (() -> Void)?
     public var onIncrementalQuery: ((String, IncrementalSearchOptions) -> Void)?
     public var onIncrementalOptions: ((IncrementalSearchOptions) -> Void)?
     public var onIncrementalSuspend: (() -> Bool)?
@@ -299,19 +300,28 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// 业务作用：切换标签时保留各文档视口，避免后台更新抢焦点。
     /// 参数说明:
     /// - document: 新活动文档。
+    /// - focus: 是否将当前窗口的首响应者切回编辑区。
     /// 返回：确认原候选后切换并保存视口时为真；候选失败时保持原文档与视图并为假。
     @discardableResult
-    public func showDocument(_ document: DocumentBuffer) -> Bool {
+    public func showDocument(_ document: DocumentBuffer, focus: Bool = true) -> Bool {
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard editor.finishComposition() else {
             return false
+        }
+        if editor.document === document {
+            if focus {
+                window?.makeFirstResponder(editor)
+            }
+            return true
         }
         let container = editor.enclosingScrollView ?? scroll
         scrollPositions[editor.document.id] = container.contentView.bounds.origin
         editor.document = document
         editor.refresh()
         container.contentView.scroll(to: scrollPositions[document.id] ?? .zero)
-        window?.makeFirstResponder(editor)
+        if focus {
+            window?.makeFirstResponder(editor)
+        }
         return true
     }
 
@@ -381,6 +391,21 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
         onWindowClose?()
         return false
+    }
+
+    /// 业务作用：实际键盘焦点决定应用的当前工作区窗口。
+    /// 参数说明:
+    /// - notification: 当前窗口收到的原生焦点通知。
+    /// 返回：同一窗口取得焦点时报告当前路由来源。
+    public func windowDidBecomeKey(_ notification: Notification) {
+        if notification.object as? NSWindow === window {
+            // AppKit 可沿用原首响应者而不再发出 becomeFirstResponder，交接时显式同步本视图的选择来源。
+            if window?.firstResponder === editor {
+                editor.synchronizeViewSelectionRevision()
+                editor.synchronizeDocumentSelectionState()
+            }
+            onWorkspaceFocus?()
+        }
     }
 
     /// 业务作用：窗口与分屏尺寸变化后，只重建各自的视口排版缓存。

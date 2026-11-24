@@ -19,7 +19,7 @@ extension EditorView {
             throw NateError.message("请先结束候选或编辑保护，再改变完整选择。")
         }
         let state = try bindingRectangleLayout(state)
-        if window?.firstResponder === self {
+        if window?.isKeyWindow == true, window?.firstResponder === self {
             try document.setSelectionState(state)
         }
         else {

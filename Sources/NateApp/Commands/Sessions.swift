@@ -3,6 +3,7 @@ import Foundation
 import NateCore
 import NatePlatform
 import NateStorage
+import NateUI
 
 extension ApplicationController {
     /// 业务作用：命名会话记录已命名文件及位置，临时文档继续由独立恢复存储保护。
@@ -171,16 +172,18 @@ extension ApplicationController {
     /// 业务作用：真实目录进入独立树侧栏，按需展开并观察变化，不覆盖搜索结果或改动虚拟项目。
     /// 参数说明:
     /// - url: 用户明确选择的根目录。
+    /// - targetWindow: 发起目录打开的原窗口，省略时使用当前窗口。
     /// 返回：新根取得目录树展示权，非法 URL 保留原树；文件仅在用户激活时进入统一打开流程。
-    func showFolder(_ url: URL) async {
+    func showFolder(_ url: URL, in targetWindow: EditorWindow? = nil) async {
+        let window = targetWindow ?? mainWindow
         do {
             // 退出已固定工作区，不能再建立会打开文件或改变焦点的新目录入口。
-            guard !closing, let mainWindow else {
+            guard !closing, let window, isWorkspaceWindowAvailable(window) else {
                 return
             }
-            if directoryWorkspace?.window !== mainWindow {
+            if directoryWorkspace?.window !== window {
                 directoryWorkspace?.stop()
-                directoryWorkspace = DirectoryWorkspaceController(application: self, window: mainWindow)
+                directoryWorkspace = DirectoryWorkspaceController(application: self, window: window)
             }
             try directoryWorkspace?.start(url)
         }

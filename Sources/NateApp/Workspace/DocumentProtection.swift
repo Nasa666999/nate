@@ -9,7 +9,7 @@ extension ApplicationController {
     /// 返回：相关候选确认后改变编辑角色，失败保留原角色；解除只读不改变磁盘权限。
     func setReadOnly(_ document: WorkspaceDocument, value: Bool) {
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
-        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+        guard finishWorkspaceCompositions(documentID: document.buffer.id) else {
             return
         }
         if value {
@@ -23,10 +23,12 @@ extension ApplicationController {
     }
 
     /// 业务作用：进入只读监视前保存当前正文，不能用磁盘更新覆盖尚未保护的本地输入。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - targetDocument: 由打开请求选定的实际文档，省略时使用当前编辑文档。
     /// 返回：角色仍有效时进入监视，停止后恢复原只读设置；等待期间目标或权威变化则保持原模式。
-    func toggleMonitoring() async {
-        guard !closing, let document = active, let target = document.url, !document.closing,
+    func toggleMonitoring(_ targetDocument: WorkspaceDocument? = nil) async {
+        guard !closing, let document = targetDocument ?? active, let target = document.url, !document.closing,
+            documents.contains(where: { $0 === document }),
             !document.buffer.isEditingSuspended
         else {
             return
@@ -42,7 +44,7 @@ extension ApplicationController {
             return
         }
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
-        guard mainWindow?.finishCompositions(documentID: document.buffer.id) != false else {
+        guard finishWorkspaceCompositions(documentID: document.buffer.id) else {
             return
         }
         // 固定最终输入后收束写入，监视期间只允许显式磁盘载入改变缓冲区。

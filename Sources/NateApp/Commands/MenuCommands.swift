@@ -37,7 +37,8 @@ extension ApplicationController: NSMenuItemValidation {
         attach(application, to: bar)
         let file = NSMenu(title: "文件")
         for (title, id, key) in [
-            ("新建", "new", "n"), ("打开…", "open", "o"), ("立即保存", "save", "s"),
+            ("新建", "new", "n"), ("新建窗口", "newWindow", "N"),
+            ("打开…", "open", "o"), ("立即保存", "save", "s"),
             ("另存为…", "saveAs", "S"), ("保存副本…", "saveCopy", ""), ("全部保存", "saveAll", ""),
             ("重新载入", "reload", ""), ("重命名…", "rename", ""), ("移到废纸篓…", "trash", ""),
             ("关闭", "close", "w"), ("关闭全部", "closeAll", ""), ("关闭其他", "closeOthers", ""),
@@ -328,6 +329,7 @@ extension ApplicationController: NSMenuItemValidation {
         let windows = NSMenu(title: "窗口")
         add(windows, "下一个标签", "nextTab")
         add(windows, "上一个标签", "previousTab")
+        add(windows, "在新窗口克隆当前文档", "cloneToWindow")
         add(windows, "文档列表…", "documentList")
         windows.delegate = self
         populateWindowDocuments(in: windows)

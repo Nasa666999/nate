@@ -120,6 +120,8 @@ extension ApplicationController {
         case "matchingBracket": mainWindow?.editor.navigateBracket(.jump)
         case "selectBracketPair": mainWindow?.editor.navigateBracket(.selectPair)
         case "selectInsideBracket": mainWindow?.editor.navigateBracket(.selectInside)
+        case "newWindow": openWorkspaceWindow()
+        case "cloneToWindow": openActiveDocumentWindow()
         case "new":
             // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
             guard mainWindow?.editor.finishComposition() != false else {

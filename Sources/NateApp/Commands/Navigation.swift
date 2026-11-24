@@ -2,6 +2,7 @@ import AppKit
 import NateCore
 import NatePlatform
 import NateStorage
+import NateUI
 
 extension ApplicationController {
     /// 业务作用：结果导航复验原快照身份，失效偏移不冒充精确匹配。
@@ -209,8 +210,15 @@ extension ApplicationController {
     /// 参数说明:
     /// - url: 解码失败的原目标。
     /// - reason: 原始失败原因。
+    /// - window: 原文件打开请求的编辑窗口。
+    /// - permit: 原请求继续发布的资格。
     /// 返回：用户确认后打开所选代码页或独立字节视图。
-    func offerDecode(_ url: URL, reason: String) async {
+    func offerDecode(
+        _ url: URL,
+        reason: String,
+        in window: EditorWindow?,
+        permit: @MainActor () -> Bool
+    ) async {
         let alert = NSAlert()
         alert.messageText = "选择 \(url.lastPathComponent) 的编码"
         alert.informativeText = reason + "\n原字节保持不变。编码属于用户选择，不会被标记为已确认的自动识别。"
@@ -222,8 +230,17 @@ extension ApplicationController {
         alert.addButton(withTitle: "只读字节查看")
         alert.addButton(withTitle: "取消")
         let choice = alert.runModal()
+        // 模态期间可能关闭了原窗口或撤销打开意图，不能把响应交给另一窗口。
+        guard permit() else {
+            return
+        }
         if choice == .alertFirstButtonReturn {
-            await openFile(url, explicitEncoding: TextEncoding.available[popup.indexOfSelectedItem])
+            await openFile(
+                url,
+                explicitEncoding: TextEncoding.available[popup.indexOfSelectedItem],
+                in: window,
+                permit: permit
+            )
         }
         else if choice == .alertSecondButtonReturn {
             do {
@@ -259,13 +276,19 @@ extension ApplicationController {
                     return "文件 \(sample.totalByteCount) 字节。只读显示前 \(bytes.count) 字节；原文件不会作为此视图的保存目标。\n"
                         + lines.joined(separator: "\n")
                 }
+                // 字节样本只属于原请求；关闭期间或撤销后不建立新文档。
+                guard permit() else {
+                    return
+                }
                 let document = WorkspaceDocument(name: url.lastPathComponent + " · 字节视图", text: display)
                 document.buffer.isReadOnly = true
                 documents.append(document)
-                activate(document.buffer.id)
+                activate(document.buffer.id, in: window)
             }
             catch {
-                SystemIntegration.alert("无法读取字节", error.localizedDescription)
+                if permit() {
+                    SystemIntegration.alert("无法读取字节", error.localizedDescription)
+                }
             }
         }
     }

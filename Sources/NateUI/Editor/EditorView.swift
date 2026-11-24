@@ -54,7 +54,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 if oldValue != viewSelections {
                     synchronizeLegacyViewSelectionState()
                 }
-                if window?.firstResponder === self {
+                if window?.isKeyWindow == true, window?.firstResponder === self {
                     synchronizeDocumentSelectionState()
                 }
             }
@@ -291,7 +291,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// 返回：刷新呈现，不制造编辑或保存状态。
     public func refresh(reveal: Bool = false) {
         synchronizeBracketContext()
-        if window?.firstResponder === self || reveal {
+        if reveal || (window?.isKeyWindow == true && window?.firstResponder === self) {
             if let state = document.selectionState {
                 adoptViewSelectionState(state)
             }

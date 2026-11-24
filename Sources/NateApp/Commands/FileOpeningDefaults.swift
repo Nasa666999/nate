@@ -91,10 +91,11 @@ extension ApplicationController {
     }
 
     /// 业务作用：新建文档应用未来文档偏好，不在用户尚未选择路径时创建文件或改写既有格式。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - activateOnCreate: 创建后是否在当前窗口激活，独立窗口创建时暂缓绑定视图。
     /// 返回：UTF-8 无 BOM 的新文档进入工作区和恢复保护，缺席默认语言暂用纯文本并保留配置。
     @discardableResult
-    func newDocument() -> WorkspaceDocument {
+    func newDocument(activateOnCreate: Bool = true) -> WorkspaceDocument {
         let settings = currentFileOpeningSettings()
         let document = WorkspaceDocument(name: "新文档 \(documents.count + 1)", lineEnding: settings.lineEnding)
         if let language = registry?.languages.first(where: {
@@ -113,7 +114,9 @@ extension ApplicationController {
             document.recoveryError = "恢复索引尚未完成校验，现有记录保持原状。"
         }
         documents.append(document)
-        activate(document.buffer.id)
+        if activateOnCreate {
+            activate(document.buffer.id)
+        }
         return document
     }
 
