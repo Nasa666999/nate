@@ -383,8 +383,8 @@ extension ApplicationController {
             toggleReferenceGuide(id)
         case "modificationHistory":
             toggleModificationHistory()
-        case "previousModification", "nextModification":
-            navigateModification(backwards: id == "previousModification")
+        case "previousModification": navigateModification(.previous)
+        case "nextModification": navigateModification(.next)
         case "zoomIn", "zoomOut", "zoomReset":
             mainWindow?.editor.zoomFont(by: id == "zoomReset" ? nil : (id == "zoomIn" ? 1 : -1))
         case "themeLight":

@@ -267,7 +267,7 @@ extension ApplicationController {
             menuItem.state = mainWindow?.editor.showModificationHistory == true ? .on : .off
             return !closing && mainWindow != nil
         }
-        if id == "previousModification" || id == "nextModification" {
+        if ModificationNavigation(rawValue: id) != nil {
             return quickFindContext(allowingStaleRectangle: true) != nil
                 && active?.buffer.modificationSnapshot != nil
         }

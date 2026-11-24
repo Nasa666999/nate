@@ -117,7 +117,7 @@ extension ApplicationController {
     func noteUnrecordedMacroCommand(_ id: String) {
         guard macroRecording, !macroPlaying, !id.hasPrefix("edit:"), !id.hasPrefix("sort:"),
             BookmarkAction(rawValue: id)?.macroTitle == nil, NateCore.BracketNavigation(rawValue: id) == nil,
-            QuickFindAction(rawValue: id) == nil
+            QuickFindAction(rawValue: id) == nil, ModificationNavigation(rawValue: id) == nil
         else {
             return
         }
