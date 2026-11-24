@@ -89,18 +89,19 @@ extension ApplicationController {
             guard mayPublish() else {
                 return nil
             }
-            if let existing = documents.first(where: {
-                ($0.baseline?.device == loaded.baseline.device && $0.baseline?.inode == loaded.baseline.inode)
-                    || $0.baseline?.resolvedPath == loaded.baseline.resolvedPath
-                    || $0.url?.standardizedFileURL == loaded.url.standardizedFileURL
-            }) {
+            if let existing = boundWorkspaceDocument(
+                for: loaded.url,
+                path: loaded.baseline.resolvedPath,
+                baseline: loaded.baseline
+            ) {
                 guard !existing.closing else {
                     throw NateError.message("该文档正在确认关闭，请稍后重新打开。")
                 }
                 return display(existing) ? existing : nil
             }
             // 保存或批量替换还未发布绑定时，不能从旧磁盘快照建立另一个写入者。
-            guard targetReservations[loaded.baseline.resolvedPath] == nil else {
+            guard targetReservation(for: loaded.baseline.resolvedPath, baseline: loaded.baseline) == nil
+            else {
                 throw NateError.message("该目标正在完成文件操作，请稍后重新打开。")
             }
             guard documents.count < 1024 else {
@@ -206,31 +207,6 @@ extension ApplicationController {
         let snapshot = document.buffer.snapshot
         let changeSavePoint = copy ? nil : document.buffer.changeHistorySavePoint()
         let encoding = document.encoding
-        let resolved = destination.resolvingSymlinksInPath().standardizedFileURL
-        if documents.contains(where: {
-            $0 !== document && $0.url?.resolvingSymlinksInPath().standardizedFileURL == resolved
-        }) {
-            SystemIntegration.alert("目标已打开", "请切换到该目标文档，不能为同一文件建立第二个写入者。")
-            return
-        }
-        if copy && document.url?.resolvingSymlinksInPath().standardizedFileURL == resolved {
-            SystemIntegration.alert("副本目标无效", "副本不能与原文件指向同一目标。")
-            return
-        }
-        if document.buffer.isReadOnly
-            && document.url?.resolvingSymlinksInPath().standardizedFileURL == resolved
-        {
-            SystemIntegration.alert("原目标为编辑器只读", "请选择不同的另存为目标，或先明确解除编辑器只读。")
-            return
-        }
-        let owner = UUID()
-        guard reserveTarget(resolved.path, owner: owner) else {
-            SystemIntegration.alert("目标正在使用", "另一个文件动作尚未完成，请稍后重试。")
-            return
-        }
-        defer {
-            releaseTarget(resolved.path, owner: owner)
-        }
         // 只读切换撤销尚未发布的显式保存，替换已完成时仍确认实际保存点。
         let permit = CancellationToken()
         let request = fileOperations.begin(
@@ -251,19 +227,63 @@ extension ApplicationController {
                 document.saveOperation = nil
             }
         }
+        var savingOriginal = false
         do {
+            request.observe(.checkingBaseline)
+            let target = try await readIO.readCancellable {
+                token -> (path: String, baseline: DiskBaseline?) in
+                try token.check()
+                try permit.check()
+                try FileStorage.validateFileURL(destination)
+                let baseline =
+                    FileManager.default.fileExists(atPath: destination.path)
+                    ? try self.fileAccess.baseline(
+                        destination,
+                        permit: {
+                            !token.isCancelled && !permit.isCancelled
+                        }
+                    ) : nil
+                let path =
+                    baseline?.resolvedPath ?? destination.resolvingSymlinksInPath().standardizedFileURL.path
+                return (path, baseline)
+            }
+            // 读取期间新打开的硬链接也可取得文件权，必须在挂起结束后同时检查路径及物理身份。
+            try permit.check()
+            guard document.saveOperation?.id == request.id,
+                document.targetGeneration == request.targetGeneration,
+                document.bindingChange
+            else {
+                throw CancellationError()
+            }
+            guard
+                boundWorkspaceDocument(
+                    for: destination,
+                    path: target.path,
+                    baseline: target.baseline,
+                    excluding: document
+                ) == nil
+            else {
+                throw NateError.message("目标已在另一标签打开，同一文件只允许一个写入者。")
+            }
+            savingOriginal = document.matchesBoundFile(
+                destination,
+                path: target.path,
+                baseline: target.baseline
+            )
+            if savingOriginal && (copy || document.buffer.isReadOnly) {
+                throw NateError.message(
+                    copy ? "副本不能与原文件指向同一目标。" : "原文件为编辑器只读，请先解除只读或选择不同目标。"
+                )
+            }
+            guard reserveTarget(target.path, baseline: target.baseline, owner: request.id) else {
+                throw NateError.message("目标或其别名尚有文件动作，请稍后重试。")
+            }
+            defer {
+                releaseTarget(target.path, owner: request.id)
+            }
             let backup = try saveBackupRequest(request)
             let result = try await fileIO.run {
                 try self.fileOperations.perform(request) {
-                    request.observe(.checkingBaseline)
-                    let expected =
-                        FileManager.default.fileExists(atPath: destination.path)
-                        ? try self.fileAccess.baseline(
-                            destination,
-                            permit: {
-                                !permit.isCancelled
-                            }
-                        ) : nil
                     request.observe(.preparingBytes)
                     let data = try encoding.encode(snapshot.text.text(), catalog: catalog)
                     return try self.fileOperations.write(
@@ -271,7 +291,7 @@ extension ApplicationController {
                         request: request,
                         data,
                         to: destination,
-                        expected: expected,
+                        expected: target.baseline,
                         replacing: true,
                         backup: backup
                     )
@@ -316,9 +336,7 @@ extension ApplicationController {
         }
         catch {
             fileOperations.complete(request, error: error)
-            if request.snapshot.requiresReconciliation
-                && document.url?.resolvingSymlinksInPath().standardizedFileURL == resolved
-            {
+            if request.snapshot.requiresReconciliation && savingOriginal {
                 // 原路径可能已经替换，未取得确认的基线不能继续作为自动覆盖依据。
                 document.conflict = true
                 document.failure = error.localizedDescription

@@ -115,7 +115,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var searchNavigationGeneration = UUID()
     var externalObservationTask: Task<Void, Never>?
     var externalStamps: [UUID: FileStamp] = [:]
-    var targetReservations: [String: UUID] = [:]
+    var targetReservations: [Data: WorkspaceFileReservation] = [:]
     var queryGeneration = UUID()
     var quickFindGeneration: UUID?
     var closing = false

@@ -200,7 +200,7 @@ extension ApplicationController {
             return
         }
         let owner = UUID()
-        guard reserveTarget(sourceKey, owner: owner) else {
+        guard reserveTarget(sourceKey, baseline: active.baseline, owner: owner) else {
             return
         }
         defer {
@@ -312,7 +312,7 @@ extension ApplicationController {
         }
         let targetKey = url.resolvingSymlinksInPath().standardizedFileURL.path
         let owner = UUID()
-        guard reserveTarget(targetKey, owner: owner) else {
+        guard reserveTarget(targetKey, baseline: active.baseline, owner: owner) else {
             return
         }
         defer {

@@ -178,7 +178,12 @@ extension ApplicationController {
                                     throw NateError.message("该文件在计划后已打开，请重新执行以修改当前缓冲区。")
                                 }
                                 let owner = UUID()
-                                guard self.reserveTarget(plan.baseline.resolvedPath, owner: owner)
+                                guard
+                                    self.reserveTarget(
+                                        plan.baseline.resolvedPath,
+                                        baseline: plan.baseline,
+                                        owner: owner
+                                    )
                                 else {
                                     throw NateError.message("目标正在执行其他文件动作。")
                                 }

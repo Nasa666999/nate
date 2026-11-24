@@ -156,7 +156,7 @@ extension ApplicationController {
         }
         let owner = UUID()
         // 路径占用先于实际写入登记，另存与其他文件动作不能同时取得同一目标。
-        guard reserveTarget(path, owner: owner) else {
+        guard reserveTarget(path, baseline: expected, owner: owner) else {
             throw NateError.message("项目定义目标正在执行其他文件动作。")
         }
         defer {

@@ -63,7 +63,7 @@ extension ApplicationController {
                 else {
                     throw NateError.message("导出目标由当前工作区文档持有，请选择独立文件。")
                 }
-                guard reserveTarget(target.1, owner: request.id) else {
+                guard reserveTarget(target.1, baseline: target.0, owner: request.id) else {
                     throw NateError.message("导出目标仍有其它文件动作，请等待完成后重试。")
                 }
                 defer {

@@ -53,10 +53,13 @@ extension ApplicationController {
                     throw NateError.message("原文件已经变化，恢复正文保持独立，需比较或另存为。")
                 }
                 // 恢复核验可能晚于用户主动打开；原文件只能有一个可写缓冲区。
-                guard self.targetReservations[loaded.baseline.resolvedPath] == nil,
-                    !self.documents.contains(where: {
-                        $0 !== document && $0.baseline?.resolvedPath == loaded.baseline.resolvedPath
-                    })
+                guard targetReservation(for: loaded.baseline.resolvedPath, baseline: loaded.baseline) == nil,
+                    boundWorkspaceDocument(
+                        for: loaded.url,
+                        path: loaded.baseline.resolvedPath,
+                        baseline: loaded.baseline,
+                        excluding: document
+                    ) == nil
                 else {
                     throw NateError.message("原文件已在另一标签或文件动作中使用，恢复正文保持独立。")
                 }

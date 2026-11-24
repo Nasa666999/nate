@@ -92,7 +92,7 @@ extension ApplicationController {
                     throw NateError.message("导出目标由当前工作区文档持有，请选择独立文件。")
                 }
                 let owner = UUID()
-                guard reserveTarget(target.1, owner: owner) else {
+                guard reserveTarget(target.1, baseline: target.0, owner: owner) else {
                     throw NateError.message("导出目标仍有其它写入任务。")
                 }
                 defer {
