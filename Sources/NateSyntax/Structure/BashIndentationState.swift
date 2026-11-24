@@ -21,6 +21,7 @@ struct BashIndentationState {
         var phase: Phase
         let prefix: String
         let level: Int
+        var foldLine: Int?
     }
 
     private enum FunctionHeader {
@@ -39,12 +40,16 @@ struct BashIndentationState {
     private var casePatternDepth = 0
     private var functionHeader: FunctionHeader?
     private var lineAction: NewlineIndentationAction = .inherit
+    private var line = 0
+    private(set) var closedBlockFrom: Int?
 
     /// 业务作用：结束物理行局部决定，完整逻辑换行开启下一条命令，续行仍属于原命令前缀。
     /// 参数说明:
+    /// - line: 当前快照中的真实物理行号。
     /// - continuation: 前一物理行仍处于引用或反斜杠续行。
     /// 返回：只清除本行建议，合法未闭合的结构仍保留原开端和权限。
-    mutating func beginLine(afterContinuation continuation: Bool) {
+    mutating func beginLine(_ line: Int, afterContinuation continuation: Bool) {
+        self.line = line
         lineAction = .inherit
         if !continuation {
             commandStart = true
@@ -61,6 +66,7 @@ struct BashIndentationState {
     /// - prefix: 该逻辑开端所在真实物理行的空白前缀。
     /// 返回：记录已完成的结构动作；过深或无法安全记录的上下文拒绝整份准备。
     mutating func consume(_ token: BashIndentationToken, prefix: String) throws {
+        closedBlockFrom = nil
         if testExpression {
             if token.kind == .word("]]") {
                 testExpression = false
@@ -260,6 +266,9 @@ struct BashIndentationState {
             return
         }
         blocks[index].phase = phase
+        if phase == .loopBody {
+            blocks[index].foldLine = line
+        }
         if let indentation {
             lineAction = .align(prefix: blocks[index].prefix, levels: blocks[index].level + indentation)
         }
@@ -271,6 +280,7 @@ struct BashIndentationState {
     private mutating func closeBlock() {
         if let block = blocks.popLast() {
             lineAction = .align(prefix: block.prefix, levels: block.level)
+            closedBlockFrom = block.foldLine
         }
         commandStart = false
     }
@@ -284,11 +294,12 @@ struct BashIndentationState {
         guard blocks.count < 256 else {
             throw NateError.message("Bash 结构换行的块嵌套超过 256 层。")
         }
+        let foldLine = phase == .then || phase == .caseValue || phase == .compound ? line : nil
         if case .align(let base, let levels) = lineAction {
-            blocks.append(Block(phase: phase, prefix: base, level: levels))
+            blocks.append(Block(phase: phase, prefix: base, level: levels, foldLine: foldLine))
         }
         else {
-            blocks.append(Block(phase: phase, prefix: prefix, level: 0))
+            blocks.append(Block(phase: phase, prefix: prefix, level: 0, foldLine: foldLine))
         }
     }
 

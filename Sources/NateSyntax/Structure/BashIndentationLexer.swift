@@ -24,6 +24,8 @@ struct BashIndentationRow {
     let startsInLiteral: Bool
     let holdsLiteral: Bool
     let hereDocument: Bool
+    var completedHereDocumentFrom: Int? = nil
+    var standaloneComment = false
 }
 
 struct BashIndentationLexer {
@@ -34,15 +36,21 @@ struct BashIndentationLexer {
         case expansion(UInt8)
     }
 
+    private struct HereDocumentSource {
+        let line: Int
+        let removesTabs: Bool
+    }
+
     private struct HereDocument {
         let word: [UInt8]
-        let removesTabs: Bool
+        let source: HereDocumentSource
     }
 
     private var contexts: [Context] = []
     private var substitutionCases: [Int: Int] = [:]
     private var carriesWord = false
-    private var expectingHereDocument: Bool?
+    private var line = 0
+    private var expectingHereDocument: HereDocumentSource?
     private var waitingHereDocuments: [HereDocument] = []
     private var substitutionHereDocuments: [HereDocument] = []
     private var activeHereDocuments: ArraySlice<HereDocument> = []
@@ -51,9 +59,12 @@ struct BashIndentationLexer {
     /// 业务作用：按真实物理行传播引号、替换、续行和 here-document 边界，供结构缩进读取裸命令。
     /// 参数说明:
     /// - bytes: 一行不含换行符的原始 UTF-8。
+    /// - line: 当前快照中的真实物理行号。
     /// - check: 所有目标共享的取消与截止校验。
     /// 返回：当前行有资格使用的词与操作符；文件正文、字面、来源容量不足不会推测结构。
-    mutating func consume(_ bytes: [UInt8], check: () throws -> Void) throws -> BashIndentationRow {
+    mutating func consume(_ bytes: [UInt8], line: Int, check: () throws -> Void) throws -> BashIndentationRow
+    {
+        self.line = line
         if unknownHereDocument {
             return BashIndentationRow(
                 tokens: [],
@@ -65,8 +76,9 @@ struct BashIndentationLexer {
         }
         if let here = activeHereDocuments.first {
             // here-document 吞掉完整物理行。分隔符只结束所属正文，不能在同一行恢复代码解释。
-            let body = here.removesTabs ? bytes.drop(while: { $0 == 9 }) : bytes[...]
-            if body.elementsEqual(here.word) {
+            let body = here.source.removesTabs ? bytes.drop(while: { $0 == 9 }) : bytes[...]
+            let completed = body.elementsEqual(here.word)
+            if completed {
                 activeHereDocuments.removeFirst()
                 if activeHereDocuments.isEmpty, contexts.isEmpty, !waitingHereDocuments.isEmpty {
                     activeHereDocuments = waitingHereDocuments[...]
@@ -78,7 +90,8 @@ struct BashIndentationLexer {
                 continues: !contexts.isEmpty,
                 startsInLiteral: true,
                 holdsLiteral: true,
-                hereDocument: true
+                hereDocument: true,
+                completedHereDocumentFrom: completed ? here.source.line : nil
             )
         }
         var tokens: [BashIndentationToken] = []
@@ -87,6 +100,7 @@ struct BashIndentationLexer {
         var opaque = carriesWord
         let startsInLiteral = !contexts.isEmpty
         var continued = false
+        var standaloneComment = false
         var nextCheck = 0
         while cursor < bytes.count {
             if cursor >= nextCheck {
@@ -103,6 +117,7 @@ struct BashIndentationLexer {
             }
             if contexts.isEmpty {
                 if byte == 35 && start == nil {
+                    standaloneComment = tokens.isEmpty
                     break
                 }
                 if start == nil, byte == 40, cursor + 1 < bytes.count, bytes[cursor + 1] == 40 {
@@ -188,7 +203,8 @@ struct BashIndentationLexer {
             continues: continues,
             startsInLiteral: startsInLiteral,
             holdsLiteral: holdsLiteral,
-            hereDocument: false
+            hereDocument: false,
+            standaloneComment: standaloneComment
         )
     }
 
@@ -236,7 +252,7 @@ struct BashIndentationLexer {
             if expectingHereDocument != nil {
                 unknownHereDocument = true
             }
-            expectingHereDocument = stripsTabs
+            expectingHereDocument = HereDocumentSource(line: line, removesTabs: stripsTabs)
             kind = .redirection
             cursor += stripsTabs ? 3 : 2
         }
@@ -287,10 +303,10 @@ struct BashIndentationLexer {
             throw NateError.message("Bash 结构换行的单行词元超过 65536 项。")
         }
         let source = bytes[lower..<upper]
-        if let stripsTabs = expectingHereDocument {
+        if let declaration = expectingHereDocument {
             expectingHereDocument = nil
             if let word = Self.delimiter(source), waitingHereDocuments.count < 256 {
-                waitingHereDocuments.append(HereDocument(word: word, removesTabs: stripsTabs))
+                waitingHereDocuments.append(HereDocument(word: word, source: declaration))
             }
             else {
                 unknownHereDocument = true
@@ -492,7 +508,9 @@ struct BashIndentationLexer {
             unknownHereDocument = true
             return
         }
-        substitutionHereDocuments.append(HereDocument(word: word, removesTabs: stripsTabs))
+        substitutionHereDocuments.append(
+            HereDocument(word: word, source: HereDocumentSource(line: line, removesTabs: stripsTabs))
+        )
     }
 
     /// 业务作用：只从命令替换中的裸命令起始识别 case 或 esac，不把实参相同拼写作为块边界。

@@ -50,9 +50,9 @@ enum BashIndentationPlan {
             }
             remainingBytes -= complete.count
             let bytes = Array(text.bytes(in: row))
-            let lexed = try lexer.consume(bytes, check: check)
+            let lexed = try lexer.consume(bytes, line: line, check: check)
             let targets = (byLine[line] ?? []).sorted { $0.lower < $1.lower }
-            state.beginLine(afterContinuation: continuation)
+            state.beginLine(line, afterContinuation: continuation)
             continuation = lexed.continues
             if lexed.hereDocument {
                 for range in targets {
