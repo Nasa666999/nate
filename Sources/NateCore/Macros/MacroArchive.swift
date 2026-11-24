@@ -1,19 +1,30 @@
 import CryptoKit
 import Foundation
 
-private struct LegacyMacroLiteralFields: Decodable {
-    struct TextValue: Decodable {
-        let _0: String
+private struct LegacyMacroFields: Decodable {
+    struct Value<Content: Decodable>: Decodable {
+        let _0: Content
     }
 
-    struct CompletionValue: Decodable {
-        let _0: CompletionInputCommand
+    struct ClipboardCopy: Decodable {
+        let cutting: Bool
+        let copyLineWithoutSelection: Bool
     }
 
-    let completion: CompletionValue?
-    let input: TextValue?
-    let command: TextValue?
-    let editor: TextValue?
+    struct Clipboard: Decodable {
+        let _0: Data
+        let adaptLineEndings: Bool
+    }
+
+    let completion: Value<CompletionInputCommand>?
+    let pairInput: Value<PairInputCommand>?
+    let clipboardCopy: ClipboardCopy?
+    let search: Value<MacroSearchAction>?
+    let input: Value<String>?
+    let command: Value<String>?
+    let lineSort: Value<LineSortOptions>?
+    let editor: Value<String>?
+    let clipboard: Clipboard?
 }
 
 public enum MacroArchive {
@@ -296,8 +307,8 @@ public enum MacroArchive {
         }
         // JSONSerialization 用于复验字段形状，原始字符串从同一归档直接解码以保留前导 U+FEFF。
         try budget.check()
-        let literals = try JSONDecoder().decode([LegacyMacroLiteralFields].self, from: data)
-        guard literals.count == objects.count else {
+        let decoded = try JSONDecoder().decode([LegacyMacroFields].self, from: data)
+        guard decoded.count == objects.count else {
             throw MacroArchiveError.unsupportedFormat
         }
         var actions: [MacroAction] = []
@@ -308,11 +319,12 @@ public enum MacroArchive {
             else {
                 throw MacroArchiveError.unsupportedFormat
             }
+            let saved = decoded[index]
             let action: MacroAction
             switch kind {
             case "completion":
                 guard Set(fields.keys) == ["_0"], let command = fields["_0"] as? [String: Any],
-                    Set(command.keys) == ["prefix", "replacement"], let literal = literals[index].completion
+                    Set(command.keys) == ["prefix", "replacement"], let literal = saved.completion
                 else {
                     throw MacroArchiveError.unsupportedFormat
                 }
@@ -320,58 +332,56 @@ public enum MacroArchive {
             case "pairInput":
                 guard Set(fields.keys) == ["_0"], let command = fields["_0"] as? [String: Any],
                     Set(command.keys) == ["pair", "input", "skipExisting"],
-                    let pair = command["pair"] as? [String: Any], Set(pair.keys) == ["opening", "closing"]
+                    let pair = command["pair"] as? [String: Any], Set(pair.keys) == ["opening", "closing"],
+                    let verified = saved.pairInput
                 else {
                     throw MacroArchiveError.unsupportedFormat
                 }
-                action = .pairInput(
-                    try JSONDecoder().decode(
-                        PairInputCommand.self,
-                        from: JSONSerialization.data(withJSONObject: command)
-                    )
-                )
+                action = .pairInput(verified._0)
             case "clipboardCopy":
-                guard Set(fields.keys) == ["cutting", "copyLineWithoutSelection"] else {
+                guard Set(fields.keys) == ["cutting", "copyLineWithoutSelection"],
+                    let copy = saved.clipboardCopy
+                else {
                     throw MacroArchiveError.unsupportedFormat
                 }
-                let bytes = try JSONSerialization.data(withJSONObject: object)
-                action = try JSONDecoder().decode(MacroAction.self, from: bytes)
+                action = .clipboardCopy(
+                    cutting: copy.cutting,
+                    copyLineWithoutSelection: copy.copyLineWithoutSelection
+                )
             case "search":
-                guard Set(fields.keys) == ["_0"], let search = fields["_0"] else {
+                guard Set(fields.keys) == ["_0"], let search = fields["_0"], let verified = saved.search
+                else {
                     throw MacroArchiveError.unsupportedFormat
                 }
                 try validateSearchObject(search)
-                let bytes = try JSONSerialization.data(withJSONObject: search)
-                action = .search(try JSONDecoder().decode(MacroSearchAction.self, from: bytes))
+                action = .search(verified._0)
             case "input", "command":
                 guard Set(fields.keys) == ["_0"] else {
                     throw MacroArchiveError.unsupportedFormat
                 }
-                guard let text = (kind == "input" ? literals[index].input : literals[index].command)?._0
+                guard let text = (kind == "input" ? saved.input : saved.command)?._0
                 else {
                     throw NateError.message("宏文字字段不是完整字符串。")
                 }
                 action = kind == "input" ? .input(text) : .command(text)
             case "lineSort":
-                guard Set(fields.keys) == ["_0"], let options = fields["_0"] else {
+                guard Set(fields.keys) == ["_0"], let options = fields["_0"], let verified = saved.lineSort
+                else {
                     throw MacroArchiveError.unsupportedFormat
                 }
                 try validateSortObject(options)
-                let bytes = try JSONSerialization.data(withJSONObject: options)
-                action = .lineSort(try JSONDecoder().decode(LineSortOptions.self, from: bytes))
+                action = .lineSort(verified._0)
             case "editor":
-                guard Set(fields.keys) == ["_0"], let name = literals[index].editor?._0,
+                guard Set(fields.keys) == ["_0"], let name = saved.editor?._0,
                     let command = EditorCommand(rawValue: name)
                 else {
                     throw MacroArchiveError.unsupportedFormat
                 }
                 action = .editor(command)
             case "clipboard":
-                guard Set(fields.keys) == ["_0", "adaptLineEndings"] else {
+                guard Set(fields.keys) == ["_0", "adaptLineEndings"], let source = saved.clipboard else {
                     throw MacroArchiveError.unsupportedFormat
                 }
-                let bytes = try JSONSerialization.data(withJSONObject: fields)
-                let source = try JSONDecoder().decode(LegacyMacroClipboard.self, from: bytes)
                 action = .clipboard(
                     try ClipboardPayload.decode(source._0, deadline: budget.deadline, permit: budget.permit),
                     adaptLineEndings: source.adaptLineEndings
@@ -428,9 +438,4 @@ public enum MacroArchive {
             throw MacroArchiveError.unsupportedFormat
         }
     }
-}
-
-private struct LegacyMacroClipboard: Decodable {
-    let _0: Data
-    let adaptLineEndings: Bool
 }
