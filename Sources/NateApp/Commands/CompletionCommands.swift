@@ -54,7 +54,9 @@ extension ApplicationController {
             }
             return true
         }
-        let definition = completionCatalog?.definition(for: languageID)
+        let definition =
+            completionOverrides.entries[languageID]?.definition
+            ?? completionCatalog?.definition(for: languageID)
         let keywords = registry?.language(languageID)?.keywords ?? []
         let threshold = max(
             1,

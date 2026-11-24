@@ -23,6 +23,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let workspaceTabSwitching = WorkspaceTabSwitching()
     var registry: LanguageRegistry?
     var completionCatalog: CompletionCatalog?
+    let completionOverrides = CompletionOverridesRuntime()
     var functionListCatalog: FunctionListCatalog?
     var structureTask: Task<Void, Never>?
     var directoryWorkspace: DirectoryWorkspaceController?
@@ -305,6 +306,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 SystemIntegration.alert("函数列表资源未载入", error.localizedDescription)
             }
             await loadUserLanguages()
+            await loadCompletionOverrides()
             for (record, tree, reference) in restored.documents {
                 let document = WorkspaceDocument(
                     name: record.name,

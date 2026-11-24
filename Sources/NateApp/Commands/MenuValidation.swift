@@ -11,6 +11,9 @@ extension ApplicationController {
         guard let id = menuItem.representedObject as? String else {
             return true
         }
+        if let action = CompletionOverrideCommand(rawValue: id) {
+            return canManageCompletionOverride(action)
+        }
         if id.hasPrefix("activate:") {
             let fields =
                 menuItem.identifier?.rawValue.split(separator: ".", omittingEmptySubsequences: false) ?? []

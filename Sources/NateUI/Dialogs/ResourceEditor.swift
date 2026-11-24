@@ -56,7 +56,7 @@ public final class ResourceEditor: NSWindowController, NSTextViewDelegate {
             height: CGFloat.greatestFiniteMagnitude
         )
         diagnosticsText.textContainer?.widthTracksTextView = true
-        diagnosticsText.setAccessibilityLabel("UDL 完整兼容说明")
+        diagnosticsText.setAccessibilityLabel("资源兼容说明")
         root.addSubview(scroll)
         root.addSubview(diagnosticsScroll)
         root.addSubview(message)

@@ -77,6 +77,10 @@ extension ApplicationController {
             quickFind(action)
             return
         }
+        if let action = CompletionOverrideCommand(rawValue: id) {
+            manageCompletionOverride(action)
+            return
+        }
         if id.hasPrefix("language:"), let active {
             active.language = String(id.dropFirst(9))
             active.languageExplicit = true
