@@ -49,6 +49,7 @@ public struct StructuralIndentationPlan: Sendable {
         self.deadline = deadline
         self.permit = permit
         let identifier = language?.id ?? "normal"
+        let lisp = identifier == "lisp" || identifier == "scheme"
         let curly: Set<String> = [
             "c", "cpp", "java", "cs", "objc", "php", "javascript", "javascript.js", "jsp", "css",
             "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r",
@@ -58,7 +59,7 @@ public struct StructuralIndentationPlan: Sendable {
             && (identifier == "python" || identifier == "lua" || identifier == "mssql" || identifier == "sql"
                 || identifier == "cmake" || identifier == "autoit" || identifier == "bash"
                 || identifier == "yaml" || identifier == "toml" || identifier == "html" || identifier == "xml"
-                || identifier == "pascal"
+                || identifier == "pascal" || lisp
                 || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
@@ -121,6 +122,16 @@ public struct StructuralIndentationPlan: Sendable {
         }
         if identifier == "toml" {
             actions = try TOMLIndentationPlan.actions(
+                snapshot: snapshot,
+                language: language,
+                ranges: ranges,
+                deadline: deadline,
+                permit: permit
+            )
+            return
+        }
+        if lisp {
+            actions = try LispIndentationPlan.actions(
                 snapshot: snapshot,
                 language: language,
                 ranges: ranges,
