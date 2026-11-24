@@ -2,7 +2,7 @@ import Foundation
 
 public enum EditorCommand: String, CaseIterable, Codable, Sendable {
     case deleteBackward, deleteForward
-    case insertTab
+    case insertTab, backTab
     case insertNewline
     case insertMarkupTagEnd
     case insertOpeningBrace, insertClosingBrace, insertOpeningBracket, insertClosingBracket

@@ -145,6 +145,7 @@ public enum MacroActionPresentation {
         switch command {
         case .deleteBackward: return "向前退格"
         case .insertTab: return "按当前规则输入 Tab"
+        case .backTab: return "退 Tab 或减少缩进"
         case .insertNewline: return "按当前规则逐光标换行"
         case .insertMarkupTagEnd: return "输入标签结束符并按当前语言闭合"
         case .insertOpeningBrace: return "输入左花括号并按当前语言对齐"

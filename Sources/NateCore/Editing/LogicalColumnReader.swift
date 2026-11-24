@@ -10,6 +10,9 @@ public struct LogicalColumnReader {
     private var line = -1
     private var position = 0
     private var currentColumn = 0
+    private var nextStopColumn = 0
+    private var currentStop = 0
+    private var previousStop = 0
 
     /// 业务作用：同一批列计算共用固定正文、字素导航和预算，顺序目标复用已读前缀。
     /// 参数说明:
@@ -55,6 +58,9 @@ public struct LogicalColumnReader {
             line = row
             position = body.lower
             currentColumn = 0
+            nextStopColumn = tabWidth
+            currentStop = body.lower
+            previousStop = body.lower
         }
         while position < offset {
             try checkpoint()
@@ -66,12 +72,31 @@ public struct LogicalColumnReader {
             guard currentColumn <= 1_000_000 else {
                 throw NateError.message("逻辑列超过一百万，未准备部分输入目标。")
             }
+            if currentColumn == nextStopColumn {
+                previousStop = currentStop
+                currentStop = next
+                nextStopColumn += tabWidth
+            }
             position = next
         }
         guard virtualColumn <= 1_000_000 - currentColumn else {
             throw NateError.message("虚拟列超出一百万列预算。")
         }
         return currentColumn + virtualColumn
+    }
+
+    /// 业务作用：退 Tab 的光标导航回到实际前一停靠列，Unicode 和行尾虚拟位置不会被解释成字节列。
+    /// 参数说明:
+    /// - selection: 当前普通选择的实际活动端及虚拟列。
+    /// 返回：收束到前一停靠位的空光标；无法完整证明当前列时抛错。
+    mutating func retreatToTabStop(from selection: TextSelection) throws -> TextSelection {
+        let column = try column(at: selection.head, virtualColumn: selection.virtualColumn)
+        let target = max(0, column - 1) / tabWidth * tabWidth
+        if target >= currentColumn {
+            return TextSelection(anchor: position, head: position, virtualColumn: target - currentColumn)
+        }
+        let stop = target == nextStopColumn - tabWidth ? currentStop : previousStop
+        return TextSelection(anchor: stop, head: stop)
     }
 
     /// 业务作用：每次列读取都消耗同一批资格，后续目标不能重新取得完整遍历预算。

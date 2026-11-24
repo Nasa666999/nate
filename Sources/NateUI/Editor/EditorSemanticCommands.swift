@@ -21,6 +21,7 @@ extension EditorView {
         case .deleteBackward: succeeded = delete(forward: false)
         case .deleteForward: succeeded = delete(forward: true)
         case .insertTab: succeeded = insertConfiguredTab()
+        case .backTab: succeeded = retreatConfiguredTab()
         case .insertNewline: succeeded = insertConfiguredNewline()
         case .insertMarkupTagEnd: succeeded = insertMarkupTagEnd()
         case .insertOpeningBrace, .insertClosingBrace, .insertOpeningBracket, .insertClosingBracket,
@@ -64,8 +65,11 @@ extension EditorView {
             return false
         }
         if command.structuralCharacter == nil,
-            ![EditorCommand.deleteBackward, .deleteForward, .insertTab, .insertNewline, .insertMarkupTagEnd]
-                .contains(command)
+            ![
+                EditorCommand.deleteBackward, .deleteForward, .insertTab, .backTab, .insertNewline,
+                .insertMarkupTagEnd,
+            ]
+            .contains(command)
         {
             clearRectangularSelection()
             needsDisplay = true
@@ -85,6 +89,7 @@ extension EditorView {
         case "deleteBackward:": return .deleteBackward
         case "deleteForward:": return .deleteForward
         case "insertTab:": return .insertTab
+        case "insertBacktab:": return .backTab
         case "insertNewline:": return .insertNewline
         case "moveLeft:", "moveBackward:": return .moveLeft
         case "moveRight:", "moveForward:": return .moveRight

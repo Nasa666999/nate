@@ -155,7 +155,10 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
                 table.scrollRowToVisible(row)
                 return true
             }
-            if (event.keyCode == 48 && confirmsTab) || (event.keyCode == 36 && confirmsEnter) {
+            let tab =
+                event.keyCode == 48 && confirmsTab
+                && event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty
+            if tab || (event.keyCode == 36 && confirmsEnter) {
                 choose()
                 return true
             }

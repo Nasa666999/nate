@@ -47,6 +47,28 @@ extension EditorView {
         }
     }
 
+    /// 业务作用：正文的 Shift+Tab 和宏共用当前语言宽度，缩进与光标调整一次发布。
+    /// 参数说明: 无。
+    /// 返回：全部选择成功更新或本来已在第一列时为真，保护状态或准备失败不发布。
+    func retreatConfiguredTab() -> Bool {
+        // 只有同一真实编辑视图具有所有选择的写入资格；只读或候选不借退 Tab 参与事务。
+        guard composition == nil, !document.isReadOnly, !document.isEditingSuspended,
+            synchronizeDocumentSelectionState()
+        else {
+            onStatus?("当前候选或编辑权限不允许退 Tab，正文与选择保持原状。")
+            return false
+        }
+        do {
+            let plan = try PreparedBackTab(snapshot: document.snapshot, settings: tabSettings)
+            try commitPreparedEditorInput(plan.transaction)
+            return true
+        }
+        catch {
+            onStatus?(error.localizedDescription)
+            return false
+        }
+    }
+
     /// 业务作用：矩形 Tab 保留原生边缘涉及的两侧空白，每个目标按实际插入列决定空格数。
     /// 参数说明: 无。
     /// 返回：保留原形态作为撤销来源的完整事务；任何视觉边缘或逻辑列不能证明时整体拒绝。
