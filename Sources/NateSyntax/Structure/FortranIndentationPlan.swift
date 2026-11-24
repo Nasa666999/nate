@@ -22,7 +22,7 @@ enum FortranIndentationPlan {
             if let name {
                 return self.name == name
             }
-            return !closing || self.name == nil || block.usesBareEnd || block == .interface
+            return !closing || self.name == nil || block.usesBareEnd || block == .interface || block == .type
         }
     }
 

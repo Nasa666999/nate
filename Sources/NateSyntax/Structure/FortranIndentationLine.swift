@@ -2,7 +2,9 @@ import Foundation
 import NateCore
 
 struct FortranIndentationLine {
-    private static let modernStructureWords: Set<String> = ["block", "endblock", "rank", "selectrank"]
+    private static let modernStructureWords: Set<String> = [
+        "block", "blockdata", "endblock", "endblockdata", "rank", "selectrank",
+    ]
     enum Block: String {
         case program, module, submodule, subroutine, function, interface
         case block, blockdata, associate, critical, select, forall, type, team
@@ -192,7 +194,10 @@ struct FortranIndentationLine {
             words = words.dropFirst()
         }
         var name: String?
-        if words.count >= 2, words[words.startIndex].identifier, words[words.startIndex + 1].value == ":" {
+        // 声明中的双冒号保留给声明语法，单冒号才引入可选结构名。
+        if words.count >= 2, words[words.startIndex].identifier, words[words.startIndex + 1].value == ":",
+            words.count == 2 || words[words.startIndex + 2].value != ":"
+        {
             name = words[words.startIndex].value
             words = words.dropFirst(2)
         }
@@ -204,6 +209,13 @@ struct FortranIndentationLine {
         if first.value == "end" {
             if rest.isEmpty {
                 return .closing(nil, name: nil)
+            }
+            if next == "block", rest.count >= 2, rest[rest.startIndex + 1].value == "data" {
+                let unit = rest.dropFirst(2)
+                guard unit.isEmpty || unit.count == 1 && unit.first?.identifier == true else {
+                    return .neutral
+                }
+                return .closing(.blockdata, name: unit.first?.value)
             }
             if let block = next.flatMap(Block.init(rawValue:)), rest.first?.keyword == true,
                 rest.count <= 2, rest.count == 1 || rest.last?.identifier == true
@@ -260,7 +272,15 @@ struct FortranIndentationLine {
             }
             return .opening(.select, name: name)
         case "case", "class", "rank", "type":
-            if ["class", "type"].contains(first.value), next != "is" && next != "default" {
+            if first.value == "type" {
+                if name == nil, let declared = try FortranDerivedType.name(in: rest, check: check) {
+                    return .opening(.type, name: declared)
+                }
+                guard next == "is" else {
+                    return .neutral
+                }
+            }
+            if first.value == "class", next != "is" && next != "default" {
                 return .neutral
             }
             let selector = next == "is" ? rest.dropFirst() : rest
@@ -283,7 +303,22 @@ struct FortranIndentationLine {
             }
             return .opening(.loop, name: name)
         case "block":
-            return rest.isEmpty ? .opening(.block, name: name) : .neutral
+            if rest.isEmpty {
+                return .opening(.block, name: name)
+            }
+            guard name == nil, next == "data" else {
+                return .neutral
+            }
+            let unit = rest.dropFirst()
+            guard unit.isEmpty || unit.count == 1 && unit.first?.identifier == true else {
+                return .neutral
+            }
+            return .opening(.blockdata, name: unit.first?.value)
+        case "blockdata":
+            guard name == nil, rest.isEmpty || rest.count == 1 && rest.first?.identifier == true else {
+                return .neutral
+            }
+            return .opening(.blockdata, name: next)
         case "associate":
             guard let end = try parenthesisEnd(in: rest, check: check), end + 1 == rest.endIndex else {
                 return .neutral
