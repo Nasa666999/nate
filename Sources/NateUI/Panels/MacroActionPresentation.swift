@@ -8,6 +8,9 @@ public enum MacroActionPresentation {
     /// 返回：用于列表的有界说明；完整内容另由详情读取。
     public static func summary(_ action: MacroAction) -> String {
         switch action {
+        case .completion(let command):
+            let preview = String(String.UnicodeScalarView(command.replacement.unicodeScalars.prefix(60)))
+            return "确认补全 · " + visible(preview)
         case .pairInput(let command):
             return "配对输入：" + visible(command.input) + " · "
                 + visible(command.pair.opening + command.pair.closing)
@@ -55,6 +58,9 @@ public enum MacroActionPresentation {
     /// 返回：包含原始 Unicode、NUL 与换行身份的只读详情，不取得播放资格。
     public static func detail(_ action: MacroAction) -> String {
         switch action {
+        case .completion(let command):
+            return "确认补全\n使用播放时当前光标之前的相同原始前缀。\n\n前缀：\n" + visible(command.prefix)
+                + "\n\n确认原文：\n" + visible(command.replacement)
         case .pairInput(let command):
             return "配对输入\n实际字符：" + visible(command.input) + "\n开端：" + visible(command.pair.opening)
                 + "\n闭合：" + visible(command.pair.closing) + "\n越过已有闭合符：\(command.skipExisting)"

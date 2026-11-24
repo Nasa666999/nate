@@ -145,6 +145,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     public var onChange: (() -> Void)?
     public var onTextInput: ((String) -> Void)?
     public var onPairInput: ((PairInputCommand) -> Void)?
+    public var onCompletionInput: ((CompletionInputCommand) -> Void)?
     public var onEditorCommand: ((EditorCommand) -> Void)?
     public var onClipboardCapture: ((ClipboardPayload) -> Void)?
     public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?

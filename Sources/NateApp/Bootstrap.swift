@@ -454,6 +454,9 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         window.onPairInput = {
             [weak self] in self?.recordPairInput($0)
         }
+        window.onCompletionInput = {
+            [weak self] in self?.recordCompletionInput($0)
+        }
         window.onEditorCommand = {
             [weak self] in self?.recordEditorCommand($0)
         }

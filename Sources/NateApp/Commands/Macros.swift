@@ -4,6 +4,17 @@ import NatePlatform
 import NateStorage
 
 extension ApplicationController {
+    /// 业务作用：真实候选替换发布后仅记录前缀及用户所选原文，后续播放不需要访问候选来源。
+    /// 参数说明:
+    /// - command: 实际正文视图已经执行成功的完整补全动作。
+    /// 返回：当前录制且来自真实正文焦点时追加一次，播放中不追加。
+    func recordCompletionInput(_ command: CompletionInputCommand) {
+        guard macroRecording, !macroPlaying, quickFindContext() != nil else {
+            return
+        }
+        appendRecordedMacroAction(.completion(command))
+    }
+
     /// 业务作用：实际配对和闭合越过成功后只记录一个完整语义动作，不把生成文字重复录入普通输入。
     /// 参数说明:
     /// - command: 来源正文视图已执行成功的完整配对定义和真实字符。
@@ -175,6 +186,11 @@ extension ApplicationController {
                     return
                 }
                 switch action {
+                case .completion(let command):
+                    searchContinuation = nil
+                    guard editor.submitCompletion(command) else {
+                        return
+                    }
                 case .pairInput(let command):
                     searchContinuation = nil
                     guard editor.submitPairInput(command) else {

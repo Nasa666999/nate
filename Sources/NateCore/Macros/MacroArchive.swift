@@ -1,6 +1,21 @@
 import CryptoKit
 import Foundation
 
+private struct LegacyMacroLiteralFields: Decodable {
+    struct TextValue: Decodable {
+        let _0: String
+    }
+
+    struct CompletionValue: Decodable {
+        let _0: CompletionInputCommand
+    }
+
+    let completion: CompletionValue?
+    let input: TextValue?
+    let command: TextValue?
+    let editor: TextValue?
+}
+
 public enum MacroArchive {
     public static let maximumBytes = 8_388_608
     public static let maximumActions = 10_000
@@ -30,6 +45,18 @@ public enum MacroArchive {
             try budget.check()
             try action.validateSupport()
             switch action {
+            case .completion(let command):
+                guard
+                    command.prefix.utf8.count + command.replacement.utf8.count <= maximumBytes
+                        - writer.data.count - 41
+                else {
+                    throw NateError.message("宏补全及归档索引超过 8 MiB。")
+                }
+                writer.unsigned(UInt8(8))
+                writer.unsigned(UInt32(command.prefix.utf8.count))
+                try writer.append(Data(command.prefix.utf8))
+                writer.unsigned(UInt32(command.replacement.utf8.count))
+                try writer.append(Data(command.replacement.utf8))
             case .pairInput(let command):
                 writer.unsigned(UInt8(7))
                 writer.unsigned(
@@ -151,6 +178,20 @@ public enum MacroArchive {
             try budget.check()
             let action: MacroAction
             switch try reader.unsigned(UInt8.self) {
+            case 8:
+                let prefixSize = Int(try reader.unsigned(UInt32.self))
+                guard prefixSize <= CompletionInputCommand.maximumPrefixBytes,
+                    let prefix = UTF8Text.decode(try reader.bytes(prefixSize))
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                let size = Int(try reader.unsigned(UInt32.self))
+                guard size <= CompletionInputCommand.maximumReplacementBytes,
+                    let text = UTF8Text.decode(try reader.bytes(size))
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                action = .completion(try CompletionInputCommand(prefix: prefix, replacement: text))
             case 7:
                 let flags = try reader.unsigned(UInt8.self)
                 guard flags <= 3 else {
@@ -253,8 +294,14 @@ public enum MacroArchive {
         else {
             throw NateError.message("宏格式不是完整动作列表，或动作超过一万项。")
         }
+        // JSONSerialization 用于复验字段形状，原始字符串从同一归档直接解码以保留前导 U+FEFF。
+        try budget.check()
+        let literals = try JSONDecoder().decode([LegacyMacroLiteralFields].self, from: data)
+        guard literals.count == objects.count else {
+            throw MacroArchiveError.unsupportedFormat
+        }
         var actions: [MacroAction] = []
-        for object in objects {
+        for (index, object) in objects.enumerated() {
             try budget.check()
             guard object.count == 1, let (kind, value) = object.first,
                 let fields = value as? [String: Any]
@@ -263,6 +310,13 @@ public enum MacroArchive {
             }
             let action: MacroAction
             switch kind {
+            case "completion":
+                guard Set(fields.keys) == ["_0"], let command = fields["_0"] as? [String: Any],
+                    Set(command.keys) == ["prefix", "replacement"], let literal = literals[index].completion
+                else {
+                    throw MacroArchiveError.unsupportedFormat
+                }
+                action = .completion(literal._0)
             case "pairInput":
                 guard Set(fields.keys) == ["_0"], let command = fields["_0"] as? [String: Any],
                     Set(command.keys) == ["pair", "input", "skipExisting"],
@@ -293,7 +347,8 @@ public enum MacroArchive {
                 guard Set(fields.keys) == ["_0"] else {
                     throw MacroArchiveError.unsupportedFormat
                 }
-                guard let text = fields["_0"] as? String else {
+                guard let text = (kind == "input" ? literals[index].input : literals[index].command)?._0
+                else {
                     throw NateError.message("宏文字字段不是完整字符串。")
                 }
                 action = kind == "input" ? .input(text) : .command(text)
@@ -305,7 +360,7 @@ public enum MacroArchive {
                 let bytes = try JSONSerialization.data(withJSONObject: options)
                 action = .lineSort(try JSONDecoder().decode(LineSortOptions.self, from: bytes))
             case "editor":
-                guard Set(fields.keys) == ["_0"], let name = fields["_0"] as? String,
+                guard Set(fields.keys) == ["_0"], let name = literals[index].editor?._0,
                     let command = EditorCommand(rawValue: name)
                 else {
                     throw MacroArchiveError.unsupportedFormat

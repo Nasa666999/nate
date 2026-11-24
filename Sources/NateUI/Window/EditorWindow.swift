@@ -20,6 +20,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onEdit: (() -> Void)?
     public var onTextInput: ((String) -> Void)?
     public var onPairInput: ((PairInputCommand) -> Void)?
+    public var onCompletionInput: ((CompletionInputCommand) -> Void)?
     public var onEditorCommand: ((EditorCommand) -> Void)?
     public var onClipboardCapture: ((ClipboardPayload) -> Void)?
     public var onClipboardPaste: ((ClipboardPayload, Bool) -> Void)?
@@ -257,6 +258,9 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         }
         editor.onPairInput = {
             [weak self] in self?.onPairInput?($0)
+        }
+        editor.onCompletionInput = {
+            [weak self] in self?.onCompletionInput?($0)
         }
         editor.onEditorCommand = {
             [weak self] in self?.onEditorCommand?($0)

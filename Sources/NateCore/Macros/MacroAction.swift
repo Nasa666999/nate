@@ -9,6 +9,7 @@ public enum MacroAction: Codable, Sendable {
     case search(MacroSearchAction)
     case clipboardCopy(cutting: Bool, copyLineWithoutSelection: Bool)
     case pairInput(PairInputCommand)
+    case completion(CompletionInputCommand)
 
     /// 业务作用：临时录制和命名宏统一估计原文及片段索引占用，空片段也必须计入保留容量。
     /// 参数说明: 无。
@@ -16,6 +17,7 @@ public enum MacroAction: Codable, Sendable {
     public func retainedByteEstimate() -> Int {
         var bytes = MemoryLayout<MacroAction>.stride
         switch self {
+        case .completion(let command): bytes += command.prefix.utf8.count + command.replacement.utf8.count
         case .pairInput(let command):
             bytes +=
                 command.pair.opening.utf8.count + command.pair.closing.utf8.count + command.input.utf8.count
@@ -62,7 +64,7 @@ public enum MacroAction: Codable, Sendable {
             else {
                 throw NateError.message("宏排序的语言地区标识为空、包含 NUL 或超过 256 字节。")
             }
-        case .clipboard, .editor, .clipboardCopy, .pairInput:
+        case .clipboard, .editor, .clipboardCopy, .pairInput, .completion:
             break
         }
     }
