@@ -78,16 +78,16 @@ extension ApplicationController {
                     guard !typed.utf8.contains(0) else {
                         throw NateError.message("路径前缀含有 NUL，无法解析本地目录。")
                     }
-                    let parentText =
-                        typed.hasSuffix("/") ? typed : ((typed as NSString).deletingLastPathComponent)
-                    let namePrefix = typed.hasSuffix("/") ? "" : (typed as NSString).lastPathComponent
-                    let expanded = (parentText as NSString).expandingTildeInPath
+                    let bytes = typed.utf8
+                    let separator = bytes.lastIndex(of: 47).map { bytes.index(after: $0) } ?? bytes.startIndex
+                    // 展开及规范化仅用于访问目录，确认候选仍采用用户正文中的父路径原字节。
+                    let writtenParent = String(decoding: bytes[..<separator], as: UTF8.self)
+                    let namePrefix = String(decoding: bytes[separator...], as: UTF8.self)
+                    let expanded = (writtenParent as NSString).expandingTildeInPath
                     let directory =
                         expanded.hasPrefix("/")
                         ? URL(fileURLWithPath: expanded, isDirectory: true)
                         : base.appendingPathComponent(expanded, isDirectory: true)
-                    let writtenParent =
-                        parentText.isEmpty || parentText.hasSuffix("/") ? parentText : parentText + "/"
                     let result = try PathCompletionDirectory.read(
                         directory: directory,
                         namePrefix: namePrefix,
