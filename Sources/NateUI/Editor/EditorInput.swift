@@ -185,7 +185,17 @@ extension EditorView {
                         throw NateError.message(reason)
                     }
                     let p = layout.caret(at: units - layout.originUTF16)
-                    head = bytePosition(at: NSPoint(x: gutterWidth + p.minX, y: projection.y(of: target) + 9))
+                    if let reason = layout.unavailableReason {
+                        throw NateError.message(reason)
+                    }
+                    guard
+                        let next = laidOutBytePosition(
+                            at: NSPoint(x: gutterWidth + p.minX, y: projection.y(of: target) + 9)
+                        )
+                    else {
+                        throw NateError.message(layoutLine(target).unavailableReason ?? "目标行缺少真实光标位置。")
+                    }
+                    head = next
                 }
                 return TextSelection(anchor: extend ? selection.anchor : head, head: head)
             }

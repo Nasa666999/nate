@@ -8,11 +8,6 @@ final class LongLineWindow {
         let width: Int
     }
 
-    private struct Han {
-        let line: PlainHanLine
-        let metrics: NativeHanLineFont
-    }
-
     let snapshot: DocumentSnapshot
     let range: ByteRange
     let advance: CGFloat
@@ -23,7 +18,8 @@ final class LongLineWindow {
     let fontZoomAdjustment: CGFloat
     let characterCount: Int
     private let tabs: ASCIITabColumns?
-    private let han: Han?
+    private let han: NativeHanProjection?
+    private(set) var unavailableReason: String?
     private(set) var renderedRange: ByteRange
     private var renderedCharacters: Range<Int>
     private var offsetX: CGFloat = 0
@@ -45,7 +41,7 @@ final class LongLineWindow {
         native.height
     }
     var width: CGFloat {
-        distance(through: characterCount)
+        han?.width ?? distance(through: characterCount)
     }
 
     /// 业务作用：完整原文字符集与各自实际原生步距均得到证明时，才用有界原生段落替代整条长行。
@@ -57,8 +53,10 @@ final class LongLineWindow {
     /// - theme: 来源视图固定主题。
     /// - language: 当前来源语言身份。
     /// - fontZoomAdjustment: 原字体的实际缩放差值，主题字号只叠加一次。
+    /// - tabWidth: 当前来源视图的实际 Tab 停靠宽度。
     /// - tabs: 本行原文已经准备好的真实 Tab 列索引；纯可打印 ASCII 可省略。
     /// - hanLine: 完整原文为基本汉字与可打印 ASCII 时使用的不可变行索引。
+    /// - hanTabLine: 含真实 Tab 且已绑定原文、字体及制表网格的证据。
     /// 返回：符合安全条件时保留有界原生窗口，否则不授予安全坐标资格。
     init?(
         snapshot: DocumentSnapshot,
@@ -68,8 +66,10 @@ final class LongLineWindow {
         theme: EditorThemeDefinition? = nil,
         language: String? = nil,
         fontZoomAdjustment: CGFloat = 0,
+        tabWidth: Int = 4,
         tabs: ASCIITabColumns? = nil,
-        hanLine: PlainHanLine? = nil
+        hanLine: PlainHanLine? = nil,
+        hanTabLine: HanTabColumns? = nil
     ) {
         let actualFont = EditorThemePresentation.baseFont(
             font,
@@ -81,10 +81,13 @@ final class LongLineWindow {
         guard range.lower >= 0, range.upper >= range.lower, range.upper <= snapshot.text.byteCount,
             range.count >= EditorNativeLayoutPolicy.asciiMinimumBytes,
             range.count <= EditorNativeLayoutPolicy.maximumDocumentBytes,
-            tabs == nil || tabs?.range == range,
+            tabs == nil || (tabs?.range == range && tabs?.tabWidth == tabWidth),
             hanLine == nil
                 || (tabs == nil && hanLine?.range == range && hanLine?.matches(snapshot.text) == true),
-            tabs != nil || hanLine != nil || snapshot.text.isPrintableASCII(in: range),
+            hanTabLine == nil
+                || (tabs == nil && hanLine == nil && hanTabLine?.range == range
+                    && hanTabLine?.matches(snapshot.text, tabWidth: tabWidth) == true),
+            tabs != nil || hanLine != nil || hanTabLine != nil || snapshot.text.isPrintableASCII(in: range),
             let advance = Self.uniformAdvance(actualFont, appearance: appearance)
         else {
             return nil
@@ -95,12 +98,19 @@ final class LongLineWindow {
         {
             return nil
         }
-        let han: Han?
-        if let hanLine {
-            guard let metrics = NativeHanLineFont.resolve(from: actualFont) else {
+        let han: NativeHanProjection?
+        if hanLine != nil || hanTabLine != nil {
+            guard
+                let measured = NativeHanProjection(
+                    plain: hanLine,
+                    tabbed: hanTabLine,
+                    base: actualFont,
+                    ascii: advance
+                )
+            else {
                 return nil
             }
-            han = Han(line: hanLine, metrics: metrics)
+            han = measured
         }
         else {
             han = nil
@@ -115,19 +125,18 @@ final class LongLineWindow {
         self.advance = advance
         self.tabs = tabs
         self.han = han
-        let count = hanLine?.characterCount ?? range.count
+        let count = han?.characterCount ?? range.count
         characterCount = count
         let upper = min(count, 8192)
         let initialByte: Int
         let initialWidth: CGFloat
         if let han {
-            guard let byte = han.line.byte(at: upper),
-                let width = han.line.distance(through: upper, ascii: advance, han: han.metrics.advance)
+            guard let byte = han.byte(at: upper), let point = han.geometry(at: upper)
             else {
                 return nil
             }
             initialByte = byte
-            initialWidth = width
+            initialWidth = point.distance
         }
         else {
             initialByte = range.lower + upper
@@ -144,8 +153,8 @@ final class LongLineWindow {
             theme: theme,
             language: language,
             fontZoomAdjustment: fontZoomAdjustment,
-            tabWidth: tabs?.tabWidth ?? 4,
-            hanFont: han?.metrics
+            tabWidth: tabs?.tabWidth ?? han?.tabWidth ?? 4,
+            hanFont: han?.font
         )
         // 只有真实原生段落与已确认字体度量一致，才允许沿正文前缀平移后续窗口。
         if han != nil {
@@ -172,6 +181,7 @@ final class LongLineWindow {
         if first >= renderedCharacters.lowerBound,
             last <= renderedCharacters.upperBound
         {
+            unavailableReason = nil
             return
         }
         project(around: first, visibleColumns: max(1, last - first))
@@ -187,7 +197,9 @@ final class LongLineWindow {
         if han != nil {
             return nearestHanInsertion(to: x, around: approximate)
         }
-        ensureColumn(approximate)
+        guard ensureColumn(approximate) else {
+            return 0
+        }
         let index = native.character(
             at: NSPoint(
                 x: x - offsetX,
@@ -203,8 +215,9 @@ final class LongLineWindow {
     /// - approximate: 由已验证前缀步距定位的相邻字符。
     /// 返回：最接近位置的原生插入点；等距时选前一个真实端点。
     private func nearestHanInsertion(to x: CGFloat, around approximate: Int) -> Int {
-        ensureColumn(approximate)
-        ensureColumn(min(characterCount, approximate + 1))
+        guard ensureColumn(approximate), ensureColumn(min(characterCount, approximate + 1)) else {
+            return 0
+        }
         let first = max(renderedCharacters.lowerBound, approximate - 1)
         let last = min(renderedCharacters.upperBound, approximate + 1)
         let base = renderedCharacters.lowerBound
@@ -227,7 +240,9 @@ final class LongLineWindow {
     /// 返回：同一完整行坐标中的原生光标矩形，不建立前缀字形副本。
     func caret(at local: Int) -> NSRect {
         let column = min(characterCount, max(0, local))
-        ensureColumn(column)
+        guard ensureColumn(column) else {
+            return .zero
+        }
         return native.caret(at: column - renderedCharacters.lowerBound).offsetBy(dx: offsetX, dy: 0)
     }
 
@@ -298,11 +313,15 @@ final class LongLineWindow {
     /// 业务作用：同一视口中的多个光标与背景共用当前段落，不逐项反复排版。
     /// 参数说明:
     /// - column: 已收束到完整行内的真实字符偏移。
-    /// 返回：当前原生段落包含目标端点。
-    private func ensureColumn(_ column: Int) {
-        if column < renderedCharacters.lowerBound || column > renderedCharacters.upperBound {
-            project(around: column, visibleColumns: 1)
+    /// 返回：当前原生段落已经确认包含目标端点时为真。
+    private func ensureColumn(_ column: Int) -> Bool {
+        if column >= renderedCharacters.lowerBound, column <= renderedCharacters.upperBound {
+            unavailableReason = nil
+            return true
         }
+        project(around: column, visibleColumns: 1)
+        return unavailableReason == nil
+            && column >= renderedCharacters.lowerBound && column <= renderedCharacters.upperBound
     }
 
     /// 业务作用：投影只读取有界连续原文，分组保留滚动重用空间与真实 UTF-8 端点。
@@ -330,25 +349,43 @@ final class LongLineWindow {
         }
         let next = ByteRange(begin, end)
         guard next != renderedRange else {
+            unavailableReason = nil
             return
         }
-        let startX = distance(through: lower)
+        let beginning = han?.geometry(at: lower)
+        let startX = beginning?.distance ?? distance(through: lower)
+        let phase = beginning?.phase ?? 0
         let endX = distance(through: upper)
-        renderedRange = next
-        renderedCharacters = lower..<upper
-        offsetX = startX
-        native = Self.project(
+        let windowWidth = endX - startX
+        let candidate = Self.project(
             snapshot: snapshot,
             range: next,
             font: font,
             appearance: appearance,
-            width: endX - startX,
+            width: windowWidth,
             theme: theme,
             language: language,
             fontZoomAdjustment: fontZoomAdjustment,
-            tabWidth: tabs?.tabWidth ?? 4,
-            hanFont: han?.metrics
+            tabWidth: tabs?.tabWidth ?? han?.tabWidth ?? 4,
+            hanFont: han?.font,
+            tabPhase: phase
         )
+        if han?.tabWidth != nil {
+            let start = candidate.caret(at: 0)
+            let end = candidate.caret(at: count)
+            // 每个混合窗口也必须复验真实段落几何，浮点或原生布局失配时立即撤回坐标权限。
+            guard candidate.isSingleVisualLine, abs(start.minX - phase) < 0.02,
+                abs(end.minX - start.minX - windowWidth) < 0.02
+            else {
+                unavailableReason = "超长汉字行的原生 Tab 停靠位置无法确认，已暂停字形呈现。"
+                return
+            }
+        }
+        unavailableReason = nil
+        renderedRange = next
+        renderedCharacters = lower..<upper
+        offsetX = startX - phase
+        native = candidate
     }
 
     /// 业务作用：浮点系统位置先收束到已验证行容量，再转为整数，哨兵和无穷值不得进入正文位置。
@@ -357,11 +394,7 @@ final class LongLineWindow {
     /// 返回：完整行内不越过横坐标的真实 UTF-16 端点。
     private func offset(at x: CGFloat) -> Int {
         if let han {
-            return han.line.character(
-                atOrBefore: min(width, max(0, x)),
-                ascii: advance,
-                han: han.metrics.advance
-            ) ?? 0
+            return han.character(atOrBefore: min(width, max(0, x))) ?? 0
         }
         let count = tabs?.columnCount ?? characterCount
         let column = Int(min(CGFloat(count), max(0, floor(x / advance))))
@@ -382,7 +415,7 @@ final class LongLineWindow {
     /// 返回：原正文绝对字节位置，行外端点为空。
     private func byte(at character: Int) -> Int? {
         if let han {
-            return han.line.byte(at: character)
+            return han.byte(at: character)
         }
         return (0...characterCount).contains(character) ? range.lower + character : nil
     }
@@ -393,7 +426,7 @@ final class LongLineWindow {
     /// 返回：相对逻辑行起点的横坐标。
     private func distance(through character: Int) -> CGFloat {
         if let han {
-            return han.line.distance(through: character, ascii: advance, han: han.metrics.advance) ?? 0
+            return han.geometry(at: character)?.distance ?? 0
         }
         return CGFloat(column(for: character)) * advance
     }
@@ -410,6 +443,7 @@ final class LongLineWindow {
     /// - fontZoomAdjustment: 主题字号的原视图缩放差值。
     /// - tabWidth: 当前语言的实际制表列数。
     /// - hanFont: 已经验证并应用于基本汉字的原生度量。
+    /// - tabPhase: 裁剪后原生第一行相对同一实际制表网格的偏量。
     /// 返回：已完成 TextKit 2 排版的只读片段，不强制排版未请求正文。
     private static func project(
         snapshot: DocumentSnapshot,
@@ -421,7 +455,8 @@ final class LongLineWindow {
         language: String?,
         fontZoomAdjustment: CGFloat,
         tabWidth: Int,
-        hanFont: NativeHanLineFont? = nil
+        hanFont: NativeHanLineFont? = nil,
+        tabPhase: CGFloat = 0
     ) -> LineLayout {
         return LineLayout(
             snapshot: snapshot,
@@ -435,6 +470,7 @@ final class LongLineWindow {
             nativeASCII: true,
             nativeHanFont: hanFont,
             tabWidth: tabWidth,
+            nativeTabPhase: tabPhase,
             theme: theme,
             language: language
         )
@@ -494,7 +530,7 @@ final class LongLineWindow {
     /// - font: 当前真实字体。
     /// - appearance: 当前真实视图外观。
     /// 返回：全部字符位置一致时提供真实步距，否则拒绝；证据缓存各最多三十二项。
-    private static func uniformAdvance(_ font: NSFont, appearance: NSAppearance) -> CGFloat? {
+    static func uniformAdvance(_ font: NSFont, appearance: NSAppearance) -> CGFloat? {
         if let value = advances[font] {
             return value
         }

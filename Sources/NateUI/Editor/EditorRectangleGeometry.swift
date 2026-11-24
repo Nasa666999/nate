@@ -79,18 +79,14 @@ extension EditorView {
             throw NateError.message(reason)
         }
         let hitY = layout.caret(at: 0).midY
-        let raw = min(
-            body.upper,
-            max(
-                body.lower,
-                bytePosition(
-                    at: NSPoint(
-                        x: CGFloat(x) + gutterWidth,
-                        y: projection.y(of: row) + 8 + hitY
-                    )
-                )
+        guard
+            let measured = laidOutBytePosition(
+                at: NSPoint(x: CGFloat(x) + gutterWidth, y: projection.y(of: row) + 8 + hitY)
             )
-        )
+        else {
+            throw NateError.message(layout.unavailableReason ?? "当前行缺少可确认的矩形命中位置。")
+        }
+        let raw = min(body.upper, max(body.lower, measured))
         var navigation = try GraphemeNavigation(text: document.text)
         var candidates = [body.lower, body.upper]
         if try navigation.isBoundary(at: raw) {
@@ -116,6 +112,9 @@ extension EditorView {
                 throw NateError.invalidRange
             }
             let caret = layout.caret(at: units - layout.originUTF16)
+            if let reason = layout.unavailableReason {
+                throw NateError.message(reason)
+            }
             // 一个真实行可能软换行，另一视觉片段的相同横坐标不能把选择跳到段落末尾。
             guard abs(caret.midY - hitY) < max(1, lineHeight / 2) else {
                 continue

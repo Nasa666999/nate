@@ -8,12 +8,24 @@ final class EditorWideTabLayout {
         let revision: UInt64
         let range: ByteRange
         let tabGeneration: UUID
+        let geometryGeneration: UUID
     }
 
     struct Entry: Sendable {
         let columns: ASCIITabColumns?
         let han: PlainHanLine?
+        var hanTabs: HanTabColumns? = nil
         let status: String?
+
+        /// 业务作用：编辑与当前实际显示共用已经确认的长行原始字节证据。
+        /// 参数说明: 无。
+        /// 返回：可安全处理真实 Tab 或独立汉字长行的逻辑列来源。
+        var logicalHan: HanLogicalColumns? {
+            if let hanTabs {
+                return .tabbed(hanTabs)
+            }
+            return han.map(HanLogicalColumns.plain)
+        }
     }
 
     struct Reveal {
@@ -25,6 +37,7 @@ final class EditorWideTabLayout {
 
     static let measuring = "正在测量超长逻辑行的可见范围。"
     var entries: [Key: Entry] = [:]
+    var geometryGeneration = UUID()
     var task: Task<Void, Never>?
     var pendingReveal: Reveal?
 
@@ -32,6 +45,7 @@ final class EditorWideTabLayout {
     /// 参数说明: 无。
     /// 返回：旧缓存及导航意图失效，仍在运行的测量收到取消。
     func reset() {
+        geometryGeneration = UUID()
         pendingReveal = nil
         entries.removeAll()
         task?.cancel()
@@ -74,7 +88,8 @@ extension EditorView {
             documentID: document.id,
             revision: document.revision,
             range: range,
-            tabGeneration: tabSettingsGeneration
+            tabGeneration: tabSettingsGeneration,
+            geometryGeneration: wideTabLayout.geometryGeneration
         )
     }
 
@@ -86,8 +101,8 @@ extension EditorView {
     /// 返回：同一来源内替换暂未排版窗口，迟到、取消或超量时保留原文和选择。
     private func prepareWideLine(snapshot: DocumentSnapshot, key: EditorWideTabLayout.Key, width: Int) {
         wideTabLayout.task = Task { [weak self] in
+            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
             let worker = Task.detached(priority: .userInitiated) {
-                let deadline = ContinuousClock.now.advanced(by: .seconds(5))
                 if let columns = try ASCIITabColumns(
                     text: snapshot.text,
                     range: key.range,
@@ -101,11 +116,30 @@ extension EditorView {
             }
             let entry: EditorWideTabLayout.Entry?
             do {
-                let measured = try await withTaskCancellationHandler(
+                var measured = try await withTaskCancellationHandler(
                     operation: { try await worker.value },
                     onCancel: { worker.cancel() }
                 )
                 try Task.checkCancellation()
+                if measured.columns == nil, measured.han == nil,
+                    let self, self.wideTabKey(key.range) == key,
+                    let grid = self.wideHanTabMetrics(width: width)
+                {
+                    // 字体与语言设置已与测量身份绑定，后台只接收实际距离，视图更改后不会复用旧像素。
+                    let mixed = Task.detached(priority: .userInitiated) {
+                        try HanTabColumns(
+                            text: snapshot.text,
+                            range: key.range,
+                            metrics: grid,
+                            deadline: deadline
+                        )
+                    }
+                    measured.hanTabs = try await withTaskCancellationHandler(
+                        operation: { try await mixed.value },
+                        onCancel: { mixed.cancel() }
+                    )
+                    try Task.checkCancellation()
+                }
                 entry = measured
             }
             catch is CancellationError {
@@ -132,7 +166,7 @@ extension EditorView {
             }
             self.wideTabLayout.pendingReveal = nil
             // 后台完成只恢复原本等待的光标定位，用户后来滚动、换焦或修改选区都优先。
-            if entry.columns != nil || entry.han != nil,
+            if entry.columns != nil || entry.han != nil || entry.hanTabs != nil,
                 self.selectionGeneration == request.selection, self.focusGeneration == request.focus,
                 self.visibleRect.origin == request.viewport,
                 self.layoutLine(snapshot.text.lineNumber(at: key.range.lower)).unavailableReason == nil
@@ -141,4 +175,27 @@ extension EditorView {
             }
         }
     }
+
+    /// 业务作用：长行制表只能沿所属真实视图的主题字体、字号与实际制表规则建立像素证据。
+    /// 参数说明:
+    /// - width: 当前语言已经确认的制表列数。
+    /// 返回：具备实测步距与原生局部段落证明时提供度量，否则原段落保留明确暂停状态。
+    private func wideHanTabMetrics(width: Int) -> HanTabColumns.Metrics? {
+        let actual = EditorThemePresentation.baseFont(
+            font,
+            theme: editorTheme?.definition,
+            language: language?.id,
+            adjustment: fontZoomAdjustment
+        )
+        guard let ascii = LongLineWindow.uniformAdvance(actual, appearance: effectiveAppearance) else {
+            return nil
+        }
+        return NativeHanProjection.tabGrid(
+            base: actual,
+            ascii: ascii,
+            width: width,
+            appearance: effectiveAppearance
+        )
+    }
+
 }

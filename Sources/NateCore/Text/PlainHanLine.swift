@@ -122,6 +122,17 @@ public struct PlainHanLine: Sendable {
         text.byteOffset(utf16: character).map { range.lower + $0 }
     }
 
+    /// 业务作用：普通光标的逻辑列与实际汉字长行共享原字节证据，每个已验证标量都是独立字素。
+    /// 参数说明:
+    /// - offset: 完整正文内的真实原字节端点。
+    /// 返回：相对逻辑行首的字符数；行外或切开标量的偏移为空。
+    public func character(atByte offset: Int) -> Int? {
+        guard (range.lower...range.upper).contains(offset) else {
+            return nil
+        }
+        return text.utf16Offset(byte: offset - range.lower)
+    }
+
     /// 业务作用：原生行宽和窗口偏移使用实际已测字体距离，按原字节数量精确区分 ASCII 与汉字。
     /// 参数说明:
     /// - character: 行首起算的真实 UTF-16 端点。

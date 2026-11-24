@@ -102,6 +102,11 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     let wideTabLayout = EditorWideTabLayout()
     public var language: LanguageDefinition? {
         didSet {
+            if oldValue?.id != language?.id {
+                // 分语言主题可能改变实际基准字体，必须先撤销后台制表网格的原像素资格。
+                wideTabLayout.reset()
+                layouts.removeAll()
+            }
             updateLanguageResource()
         }
     }
@@ -177,6 +182,9 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         didSet {
             if oldValue != font {
                 clipboard.cancel()
+                // 制表网格绑定实际字体和字号，切换后先撤销旧窗口的坐标能力。
+                wideTabLayout.reset()
+                layouts.removeAll()
             }
         }
     }
@@ -449,6 +457,11 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         }
         let units = document.text.utf16Offset(byte: selection.head) ?? layout.originUTF16
         var rect = layout.caret(at: units - layout.originUTF16)
+        if let reason = layout.unavailableReason {
+            // 跳到更远窗口会触发新的原生测量，失败时不能滚到占位坐标。
+            onStatus?(reason)
+            return
+        }
         rect.origin.x += gutterWidth + selectionCaretOffset(for: selection)
         rect.origin.y += projection.y(of: line) + 8
         rect.size.height = lineHeight

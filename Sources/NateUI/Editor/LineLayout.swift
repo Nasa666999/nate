@@ -51,6 +51,7 @@ final class LineLayout {
     /// - nativeASCII: 已证明独立标量的有界内部段落，关闭上下文连字与字距调整。
     /// - nativeHanFont: 仅安全汉字窗口采用的已确认级联字体。
     /// - tabWidth: 当前语言的合法 Tab 停靠间距。
+    /// - nativeTabPhase: 原文片段起点相对最近真实制表位的已验证偏量。
     /// - showSequences: 是否显示 ANSI 控制范围的原始占位与参数文字。
     /// - theme: 当前来源视图的完整固定主题。
     /// - language: 来源语言身份，用于隔离逐语言样式。
@@ -70,6 +71,7 @@ final class LineLayout {
         nativeASCII: Bool = false,
         nativeHanFont: NativeHanLineFont? = nil,
         tabWidth: Int = 4,
+        nativeTabPhase: CGFloat = 0,
         showSequences: Bool = false,
         theme: EditorThemeDefinition? = nil,
         language: String? = nil,
@@ -112,8 +114,10 @@ final class LineLayout {
                 theme: theme,
                 language: language,
                 fontZoomAdjustment: fontZoomAdjustment,
+                tabWidth: tabWidth,
                 tabs: wideTabs?.columns,
-                hanLine: wideTabs?.han
+                hanLine: wideTabs?.han,
+                hanTabLine: wideTabs?.hanTabs
             )
         }
         else {
@@ -125,6 +129,7 @@ final class LineLayout {
             manager = wideLine.manager
             height = wideLine.height
             self.width = wideLine.width
+            unavailableReason = wideLine.unavailableReason
             return
         }
         // 原生引擎会排完整个段落，缺少安全窗口证据时必须在复制原文之前关闭超预算排版。
@@ -147,6 +152,12 @@ final class LineLayout {
             max(1, NSAttributedString(string: " ", attributes: [.font: baseFont]).size().width)
             * CGFloat(tabWidth)
         paragraph.tabStops = []
+        if nativeASCII, nativeTabPhase.isFinite, nativeTabPhase >= 0,
+            nativeTabPhase < paragraph.defaultTabInterval
+        {
+            // 首行缩进只恢复局部的实际制表网格，不向内核正文插入用于对齐的伪字符。
+            paragraph.firstLineHeadIndent = nativeTabPhase
+        }
         var attributes: [NSAttributedString.Key: Any] = [
             .font: baseFont,
             .foregroundColor: EditorThemePresentation.color(
@@ -454,11 +465,14 @@ final class LineLayout {
     /// 参数说明: 无。
     /// 返回：窗口改变时重建只读内容适配，完整正文、行范围和字节位置不变。
     private func synchronizeWideProjection() {
-        guard let wideLine, content.projection != wideLine.renderedRange else {
+        guard let wideLine else {
             return
         }
-        content = wideLine.content
-        manager = wideLine.manager
+        unavailableReason = wideLine.unavailableReason
+        if content.projection != wideLine.renderedRange {
+            content = wideLine.content
+            manager = wideLine.manager
+        }
     }
 
     /// 业务作用：所有字形仍由 TextKit 2 绘制，安全长行只平移当前原生单行片段。

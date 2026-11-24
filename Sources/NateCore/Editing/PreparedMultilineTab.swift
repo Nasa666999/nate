@@ -8,6 +8,7 @@ enum PreparedMultilineTab {
     /// - settings: 当前语言的 Tab 宽度及实际写入方式。
     /// - overwrite: 未被跨行选择涵盖的空光标是否覆盖完整字素。
     /// - preparedColumns: 给独立普通目标复用的同源长行列证据。
+    /// - preparedHan: 视图已确认的独立汉字长行证据，复用实际逻辑列和端点。
     /// - permit: 整批输入继续准备的资格。
     /// 返回：统一的原子事务；范围、容量、控制身份或任何独立目标不合法时不发布部分输入。
     static func transaction(
@@ -16,6 +17,7 @@ enum PreparedMultilineTab {
         settings: TabSettings,
         overwrite: Bool,
         preparedColumns: [ASCIITabColumns],
+        preparedHan: [HanLogicalColumns],
         permit: @escaping @Sendable () -> Bool
     ) throws -> PreparedTransaction {
         let text = snapshot.text
@@ -72,6 +74,7 @@ enum PreparedMultilineTab {
                 settings: settings,
                 overwrite: overwrite,
                 preparedColumns: preparedColumns,
+                preparedHan: preparedHan,
                 permit: allowed
             ).transaction
         }

@@ -279,6 +279,10 @@ extension EditorView {
         }
         let units = tree.utf16Offset(byte: offset) ?? 0
         var rect = layout.caret(at: units - layout.originUTF16)
+        guard layout.unavailableReason == nil else {
+            actualRange?.pointee = NSRange(location: NSNotFound, length: 0)
+            return .zero
+        }
         rect.origin.x += gutterWidth
         if composition == nil, let primarySelection, offset == primarySelection.head {
             rect.origin.x += selectionCaretOffset(for: primarySelection)
@@ -298,9 +302,9 @@ extension EditorView {
         }
         let local = convert(window.convertPoint(fromScreen: point), from: nil)
         // 没有实际字形就没有可信像素命中，文本服务必须收到系统哨兵而非原光标的替代位置。
-        guard layoutLine(projection.line(at: max(0, local.y - 8))).unavailableReason == nil else {
+        guard let byte = laidOutBytePosition(at: local) else {
             return NSNotFound
         }
-        return displayTree.utf16Offset(byte: bytePosition(at: local)) ?? NSNotFound
+        return displayTree.utf16Offset(byte: byte) ?? NSNotFound
     }
 }

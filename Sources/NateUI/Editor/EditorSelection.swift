@@ -31,6 +31,11 @@ extension EditorView {
         let local = layout.character(
             at: NSPoint(x: max(0, point.x - gutterWidth), y: point.y - projection.y(of: line) - 8)
         )
+        if let reason = layout.unavailableReason {
+            // 横向命中可能刚切换到新的原生窗口。新窗口失败时不借旧布局生成点击结果。
+            onStatus?(reason)
+            return nil
+        }
         // 系统哨兵或越界位置必须先收束到本段范围，再叠加正文起点，不能先做可能溢出的算术。
         let origin = min(tree.utf16Count, max(0, layout.originUTF16))
         let bounded = min(tree.utf16Count - origin, max(0, min(layout.characterCount, local)))

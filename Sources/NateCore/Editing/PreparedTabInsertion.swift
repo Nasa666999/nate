@@ -9,6 +9,7 @@ public struct PreparedTabInsertion: Sendable {
     /// - settings: 当前语言的明确 Tab 宽度与输入方式。
     /// - overwrite: 空光标是否覆盖同一行内一个完整字素，行结束符不参与覆盖。
     /// - preparedColumns: 给当前普通目标复用的同源、有界长行制表列证据。
+    /// - preparedHan: 视图已确认的独立汉字长行证据，复用实际逻辑列和端点。
     /// - permit: 目标、列计算和事务构建共享的继续资格。
     /// 返回：保留身份、主项及原撤销来源的完整事务；任一列不合法时不提交部分光标。
     public init(
@@ -16,6 +17,7 @@ public struct PreparedTabInsertion: Sendable {
         settings: TabSettings,
         overwrite: Bool = false,
         preparedColumns: [ASCIITabColumns] = [],
+        preparedHan: [HanLogicalColumns] = [],
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -33,6 +35,7 @@ public struct PreparedTabInsertion: Sendable {
                 settings: settings,
                 overwrite: overwrite,
                 preparedColumns: preparedColumns,
+                preparedHan: preparedHan,
                 permit: permit
             )
             return
@@ -56,6 +59,7 @@ public struct PreparedTabInsertion: Sendable {
             tabWidth: settings.width,
             deadline: .now.advanced(by: .seconds(5)),
             preparedColumns: preparedColumns,
+            preparedHan: preparedHan,
             permit: permit
         )
         var navigation = try GraphemeNavigation(text: snapshot.text)

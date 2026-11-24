@@ -37,7 +37,8 @@ extension EditorView {
                     snapshot: document.snapshot,
                     settings: tabSettings,
                     overwrite: overwrite,
-                    preparedColumns: wideTabLayout.entries.values.compactMap(\.columns)
+                    preparedColumns: wideTabLayout.entries.values.compactMap(\.columns),
+                    preparedHan: wideTabLayout.entries.values.compactMap(\.logicalHan)
                 ).transaction
             }
             try commitPreparedEditorInput(transaction)
@@ -64,7 +65,8 @@ extension EditorView {
             let plan = try PreparedBackTab(
                 snapshot: document.snapshot,
                 settings: tabSettings,
-                preparedColumns: wideTabLayout.entries.values.compactMap(\.columns)
+                preparedColumns: wideTabLayout.entries.values.compactMap(\.columns),
+                preparedHan: wideTabLayout.entries.values.compactMap(\.logicalHan)
             )
             try commitPreparedEditorInput(plan.transaction)
             return true
@@ -90,7 +92,9 @@ extension EditorView {
         var reader = try LogicalColumnReader(
             text: document.text,
             tabWidth: tabSettings.width,
-            deadline: .now.advanced(by: .seconds(2))
+            deadline: .now.advanced(by: .seconds(2)),
+            preparedColumns: wideTabLayout.entries.values.compactMap(\.columns),
+            preparedHan: wideTabLayout.entries.values.compactMap(\.logicalHan)
         )
         let converted = try targets.sorted {
             $0.range.lower < $1.range.lower

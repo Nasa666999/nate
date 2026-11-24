@@ -51,6 +51,9 @@ extension EditorView {
             return missing
         }
         let hit = min(layout.characterCount, max(0, layout.character(at: position)))
+        guard layout.unavailableReason == nil else {
+            return missing
+        }
         // TextKit 可返回字形两侧的插入点；只有当前选区片段覆盖指针才作为真实字符命中。
         let indices = [hit, max(0, hit - 1)]
         for index in indices {
@@ -122,6 +125,9 @@ extension EditorView {
                 )
             {
                 let local = layout.caret(at: units - layout.originUTF16, downstream: true)
+                guard layout.unavailableReason == nil else {
+                    return .zero
+                }
                 let shown = local.offsetBy(dx: gutterWidth, dy: offsetY).intersection(body)
                 if !shown.isEmpty {
                     screenBounds = screenBounds.union(shown)

@@ -217,8 +217,11 @@ extension EditorView {
             throw NateError.message(reason)
         }
         let units = document.text.utf16Offset(byte: offset) ?? layout.originUTF16
-        return Double(layout.caret(at: units - layout.originUTF16).minX)
-            + Double(virtual) * layout.virtualColumnWidth
+        let caret = layout.caret(at: units - layout.originUTF16)
+        if let reason = layout.unavailableReason {
+            throw NateError.message(reason)
+        }
+        return Double(caret.minX) + Double(virtual) * layout.virtualColumnWidth
     }
 
     /// 业务作用：活动行的虚拟列和键盘矩形步长沿实际行末字体，不把主视图基础字号当作全部行的字体。

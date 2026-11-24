@@ -6,6 +6,7 @@ public struct LogicalColumnReader {
     private let deadline: ContinuousClock.Instant
     private let permit: @Sendable () -> Bool
     private let prepared: [ByteRange: ASCIITabColumns]
+    private let preparedHan: [ByteRange: HanLogicalColumns]
     private var navigation: GraphemeNavigation
     private var remaining = 1_000_000
     private var line = -1
@@ -21,6 +22,7 @@ public struct LogicalColumnReader {
     /// - tabWidth: 已确认的 Tab 停靠间距。
     /// - deadline: 所有目标共享的截止，最多五秒。
     /// - preparedColumns: 视图已经确认的最多 1024 个长行列索引，只有同源证明可复用。
+    /// - preparedHan: 同一原文中实际已确认的汉字长行，逻辑列按独立字素计数。
     /// - permit: 当前操作的继续资格，失去资格后整批失败。
     /// 返回：尚未遍历正文的列读取器；非法宽度或字素导航不可用时拒绝建立。
     public init(
@@ -28,6 +30,7 @@ public struct LogicalColumnReader {
         tabWidth: Int,
         deadline: ContinuousClock.Instant,
         preparedColumns: [ASCIITabColumns] = [],
+        preparedHan: [HanLogicalColumns] = [],
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -41,6 +44,11 @@ public struct LogicalColumnReader {
         self.permit = permit
         prepared = Dictionary(
             preparedColumns.prefix(ASCIITabColumns.maximumLineProjections)
+                .filter { $0.matches(text, width: tabWidth) }.map { ($0.range, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        self.preparedHan = Dictionary(
+            preparedHan.prefix(ASCIITabColumns.maximumLineProjections)
                 .filter { $0.matches(text, width: tabWidth) }.map { ($0.range, $0) },
             uniquingKeysWith: { first, _ in first }
         )
@@ -71,6 +79,23 @@ public struct LogicalColumnReader {
                 throw NateError.invalidRange
             }
             // 已验证的整行证明同时确定两处原字节停靠位，长行不会因重新遍历前缀而拒绝普通输入。
+            adopt(
+                row: row,
+                offset: offset,
+                column: column,
+                stop: body.lower + current,
+                previous: body.lower + previous
+            )
+            return column + virtualColumn
+        }
+        if let index = preparedHan[body], let column = index.column(at: prefixLength) {
+            let stop = column / tabWidth * tabWidth
+            guard let current = index.offset(atOrBefore: stop),
+                let previous = index.offset(atOrBefore: max(0, stop - tabWidth))
+            else {
+                throw NateError.invalidRange
+            }
+            // 普通 Tab 采用字素逻辑列。不同原生字形宽度只影响显示，不能把像素或 UTF-8 字节当成缩进列。
             adopt(
                 row: row,
                 offset: offset,

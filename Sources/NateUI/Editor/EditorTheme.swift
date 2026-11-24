@@ -17,6 +17,7 @@ extension EditorView {
         // 旧矩形像素不能沿新字体解释；先撤销旧动作并发布新的稳定样式身份，再建立新布局。
         clipboard.cancel()
         layouts.removeAll()
+        wideTabLayout.reset()
         projection.measured.removeAll()
         updateRectangleStyleIdentity()
         refresh(reveal: false)

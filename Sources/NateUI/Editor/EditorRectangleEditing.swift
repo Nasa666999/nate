@@ -357,13 +357,14 @@ extension EditorView {
             throw NateError.message(reason)
         }
         let y = layout.caret(at: 0).midY
-        let raw = min(
-            body.upper,
-            max(
-                body.lower,
-                bytePosition(at: NSPoint(x: CGFloat(x) + gutterWidth, y: projection.y(of: row) + 8 + y))
+        guard
+            let measured = laidOutBytePosition(
+                at: NSPoint(x: CGFloat(x) + gutterWidth, y: projection.y(of: row) + 8 + y)
             )
-        )
+        else {
+            throw NateError.message(layout.unavailableReason ?? "当前行缺少可确认的矩形写入位置。")
+        }
+        let raw = min(body.upper, max(body.lower, measured))
         let snapped = try rectangleHit(row: row, x: x)
         var candidates = [raw, snapped]
         for point in [raw, snapped] where point > body.lower && document.text.byte(at: point - 1) == 9 {
@@ -374,7 +375,13 @@ extension EditorView {
                 throw NateError.invalidRange
             }
             let first = layout.caret(at: units - layout.originUTF16)
+            if let reason = layout.unavailableReason {
+                throw NateError.message(reason)
+            }
             let last = layout.caret(at: units - layout.originUTF16 + 1)
+            if let reason = layout.unavailableReason {
+                throw NateError.message(reason)
+            }
             guard abs(first.midY - y) < max(1, lineHeight / 2), abs(last.midY - y) < max(1, lineHeight / 2),
                 x > Double(min(first.minX, last.minX)) + 0.01,
                 x < Double(max(first.minX, last.minX)) - 0.01
