@@ -15,8 +15,7 @@ enum ResourceXML {
     /// 返回：通过深度、节点及字段限额检查的树；失败不发布部分规则。
     static func parse(_ data: Data) throws -> ResourceXMLNode {
         guard data.count <= 8_388_608, let source = String(data: data, encoding: .utf8),
-            !source.localizedCaseInsensitiveContains("<!DOCTYPE"),
-            !source.localizedCaseInsensitiveContains("<!ENTITY")
+            !source.utf8.contains(0)
         else {
             throw NateError.message("语言辅助资源必须是无 DTD 和实体声明、不超过 8 MB 的 UTF-8 XML。")
         }
@@ -41,26 +40,50 @@ enum ResourceXML {
     /// 返回：仅将属性中的换行和 Tab 改写为等价字符引用，普通文本与 CDATA 保持原值。
     static func preservingAttributeNewlines(_ source: String) throws -> Data {
         let bytes = Array(source.utf8)
+        let comment = Array("<!--".utf8)
+        let endComment = Array("-->".utf8)
+        let cdata = Array("<![CDATA[".utf8)
+        let endCDATA = Array("]]>".utf8)
+        let instruction = Array("<?".utf8)
+        let endInstruction = Array("?>".utf8)
+        let doctype = Array("<!DOCTYPE".utf8)
+        let entity = Array("<!ENTITY".utf8)
         var output: [UInt8] = []
         output.reserveCapacity(bytes.count)
         var index = 0
         var tag = false
         var quote: UInt8?
         while index < bytes.count {
+            if index & 4095 == 0 {
+                try Task.checkCancellation()
+            }
             guard output.count <= 16_777_216 else {
                 throw NateError.message("语言辅助资源的属性展开超过 16 MB。")
             }
             if !tag && bytes[index] == 60 {
                 let suffix = bytes[index...]
+                // 只有真正的 XML 声明能建立实体。注释、CDATA 和处理指令中的相同字节是字面内容。
+                guard !suffix.starts(with: doctype), !suffix.starts(with: entity) else {
+                    throw NateError.message("语言辅助 XML 禁止 DTD 和实体声明。")
+                }
                 let end: [UInt8]? =
-                    suffix.starts(with: Array("<!--".utf8))
-                    ? Array("-->".utf8)
-                    : suffix.starts(with: Array("<![CDATA[".utf8)) ? Array("]]>".utf8) : nil
+                    suffix.starts(with: comment)
+                    ? endComment
+                    : suffix.starts(with: cdata)
+                        ? endCDATA
+                        : suffix.starts(with: instruction) ? endInstruction : nil
                 if let end {
+                    let start = index
                     repeat {
+                        if index & 4095 == 0 {
+                            try Task.checkCancellation()
+                        }
                         output.append(bytes[index])
                         index += 1
                     } while index < bytes.count && !bytes[index...].starts(with: end)
+                    if end == endInstruction {
+                        try requireUTF8Declaration(bytes[start..<index])
+                    }
                     let count = min(end.count, bytes.count - index)
                     output.append(contentsOf: bytes[index..<(index + count)])
                     index += count
@@ -95,6 +118,33 @@ enum ResourceXML {
             throw NateError.message("语言辅助资源的属性展开超过 16 MB。")
         }
         return Data(output)
+    }
+
+    /// 业务作用：资源在进入 XMLParser 前必须固定为 UTF-8，声明不能将已确认的原字节重新解释为其它字符集。
+    /// 参数说明:
+    /// - instruction: 已定位的完整处理指令内容，不含实际结束分隔符。
+    /// 返回：普通指令或 UTF-8 声明通过；显式其它编码拒绝。
+    private static func requireUTF8Declaration(_ instruction: ArraySlice<UInt8>) throws {
+        let signature = Array("<?xml".utf8)
+        guard instruction.starts(with: signature),
+            let next = instruction.dropFirst(signature.count).first,
+            [9, 10, 13, 32].contains(next)
+        else {
+            return
+        }
+        let value = String(decoding: instruction, as: UTF8.self)
+        guard let key = value.range(of: #"\bencoding[ \t\r\n]*="#, options: .regularExpression) else {
+            return
+        }
+        let remainder = value[key.upperBound...].drop(while: { [" ", "\t", "\r", "\n"].contains($0) })
+        guard let quote = remainder.first, quote == "\"" || quote == "'",
+            let end = remainder.dropFirst().firstIndex(of: quote),
+            ["utf-8", "utf8"].contains(
+                remainder[remainder.index(after: remainder.startIndex)..<end].lowercased()
+            )
+        else {
+            throw NateError.message("语言辅助 XML 的编码声明必须为 UTF-8。")
+        }
     }
 }
 
@@ -143,6 +193,19 @@ private final class ResourceXMLReader: NSObject, XMLParserDelegate {
             return
         }
         stack[stack.count - 1].text += string
+    }
+
+    /// 业务作用：CDATA 的字面内容与普通文本保存在其所属节点，校验器可以识别原本不允许出现的文本。
+    /// 参数说明:
+    /// - parser: 当前受限 XML 解析器。
+    /// - CDATABlock: XMLParser 提供的当前完整字面片段。
+    /// 返回：UTF-8 字面内容只在所属节点原样追加，非法片段会终止当前资源。
+    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
+        guard String(data: CDATABlock, encoding: .utf8) != nil else {
+            parser.abortParsing()
+            return
+        }
+        self.parser(parser, foundCharacters: String(decoding: CDATABlock, as: UTF8.self))
     }
 
     /// 业务作用：闭合节点后才发布到父节点，根节点完整闭合后可供规则校验。
