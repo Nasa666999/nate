@@ -41,7 +41,7 @@ extension EditorView {
 
     /// 业务作用：自动配对关闭时仍允许结构对齐，实际字符与前导空白作为一个语义输入提交。
     /// 参数说明:
-    /// - command: 明确保存一个花括号或方括号的输入动作。
+    /// - command: 明确保存受支持界定符的输入动作。
     /// 返回：全部目标一次成功提交时为真；候选、权限或准备失败保留原状态且不记录输入。
     func insertStructuralCharacter(_ command: EditorCommand) -> Bool {
         guard let value = command.structuralCharacter, composition == nil,
@@ -51,11 +51,13 @@ extension EditorView {
             return false
         }
         do {
-            let brace = value == "{" || value == "}"
-            let pair = try AutomaticPair(
-                opening: brace ? "{" : "[",
-                closing: brace ? "}" : "]"
-            )
+            let pair: AutomaticPair
+            switch value {
+            case "{", "}": pair = try AutomaticPair(opening: "{", closing: "}")
+            case "[", "]": pair = try AutomaticPair(opening: "[", closing: "]")
+            case ")": pair = try AutomaticPair(opening: "(", closing: ")")
+            default: throw NateError.invalidRange
+            }
             let input = try PairInputCommand(
                 pair: pair,
                 input: value,
@@ -86,7 +88,7 @@ extension EditorView {
         }
         let structure: StructuralCharacterIndentationPlan?
         if indentationSettings.automatic == .language,
-            ["{", "}", "[", "]"].contains(command.input)
+            ["{", "}", "[", "]"].contains(command.input) || command.input == ")" && language?.id == "rust"
         {
             structure = try StructuralCharacterIndentationPlan(
                 snapshot: snapshot,

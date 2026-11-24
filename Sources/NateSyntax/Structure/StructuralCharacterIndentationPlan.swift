@@ -11,7 +11,7 @@ public struct StructuralCharacterIndentationPlan: Sendable {
     /// 业务作用：独立结构字符沿同一词法传播确认前导空白，闭合符只对齐真实代码中的同类开端。
     /// 参数说明:
     /// - snapshot: 带完整普通选择及控制代次的固定正文。
-    /// - input: 本次实际输入的单个花括号或 JSON 方括号。
+    /// - input: 本次实际输入的单个花括号、方括号或 Rust 右圆括号。
     /// - language: 当前内置语言，没有适用规则时保留原前缀。
     /// - udl: 当前用户语言，尚无规则时保留原前缀。
     /// - settings: 当前语言的 Tab 宽度及新增空白方式。
@@ -54,13 +54,22 @@ public struct StructuralCharacterIndentationPlan: Sendable {
             "c", "cpp", "java", "cs", "objc", "php", "javascript", "javascript.js", "jsp", "css",
             "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r", "lua",
         ]
-        let array = identifier == "json" || identifier == "json5"
+        let round = identifier == "rust"
+        let json = identifier == "json" || identifier == "json5"
+        let square = json || round
         guard udl == nil, let language, curly.contains(identifier),
-            input == "{" || input == "}" || array && (input == "[" || input == "]")
+            input == "{" || input == "}" || json && input == "[" || square && input == "]"
+                || round && input == ")"
         else {
             prefixes = [:]
             return
         }
+        let requiredOpening: UInt8 =
+            switch input {
+            case ")": 40
+            case "]": 91
+            default: 123
+            }
         var byLine: [Int: [SelectionEntry]] = [:]
         for entry in normalized.entries {
             byLine[snapshot.text.lineNumber(at: entry.selection.range.lower), default: []].append(entry)
@@ -128,7 +137,8 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                     until: offset,
                     cursor: &cursor,
                     line: line,
-                    array: array,
+                    square: square,
+                    round: round,
                     stack: &stack,
                     deadline: deadline,
                     permit: permit
@@ -155,8 +165,12 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                     origin = previous
                 }
                 else if let opening = stack.last,
-                    opening.byte == (input == "}" ? 123 : 91), opening.line < line
+                    opening.byte == requiredOpening, opening.line < line
                 {
+                    // Rust 参数或数组最后一项可与闭合同处一行；此时该行仍采用正文的缩进。
+                    if round, input != "}", source[..<offset].contains(where: { $0 != 9 && $0 != 32 }) {
+                        continue
+                    }
                     // 只在插入点真正回到代码区后才调整行首，完整行的末状态不能替代光标处的状态。
                     guard
                         try StructuralInsertionContext.isCode(
@@ -193,7 +207,8 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                 until: code.count,
                 cursor: &cursor,
                 line: line,
-                array: array,
+                square: square,
+                round: round,
                 stack: &stack,
                 deadline: deadline,
                 permit: permit
@@ -236,7 +251,8 @@ public struct StructuralCharacterIndentationPlan: Sendable {
     /// - until: 当前目标或整行结束边界。
     /// - cursor: 本行已经消费的位置。
     /// - line: 当前原文物理行。
-    /// - array: 是否启用 JSON 方括号。
+    /// - square: 是否采用当前语言的方括号证据。
+    /// - round: 是否采用 Rust 圆括号证据。
     /// - stack: 所有前置行共同持有的未闭合代码开端。
     /// - deadline: 整批输入的共同截止。
     /// - permit: 当前仍有准备资格。
@@ -246,7 +262,8 @@ public struct StructuralCharacterIndentationPlan: Sendable {
         until: Int,
         cursor: inout Int,
         line: Int,
-        array: Bool,
+        square: Bool,
+        round: Bool,
         stack: inout [(byte: UInt8, line: Int)],
         deadline: ContinuousClock.Instant,
         permit: @Sendable () -> Bool
@@ -256,14 +273,20 @@ public struct StructuralCharacterIndentationPlan: Sendable {
                 try check(deadline: deadline, permit: permit)
             }
             let byte = code[cursor]
-            if byte == 123 || array && byte == 91 {
+            if byte == 123 || square && byte == 91 || round && byte == 40 {
                 guard stack.count < 65_536 else {
                     throw NateError.message("结构字符的代码嵌套超过 65536 层。")
                 }
                 stack.append((byte, line))
             }
-            else if byte == 125 || array && byte == 93 {
-                if stack.last?.byte == (byte == 125 ? 123 : 91) {
+            else if byte == 125 || square && byte == 93 || round && byte == 41 {
+                let opener: UInt8 =
+                    switch byte {
+                    case 41: 40
+                    case 93: 91
+                    default: 123
+                    }
+                if stack.last?.byte == opener {
                     stack.removeLast()
                 }
                 else {

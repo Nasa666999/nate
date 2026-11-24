@@ -145,6 +145,7 @@ extension EditorView {
                     return
                 }
                 if indentationSettings.automatic == .language,
+                    value != ")" || language?.id == "rust" && userLanguage == nil,
                     let command = EditorCommand.allCases.first(where: { $0.structuralCharacter == value })
                 {
                     _ = performEditorCommand(command)

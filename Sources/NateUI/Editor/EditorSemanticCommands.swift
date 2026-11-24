@@ -23,7 +23,8 @@ extension EditorView {
         case .insertTab: succeeded = insertConfiguredTab()
         case .insertNewline: succeeded = insertConfiguredNewline()
         case .insertMarkupTagEnd: succeeded = insertMarkupTagEnd()
-        case .insertOpeningBrace, .insertClosingBrace, .insertOpeningBracket, .insertClosingBracket:
+        case .insertOpeningBrace, .insertClosingBrace, .insertOpeningBracket, .insertClosingBracket,
+            .insertClosingParenthesis:
             succeeded = insertStructuralCharacter(command)
         case .moveLeft: succeeded = move(horizontal: -1)
         case .moveRight: succeeded = move(horizontal: 1)
