@@ -147,5 +147,20 @@
       "Copyright 2013 by Neil Hodgson <neilh@scintilla.org>"
     ],
     "implementation": "Python 词法样式的 Swift 适配及固定 Unicode 标识符范围"
+  },
+  "regexCharacterUnits": {
+    "project": "Boost.Regex",
+    "sources": [
+      "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/boostregex/boost/regex/v5/regex_traits_defaults.hpp",
+      "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/boostregex/boost/regex/v5/perl_matcher_common.hpp",
+      "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/boostregex/boost/regex/v5/basic_regex_creator.hpp"
+    ],
+    "license": "Boost Software License 1.0",
+    "licenseFile": "Boost-LICENSE.txt",
+    "copyright": [
+      "Copyright (c) 2002 John Maddock",
+      "Copyright (c) 2004 John Maddock"
+    ],
+    "implementation": "UTF-16 字符单位、固定组合范围和组合表达式起点筛选的 Swift 适配"
   }
 }

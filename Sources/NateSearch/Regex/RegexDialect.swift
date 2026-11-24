@@ -6,7 +6,7 @@ indirect enum RegexNode: Sendable {
     case quoted([UInt16])
     case empty
     case literal(UInt16)
-    case any, linebreak
+    case any, linebreak, combining
     case anchor(String)
     case characterClass(String, Bool, [ClosedRange<UInt16>])
     case sequence([RegexNode])
@@ -37,6 +37,7 @@ struct CompiledRegex: Sendable {
     var root: RegexNode
     var names: [String: [Int]]
     var groups: [Int: RegexNode]
+    var usesCombining = false
 }
 
 struct RegexParser {
@@ -53,6 +54,7 @@ struct RegexParser {
     }
     var compileDeadline = ContinuousClock.now.advanced(by: .seconds(2))
     var compileSteps = 0
+    var usesCombining = false
 
     /// 业务作用：编译 Boost 风格表达式，非法语法在任何修改前失败。
     /// 参数说明:
@@ -104,7 +106,8 @@ struct RegexParser {
         return CompiledRegex(
             root: root,
             names: parser.names,
-            groups: parser.groups
+            groups: parser.groups,
+            usesCombining: parser.usesCombining
         )
     }
 

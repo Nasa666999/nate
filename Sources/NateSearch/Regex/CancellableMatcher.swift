@@ -55,9 +55,9 @@ struct CancellableMatcher {
         }
     }
 
-    /// 业务作用：执行单个确定性字符或边界条件，分支和回退由有界执行栈统一调度。
+    /// 业务作用：执行确定性字符、组合序列或边界条件，分支和回退由有界执行栈统一调度。
     /// 参数说明:
-    /// - node: 字面、字符类、换行、锚点或已解析的捕获引用。
+    /// - node: 字面、字符类、换行、组合序列、锚点或已解析的捕获引用。
     /// - state: 当前输入位置、捕获与局部模式。
     /// 返回：条件满足时提供唯一后继；不满足时不消费正文，非法内部节点明确失败。
     mutating func consume(_ node: RegexNode, _ state: MatchState) throws -> MatchState? {
@@ -88,6 +88,22 @@ struct CancellableMatcher {
             next.position +=
                 input[state.position] == 13 && state.position + 1 < inputEnd
                     && input[state.position + 1] == 10 ? 2 : 1
+            return next
+        case .combining:
+            guard state.position < inputEnd,
+                !RegexCombiningRules.contains(input[state.position])
+            else {
+                return nil
+            }
+            next.position += 1
+            while next.position < inputEnd {
+                // 每个组合单元共用本次匹配的执行额度，长组合序列不能绕过取消或截止，也不回退其中的后缀。
+                try checkpoint()
+                if !RegexCombiningRules.contains(input[next.position]) {
+                    break
+                }
+                next.position += 1
+            }
             return next
         case .characterClass(let kinds, let inverted, let ranges):
             guard state.position < inputEnd else {

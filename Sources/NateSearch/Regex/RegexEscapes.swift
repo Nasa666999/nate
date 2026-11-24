@@ -44,6 +44,10 @@ extension RegexParser {
         case 66, 65, 90, 122, 71, 60, 62:
             return inClass ? .literal(c) : .anchor(String(decoding: [c], as: UTF16.self))
         case 82: return inClass ? .literal(c) : .linebreak
+        case 67 where !inClass: return .any
+        case 88 where !inClass:
+            usesCombining = true
+            return .combining
         case 75: return inClass ? .literal(c) : .resetStart
         case 99:
             guard index < units.count else {

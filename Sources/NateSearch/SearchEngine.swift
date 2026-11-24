@@ -129,7 +129,9 @@ public enum SearchEngine {
                 sensitive: options.caseSensitive,
                 dot: options.dotMatchesNewline
             )
-            if let state = try matcher.firstMatch(compiled.root, initial, end: end) {
+            if try matcher.canStart(compiled.root, state: initial),
+                let state = try matcher.firstMatch(compiled.root, initial, end: end)
+            {
                 let empty = state.start == state.position
                 let allowedEmpty =
                     policy != .nonEmpty

@@ -96,11 +96,17 @@ extension CancellableMatcher {
                     if index + 1 < nodes.count {
                         try fork([.alternative(nodes, index + 1, depth)], from: path, into: &choices)
                     }
+                    guard try canStart(nodes[index], state: path.state, following: path.pending) else {
+                        continue backtrack
+                    }
                     try push(.node(nodes[index], depth), onto: &path)
                 case .resetAlternative(let nodes, let index, let depth):
                     if index + 1 < nodes.count {
                         try fork([.resetAlternative(nodes, index + 1, depth)], from: path, into: &choices)
                         try push(.acceptedBranches(nodes, index + 1), onto: &path)
+                    }
+                    guard try canStart(nodes[index], state: path.state, following: path.pending) else {
+                        continue backtrack
                     }
                     try push(.node(nodes[index], depth), onto: &path)
                 case .acceptedBranches(let nodes, let index):
@@ -116,7 +122,7 @@ extension CancellableMatcher {
                     switch node {
                     case .directive, .empty:
                         break
-                    case .literal, .any, .linebreak, .characterClass, .anchor, .reference:
+                    case .literal, .any, .linebreak, .combining, .characterClass, .anchor, .reference:
                         guard let next = try consume(node, path.state) else {
                             continue backtrack
                         }
@@ -136,6 +142,9 @@ extension CancellableMatcher {
                         if nodes.count > 1 {
                             try fork([.alternative(nodes, 1, depth + 1)], from: path, into: &choices)
                         }
+                        guard try canStart(first, state: path.state, following: path.pending) else {
+                            continue backtrack
+                        }
                         try push(.node(first, depth + 1), onto: &path)
                     case .resetAlternate(let nodes):
                         guard let first = nodes.first else {
@@ -144,6 +153,9 @@ extension CancellableMatcher {
                         if nodes.count > 1 {
                             try fork([.resetAlternative(nodes, 1, depth + 1)], from: path, into: &choices)
                             try push(.acceptedBranches(nodes, 1), onto: &path)
+                        }
+                        guard try canStart(first, state: path.state, following: path.pending) else {
+                            continue backtrack
                         }
                         try push(.node(first, depth + 1), onto: &path)
                     case .capture(let id, let child):
