@@ -51,6 +51,7 @@ extension SelectionState {
         else {
             projections = [:]
         }
+        let entirelyASCII = text.byteCount == text.utf16Count
         for (index, entry) in entries.enumerated() {
             if index & 255 == 0 {
                 if checkingCancellation {
@@ -64,13 +65,18 @@ extension SelectionState {
                 }
             }
             let value = entry.selection
-            guard text.isBoundary(value.anchor), text.isBoundary(value.head) else {
+            let range = value.range
+            guard range.lower >= 0, range.upper <= text.byteCount,
+                entirelyASCII || text.isBoundary(value.anchor) && text.isBoundary(value.head)
+            else {
                 throw NateError.invalidRange
             }
-            let row = text.lineNumber(at: value.range.lower)
-            let body = text.lineRange(row, includeEnding: false)
+            guard rectangular || value.virtualColumn != 0 else {
+                continue
+            }
+            let body = text.physicalLineBody(containing: range.lower)
             // 虚拟空白只能定位真实行尾之外，不能与已有行内正文重叠后再次补空格。
-            guard value.virtualColumn == 0 || value.range.isEmpty && value.head == body.upper else {
+            guard value.virtualColumn == 0 || range.isEmpty && value.head == body.upper else {
                 throw NateError.message("虚拟光标必须位于真实行尾。")
             }
             if rectangular {
@@ -78,20 +84,29 @@ extension SelectionState {
                     _ = try projection.validated(
                         for: value,
                         in: text,
+                        body: body,
                         checkingCancellation: checkingCancellation
                     )
                 }
                 // 完整矩形每行只能有一个目标，跨行范围或重复行会破坏块粘贴和行键权限。
-                guard value.range.upper <= body.upper, rows.insert(row).inserted else {
+                guard range.lower >= body.lower, range.upper <= body.upper,
+                    rows.insert(body.lower).inserted
+                else {
                     throw NateError.message("矩形选择包含跨行范围或重复逻辑行。")
                 }
-                var graphemes = try GraphemeNavigation(text: text, checkingCancellation: checkingCancellation)
-                guard ContinuousClock.now < deadline else {
-                    throw NateError.message("矩形边缘复验超过五秒，原完整状态保留。")
-                }
-                guard try graphemes.isBoundary(at: value.anchor) && graphemes.isBoundary(at: value.head)
-                else {
-                    throw NateError.message("矩形边缘位于一个完整字形簇内部，未切开列选择。")
+                // ASCII 内唯一的多字节字形是 CRLF，真实正文范围已经排除了该行尾和行尾内部。
+                if !entirelyASCII {
+                    var graphemes = try GraphemeNavigation(
+                        text: text,
+                        checkingCancellation: checkingCancellation
+                    )
+                    guard ContinuousClock.now < deadline else {
+                        throw NateError.message("矩形边缘复验超过五秒，原完整状态保留。")
+                    }
+                    guard try graphemes.isBoundary(at: value.anchor) && graphemes.isBoundary(at: value.head)
+                    else {
+                        throw NateError.message("矩形边缘位于一个完整字形簇内部，未切开列选择。")
+                    }
                 }
             }
         }
@@ -110,8 +125,8 @@ extension SelectionState {
             else {
                 throw NateError.invalidRange
             }
-            let a = text.lineNumber(at: anchor.selection.range.lower)
-            let b = text.lineNumber(at: head.selection.range.lower)
+            let a = text.physicalLineBody(containing: anchor.selection.range.lower).lower
+            let b = text.physicalLineBody(containing: head.selection.range.lower).lower
             guard min(a, b) == first, max(a, b) == last else {
                 throw NateError.message("矩形纵向端点未覆盖全部选择行，原状态保持不变。")
             }

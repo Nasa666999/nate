@@ -35,11 +35,32 @@ public struct RectangleEditProjection: Sendable, Codable, Equatable {
         guard text.isBoundary(selection.anchor), text.isBoundary(selection.head) else {
             throw NateError.invalidRange
         }
-        let body = text.lineRange(text.lineNumber(at: selection.range.lower), includeEnding: false)
+        return try validated(
+            for: selection,
+            in: text,
+            body: text.physicalLineBody(containing: selection.range.lower),
+            checkingCancellation: checkingCancellation
+        )
+    }
+
+    /// 业务作用：复用调用者已经确认的同源物理行，验证投影在原行和原选择内只延伸到真实 Tab。
+    /// 参数说明:
+    /// - selection: 已确认原字节边界的选择。
+    /// - text: 本次复验固定的原文。
+    /// - body: 同一原文与选择起点对应的完整物理行正文。
+    /// - checkingCancellation: 是否允许原准备任务取消当前复验。
+    /// 返回：所有扩张字节和字形边界已证实时保留完整投影，否则失败。
+    func validated(
+        for selection: TextSelection,
+        in text: PieceTree,
+        body: ByteRange,
+        checkingCancellation: Bool
+    ) throws -> RectangleEditProjection {
+        let entirelyASCII = text.byteCount == text.utf16Count
         guard range.lower >= body.lower, range.upper <= body.upper,
             range.lower <= selection.range.lower, selection.range.upper <= range.upper,
             selection.virtualColumn == 0 || range.isEmpty && range.lower == body.upper,
-            text.isBoundary(range.lower), text.isBoundary(range.upper),
+            entirelyASCII || text.isBoundary(range.lower) && text.isBoundary(range.upper),
             leadingSpaces == 0 || text.byte(at: range.lower) == 9,
             trailingSpaces == 0 || text.byte(at: range.upper - 1) == 9,
             range.lower == selection.range.lower
@@ -48,6 +69,13 @@ public struct RectangleEditProjection: Sendable, Codable, Equatable {
                 || text.byte(at: range.upper - 1) == 9 && selection.range.upper == range.upper - 1
         else {
             throw NateError.message("矩形实际范围超出原选择或缺少边缘 Tab，未扩大编辑权限。")
+        }
+        // 同源计数相等证明全篇都是 ASCII；该行的正文范围已经排除唯一会切分字形的 CRLF。
+        if entirelyASCII {
+            if checkingCancellation {
+                try Task.checkCancellation()
+            }
+            return self
         }
         var navigation = try GraphemeNavigation(text: text, checkingCancellation: checkingCancellation)
         guard try navigation.isBoundary(at: range.lower), try navigation.isBoundary(at: range.upper) else {
