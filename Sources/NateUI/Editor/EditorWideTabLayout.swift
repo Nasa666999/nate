@@ -12,6 +12,7 @@ final class EditorWideTabLayout {
 
     struct Entry: Sendable {
         let columns: ASCIITabColumns?
+        let han: PlainHanLine?
         let status: String?
     }
 
@@ -22,7 +23,7 @@ final class EditorWideTabLayout {
         let viewport: NSPoint
     }
 
-    static let measuring = "正在测量超长逻辑行的 Tab 停靠位。"
+    static let measuring = "正在测量超长逻辑行的可见范围。"
     var entries: [Key: Entry] = [:]
     var task: Task<Void, Never>?
     var pendingReveal: Reveal?
@@ -38,7 +39,7 @@ final class EditorWideTabLayout {
 }
 
 extension EditorView {
-    /// 业务作用：有限长行窗口只接受实际当前文档及语言 Tab 规则对应的后台列证据。
+    /// 业务作用：有限长行窗口只接受对应实际文档及语言设置的完整原文证据。
     /// 参数说明:
     /// - snapshot: 当前布局请求的固定正文。
     /// - range: 当前真实逻辑行的完整原字节范围。
@@ -49,19 +50,19 @@ extension EditorView {
             snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
             !snapshot.text.isPrintableASCII(in: range)
         else {
-            return EditorWideTabLayout.Entry(columns: nil, status: nil)
+            return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
         }
         let key = wideTabKey(range)
         if let entry = wideTabLayout.entries[key] {
             return entry
         }
         guard wideTabLayout.entries.count < ASCIITabColumns.maximumLineProjections else {
-            return EditorWideTabLayout.Entry(columns: nil, status: nil)
+            return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
         }
         if wideTabLayout.task == nil {
-            prepareWideTabColumns(snapshot: snapshot, key: key, width: tabSettings.width)
+            prepareWideLine(snapshot: snapshot, key: key, width: tabSettings.width)
         }
-        return EditorWideTabLayout.Entry(columns: nil, status: EditorWideTabLayout.measuring)
+        return EditorWideTabLayout.Entry(columns: nil, han: nil, status: EditorWideTabLayout.measuring)
     }
 
     /// 业务作用：为跨线程测量和实际导航固定同一正文与视觉任务代次。
@@ -83,25 +84,35 @@ extension EditorView {
     /// - key: 测量开始时固定的视图布局来源。
     /// - width: 当前真实 Tab 宽度。
     /// 返回：同一来源内替换暂未排版窗口，迟到、取消或超量时保留原文和选择。
-    private func prepareWideTabColumns(snapshot: DocumentSnapshot, key: EditorWideTabLayout.Key, width: Int) {
+    private func prepareWideLine(snapshot: DocumentSnapshot, key: EditorWideTabLayout.Key, width: Int) {
         wideTabLayout.task = Task { [weak self] in
             let worker = Task.detached(priority: .userInitiated) {
-                try ASCIITabColumns(text: snapshot.text, range: key.range, tabWidth: width)
+                let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+                if let columns = try ASCIITabColumns(
+                    text: snapshot.text,
+                    range: key.range,
+                    tabWidth: width,
+                    deadline: deadline
+                ) {
+                    return EditorWideTabLayout.Entry(columns: columns, han: nil, status: nil)
+                }
+                let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline)
+                return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil)
             }
             let entry: EditorWideTabLayout.Entry?
             do {
-                let columns = try await withTaskCancellationHandler(
+                let measured = try await withTaskCancellationHandler(
                     operation: { try await worker.value },
                     onCancel: { worker.cancel() }
                 )
                 try Task.checkCancellation()
-                entry = EditorWideTabLayout.Entry(columns: columns, status: nil)
+                entry = measured
             }
             catch is CancellationError {
                 entry = nil
             }
             catch {
-                entry = EditorWideTabLayout.Entry(columns: nil, status: error.localizedDescription)
+                entry = EditorWideTabLayout.Entry(columns: nil, han: nil, status: error.localizedDescription)
             }
             guard let self else {
                 return
@@ -121,8 +132,10 @@ extension EditorView {
             }
             self.wideTabLayout.pendingReveal = nil
             // 后台完成只恢复原本等待的光标定位，用户后来滚动、换焦或修改选区都优先。
-            if entry.columns != nil, self.selectionGeneration == request.selection,
-                self.focusGeneration == request.focus, self.visibleRect.origin == request.viewport
+            if entry.columns != nil || entry.han != nil,
+                self.selectionGeneration == request.selection, self.focusGeneration == request.focus,
+                self.visibleRect.origin == request.viewport,
+                self.layoutLine(snapshot.text.lineNumber(at: key.range.lower)).unavailableReason == nil
             {
                 self.revealSelection()
             }

@@ -11,7 +11,7 @@ final class LineLayout {
     var fragments: [NSTextLayoutFragment] = []
     var height: CGFloat = 20
     var width: CGFloat = 0
-    private let ascii: ASCIILineWindow?
+    private let wideLine: LongLineWindow?
     private let horizontallyOrderedASCII: Bool
     private(set) var unavailableReason: String?
     private var nativeLines: [NativeLineGeometry] = []
@@ -23,10 +23,17 @@ final class LineLayout {
     var syntaxBackgrounds: [(range: ByteRange, color: NSColor, fillsLineEnd: Bool)] = []
 
     var renderedRange: ByteRange {
-        ascii?.renderedRange ?? content.projection
+        wideLine?.renderedRange ?? content.projection
     }
     var characterCount: Int {
-        ascii == nil ? content.rendered.length : range.count
+        wideLine?.characterCount ?? content.rendered.length
+    }
+
+    /// 业务作用：长行窗口在接收原生像素证据前确认底层排版确实只有一个视觉行。
+    /// 参数说明: 无。
+    /// 返回：已成功排出一个视觉行时为真。
+    var isSingleVisualLine: Bool {
+        nativeLines.count == 1 && unavailableReason == nil
     }
 
     /// 业务作用：只为当前可见段落建立原生字形、双向排版和命中映射。
@@ -41,12 +48,13 @@ final class LineLayout {
     /// - rtl: 段落基础方向。
     /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
     /// - viewport: 不换行时的真实可见正文矩形，省略时保留完整原生段落流程。
-    /// - nativeASCII: 已证明独立 ASCII 的有界内部段落，关闭上下文连字与字距调整。
+    /// - nativeASCII: 已证明独立标量的有界内部段落，关闭上下文连字与字距调整。
+    /// - nativeHanFont: 仅安全汉字窗口采用的已确认级联字体。
     /// - tabWidth: 当前语言的合法 Tab 停靠间距。
     /// - showSequences: 是否显示 ANSI 控制范围的原始占位与参数文字。
     /// - theme: 当前来源视图的完整固定主题。
     /// - language: 来源语言身份，用于隔离逐语言样式。
-    /// - wideTabs: 同一逻辑行当前请求的可用制表证据与准备状态。
+    /// - wideTabs: 同一逻辑行当前请求的制表或汉字证据与准备状态。
     /// 返回：只读 TextKit 2 布局缓存，控制字符只在呈现副本中使用等长占位，原文与坐标保持一致。
     init(
         snapshot: DocumentSnapshot,
@@ -60,6 +68,7 @@ final class LineLayout {
         appearance: NSAppearance,
         viewport: NSRect? = nil,
         nativeASCII: Bool = false,
+        nativeHanFont: NativeHanLineFont? = nil,
         tabWidth: Int = 4,
         showSequences: Bool = false,
         theme: EditorThemeDefinition? = nil,
@@ -95,7 +104,7 @@ final class LineLayout {
         let origin = snapshot.text.utf16Offset(byte: range.lower) ?? 0
         originUTF16 = origin
         if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {
-            ascii = ASCIILineWindow(
+            wideLine = LongLineWindow(
                 snapshot: snapshot,
                 range: range,
                 font: font,
@@ -103,18 +112,19 @@ final class LineLayout {
                 theme: theme,
                 language: language,
                 fontZoomAdjustment: fontZoomAdjustment,
-                tabs: wideTabs?.columns
+                tabs: wideTabs?.columns,
+                hanLine: wideTabs?.han
             )
         }
         else {
-            ascii = nil
+            wideLine = nil
         }
-        if let ascii, let viewport {
-            ascii.updateViewport(viewport)
-            content = ascii.content
-            manager = ascii.manager
-            height = ascii.height
-            self.width = ascii.width
+        if let wideLine, let viewport {
+            wideLine.updateViewport(viewport)
+            content = wideLine.content
+            manager = wideLine.manager
+            height = wideLine.height
+            self.width = wideLine.width
             return
         }
         // 原生引擎会排完整个段落，缺少安全窗口证据时必须在复制原文之前关闭超预算排版。
@@ -179,6 +189,7 @@ final class LineLayout {
             ),
             attributes: attributes
         )
+        nativeHanFont?.apply(to: value)
         for token in tokens where token.range.lower < range.upper && token.range.upper > range.lower {
             let clipped = ByteRange(max(range.lower, token.range.lower), min(range.upper, token.range.upper))
             if let ns = snapshot.text.nsRange(clipped) {
@@ -245,7 +256,7 @@ final class LineLayout {
     /// 返回：该位置原生字体的空格宽度；安全 ASCII 窗口及行尾采用已固定的行末字体。
     func columnWidth(at local: Int) -> Double {
         let actual: NSFont
-        if ascii == nil, local >= 0, local < content.rendered.length,
+        if wideLine == nil, local >= 0, local < content.rendered.length,
             let font = content.rendered.attribute(.font, at: local, effectiveRange: nil) as? NSFont
         {
             actual = font
@@ -261,9 +272,9 @@ final class LineLayout {
     /// - point: 段落内像素位置。
     /// 返回：段落内合法 UTF-16 位置；系统未命中时按最近真实端点处理，不把系统哨兵用于正文偏移。
     func character(at point: NSPoint) -> Int {
-        if let ascii {
-            let result = ascii.character(at: point)
-            synchronizeASCIIProjection()
+        if let wideLine {
+            let result = wideLine.character(at: point)
+            synchronizeWideProjection()
             return result
         }
         return visualLine(at: point.y)?.character(at: point) ?? content.rendered.length
@@ -275,9 +286,9 @@ final class LineLayout {
     /// - downstream: 字符标记取软换行后的实际所属行，光标默认保留上游亲和性。
     /// 返回：段落内光标矩形。
     func caret(at local: Int, downstream: Bool = false) -> NSRect {
-        if let ascii {
-            let result = ascii.caret(at: local)
-            synchronizeASCIIProjection()
+        if let wideLine {
+            let result = wideLine.caret(at: local)
+            synchronizeWideProjection()
             return result
         }
         let result =
@@ -371,8 +382,8 @@ final class LineLayout {
         guard unavailableReason == nil else {
             return []
         }
-        if let ascii {
-            return ascii.visibleByteRanges(in: viewport)
+        if let wideLine {
+            return wideLine.visibleByteRanges(in: viewport)
         }
         var ranges: [ByteRange] = []
         for row in nativeLines where row.bounds.maxY > viewport.minY && row.bounds.minY < viewport.maxY {
@@ -397,8 +408,8 @@ final class LineLayout {
         guard unavailableReason == nil else {
             return []
         }
-        if let ascii {
-            return ascii.selectionRects(range)
+        if let wideLine {
+            return wideLine.selectionRects(range)
         }
         guard !range.isEmpty, range.lower >= self.range.lower, range.upper <= self.range.upper,
             let a = content.snapshot.text.utf16Offset(byte: range.lower),
@@ -433,21 +444,21 @@ final class LineLayout {
     /// 业务作用：滚动保留完整行坐标，只替换已有原生等宽证据的视口片段。
     /// 参数说明:
     /// - viewport: 当前实际可见正文区域。
-    /// 返回：普通段落保持原布局，长 ASCII 行同步有界投影。
+    /// 返回：普通段落保持原布局，已验证的长行同步有界投影。
     func updateViewport(_ viewport: NSRect) {
-        ascii?.updateViewport(viewport)
-        synchronizeASCIIProjection()
+        wideLine?.updateViewport(viewport)
+        synchronizeWideProjection()
     }
 
     /// 业务作用：文本服务投影与当前实际原生片段保持一致，不借旧窗口表示新视口。
     /// 参数说明: 无。
     /// 返回：窗口改变时重建只读内容适配，完整正文、行范围和字节位置不变。
-    private func synchronizeASCIIProjection() {
-        guard let ascii, content.projection != ascii.renderedRange else {
+    private func synchronizeWideProjection() {
+        guard let wideLine, content.projection != wideLine.renderedRange else {
             return
         }
-        content = ascii.content
-        manager = ascii.manager
+        content = wideLine.content
+        manager = wideLine.manager
     }
 
     /// 业务作用：所有字形仍由 TextKit 2 绘制，安全长行只平移当前原生单行片段。
@@ -466,8 +477,8 @@ final class LineLayout {
             ).draw(at: origin)
             return
         }
-        if let ascii {
-            ascii.draw(at: origin, in: context)
+        if let wideLine {
+            wideLine.draw(at: origin, in: context)
             return
         }
         for fragment in fragments {
@@ -493,8 +504,8 @@ final class LineLayout {
         guard unavailableReason == nil else {
             return
         }
-        if let ascii {
-            ascii.drawForeground(at: origin, color: color, in: context)
+        if let wideLine {
+            wideLine.drawForeground(at: origin, color: color, in: context)
             return
         }
         if foregroundVariant?.color != color {
