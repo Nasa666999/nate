@@ -69,7 +69,7 @@ enum RubyIndentationPlan {
             }
             prefixesRemaining -= rawPrefix.count
             let prefix = String(decoding: rawPrefix, as: UTF8.self)
-            structure.beginLine()
+            structure.beginLine(line, base: raw.lower)
             var current = 0
             for range in ordered {
                 try check()

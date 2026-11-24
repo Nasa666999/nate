@@ -7,6 +7,8 @@ struct RubyIndentationState {
     private struct Block {
         let word: Word
         let prefix: String
+        let line: Int
+        let byte: Int
     }
 
     private struct Header {
@@ -26,11 +28,19 @@ struct RubyIndentationState {
     private var statementStart = true
     private var afterSeparator = false
     private var previous: Token?
+    private var currentLine = 0
+    private var base = 0
+    private(set) var closedBlock: FoldRegion?
 
     /// 业务作用：新物理行清除上一行的完成动作，未闭合的真实表达式和声明继续使用同一结构来源。
-    /// 参数说明: 无。
+    /// 参数说明:
+    /// - line: 当前真实物理行号。
+    /// - base: 当前行的绝对原字节起点。
     /// 返回：为当前行建立独立的动作边界；上一行仍有效的续接证据继续保留。
-    mutating func beginLine() {
+    mutating func beginLine(_ line: Int, base: Int) {
+        currentLine = line
+        self.base = base
+        closedBlock = nil
         closedPrefix = nil
         afterSeparator = false
         previous = nil
@@ -45,6 +55,7 @@ struct RubyIndentationState {
     /// - prefix: 此物理行已确认的原水平前缀。
     /// 返回：更新有界块状态；结构深度超限时不交付部分输入。
     mutating func consume(_ token: RubyIndentationLexer.Token, prefix: String) throws {
+        closedBlock = nil
         if afterSeparator {
             // 分号有下一条实际语句时，前一条成功动作不再代替这个输入点的上下文。
             if case .symbol(59) = token.kind {
@@ -76,7 +87,7 @@ struct RubyIndentationState {
         }
         switch token.kind {
         case .word(.end):
-            closeCurrent()
+            closeCurrent(endingAt: token.span.upper)
         case .word(.then):
             header?.active = false
             statementStart = true
@@ -86,7 +97,7 @@ struct RubyIndentationState {
                 statementStart = true
             }
             else if before != nil && !statementStart {
-                try open(.block, prefix: prefix, complete: true)
+                try open(.block, prefix: prefix, at: token.span.lower, complete: true)
             }
         case .word(let word) where statementStart:
             if [
@@ -94,7 +105,12 @@ struct RubyIndentationState {
                 .classBody,
             ]
             .contains(word) {
-                try open(word, prefix: prefix, complete: word == .begin || word == .choice)
+                try open(
+                    word,
+                    prefix: prefix,
+                    at: token.span.lower,
+                    complete: word == .begin || word == .choice
+                )
             }
             else if let block = blocks.last, Self.accepts(word, in: block.word) {
                 header = Header(
@@ -205,29 +221,40 @@ struct RubyIndentationState {
     /// 参数说明:
     /// - word: 已识别的块开端词或实际 do。
     /// - prefix: 块首物理行的原始水平空白。
+    /// - offset: 当前物理行内真实开端词的原字节偏移。
     /// - complete: 该声明已经具备自身所需最小上下文时为真。
     /// 返回：进入新的有界结构；深度不足时拒绝整批。
-    private mutating func open(_ word: Word, prefix: String, complete: Bool) throws {
+    private mutating func open(_ word: Word, prefix: String, at offset: Int, complete: Bool) throws {
         guard blocks.count < 4096 else {
             throw NateError.message("Ruby 结构缩进超过 4096 层活动块。")
         }
-        blocks.append(Block(word: word, prefix: prefix))
+        blocks.append(Block(word: word, prefix: prefix, line: currentLine, byte: base + offset))
         header = Header(word: word, blockIndex: blocks.count - 1, addsBlock: true, complete: complete)
         closedPrefix = nil
         statementStart = word == .begin
     }
 
     /// 业务作用：关闭前先收束当前尚未完成的局部声明，只有已确认的开端才给出正文前缀。
-    /// 参数说明: 无。
-    /// 返回：原开端仍存在且完整时保存关闭端的原空白。
-    private mutating func closeCurrent() {
+    /// 参数说明:
+    /// - offset: 当前实际结束词的相对排他末端。
+    /// 返回：原开端仍完整时保存对齐前缀，真实跨行时同时交付折叠范围。
+    private mutating func closeCurrent(endingAt offset: Int) {
         if let header, !header.complete {
             // 不完整的内层语句可能改变结束词的归属，停止继承此前的所有块资格。
             blocks.removeAll()
             closedPrefix = nil
         }
         else {
-            closedPrefix = blocks.popLast()?.prefix
+            let block = blocks.popLast()
+            closedPrefix = block?.prefix
+            if let block, block.line < currentLine {
+                closedBlock = FoldRegion(
+                    range: ByteRange(block.byte, base + offset),
+                    startLine: block.line,
+                    endLine: currentLine,
+                    level: 0
+                )
+            }
         }
         header = nil
         statementStart = false
