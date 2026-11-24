@@ -11,11 +11,11 @@ final class LineLayout {
     var fragments: [NSTextLayoutFragment] = []
     var height: CGFloat = 20
     var width: CGFloat = 0
-    private let wideLine: (any LongLineProjection)?
+    let wideLine: (any LongLineProjection)?
     private let horizontallyOrderedASCII: Bool
     private(set) var unavailableReason: String?
-    private var nativeLines: [NativeLineGeometry] = []
-    private var orderedPositions = true
+    private(set) var nativeLines: [NativeLineGeometry] = []
+    private(set) var orderedPositions = true
     private var orderedHeights = true
     private let virtualFont: NSFont
     private let appearance: NSAppearance
@@ -318,7 +318,9 @@ final class LineLayout {
             return result
         }
         let result =
-            visualLine(containing: local, downstream: downstream)?.caret(at: local)
+            nativeVisualRow(containing: local, downstream: downstream).map {
+                nativeLines[$0].caret(at: local)
+            }
             ?? NSRect(x: 0, y: 0, width: 1.5, height: height)
         // 尾随空格的真实插入点可能超过原生容器，保留已证明的边缘以免重绘收回可见光标。
         width = max(width, result.maxX)
@@ -388,33 +390,6 @@ final class LineLayout {
             }
             nativeLines.append(item)
         }
-    }
-
-    /// 业务作用：按真实 UTF-16 位置取得首个包含端点的视觉行，软换行边界保持原有上游位置。
-    /// 参数说明:
-    /// - local: 当前段落内的真实 UTF-16 位置。
-    /// - downstream: 是否选择字符实际所属的后续视觉行。
-    /// 返回：原生行证据或空；原生顺序不具备二分条件时按既有顺序查询。
-    private func visualLine(containing local: Int, downstream: Bool) -> NativeLineGeometry? {
-        guard orderedPositions else {
-            return nativeLines.first {
-                local >= $0.lower && (downstream ? local < $0.upper : local <= $0.upper)
-            }
-        }
-        var lower = 0, upper = nativeLines.count
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2
-            if downstream ? nativeLines[middle].upper <= local : nativeLines[middle].upper < local {
-                lower = middle + 1
-            }
-            else {
-                upper = middle
-            }
-        }
-        guard nativeLines.indices.contains(lower), local >= nativeLines[lower].lower else {
-            return nil
-        }
-        return nativeLines[lower]
     }
 
     /// 业务作用：按原生视觉行的真实下边缘定位命中行，不逐次扫描长段落的全部软换行。
@@ -519,7 +494,7 @@ final class LineLayout {
     /// 业务作用：文本服务投影与当前实际原生片段保持一致，不借旧窗口表示新视口。
     /// 参数说明: 无。
     /// 返回：窗口改变时重建只读内容适配，完整正文、行范围和字节位置不变。
-    private func synchronizeWideProjection() {
+    func synchronizeWideProjection() {
         guard let wideLine else {
             return
         }

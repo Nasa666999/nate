@@ -21,7 +21,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     private let advance: CGFloat
     private let metrics: WrappedASCIIGeometry
     private let wordIndex: ASCIIWordWrapIndex?
-    private let rowCount: Int
+    let rowCount: Int
     private var rows: Range<Int>
     private var native: LineLayout
     private(set) var unavailableReason: String?
@@ -244,6 +244,35 @@ final class WrappedASCIIWindow: LongLineProjection {
             at: byte - renderedRange.lower,
             downstream: downstream && position < characterCount
         ).offsetBy(dx: 0, dy: offsetY)
+    }
+
+    /// 业务作用：将完整长行的真实插入位置还原为所属视觉行，保留断点两侧的位置。
+    /// 参数说明:
+    /// - offset: 逻辑行相对的 UTF-16 原位置。
+    /// - downstream: 共享端点采用后面的视觉行时为真。
+    /// 返回：对应视觉行，与本窗口已经排版的原字节位置一致。
+    func visualRow(containing offset: Int, downstream: Bool) -> Int? {
+        if let wordIndex {
+            return wordIndex.row(at: range.lower + offset, downstream: downstream)
+        }
+        let position = downstream ? offset : max(0, offset - 1)
+        return min(rowCount - 1, position / metrics.columns)
+    }
+
+    /// 业务作用：跨越长行视口时先建立目标视觉行的原生段落，再取得真实插入端点。
+    /// 参数说明:
+    /// - row: 完整逻辑行内已确认的视觉行号。
+    /// - x: 当前视图的像素横坐标。
+    /// 返回：完整行 UTF-16 位置及当前视觉行前沿，原生证据不足时为空。
+    func visualCaret(in row: Int, x: CGFloat) -> LineVisualCaret? {
+        project(covering: row...row)
+        guard unavailableReason == nil, let local = native.visualCaret(in: row - rows.lowerBound, x: x) else {
+            return nil
+        }
+        return LineVisualCaret(
+            offset: renderedRange.lower - range.lower + local.offset,
+            atLeadingEdge: local.atLeadingEdge
+        )
     }
 
     /// 业务作用：由当前真实字形投影正文选择，离开视口的文本恢复为核心原范围。

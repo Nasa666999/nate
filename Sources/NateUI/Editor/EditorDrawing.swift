@@ -88,7 +88,10 @@ extension EditorView {
                         continue
                     }
                     if let offset = tree.utf16Offset(byte: selection.head) {
-                        var rect = layout.caret(at: offset - layout.originUTF16)
+                        var rect = layout.caret(
+                            at: offset - layout.originUTF16,
+                            downstream: prefersWrappedCaretDownstream(at: selection.head)
+                        )
                         rect.origin.x += gutterWidth + selectionCaretOffset(for: selection)
                         rect.origin.y += y
                         rect.size.height = max(rect.height, lineHeight)

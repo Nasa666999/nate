@@ -278,7 +278,10 @@ extension EditorView {
             return .zero
         }
         let units = tree.utf16Offset(byte: offset) ?? 0
-        var rect = layout.caret(at: units - layout.originUTF16)
+        var rect = layout.caret(
+            at: units - layout.originUTF16,
+            downstream: prefersWrappedCaretDownstream(at: offset)
+        )
         guard layout.unavailableReason == nil else {
             actualRange?.pointee = NSRange(location: NSNotFound, length: 0)
             return .zero

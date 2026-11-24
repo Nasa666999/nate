@@ -158,6 +158,10 @@ extension EditorView {
         guard finishComposition() else {
             return false
         }
+        if wrapLines, horizontal == 0, edge == 0, vertical != 0 {
+            return moveWrappedVertical(direction: vertical, extend: extend)
+        }
+        wrappedCaretRun = nil
         do {
             var navigation = try GraphemeNavigation(text: document.text)
             let after = try viewSelections.map {
@@ -277,6 +281,7 @@ extension EditorView {
         guard document.text.isBoundary(position) else {
             return
         }
+        wrappedCaretRun = nil
         viewSelections = [TextSelection(anchor: position, head: position)]
         needsDisplay = true
         revealSelection()

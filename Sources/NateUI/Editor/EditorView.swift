@@ -100,6 +100,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var projection = VisualLineMap()
     var layoutMetrics: EditorLayoutMetrics?
     let wideTabLayout = EditorWideTabLayout()
+    var wrappedCaretRun: EditorWrappedCaretRun?
     public var language: LanguageDefinition? {
         didSet {
             if oldValue?.id != language?.id {
@@ -461,7 +462,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             return
         }
         let units = document.text.utf16Offset(byte: selection.head) ?? layout.originUTF16
-        var rect = layout.caret(at: units - layout.originUTF16)
+        var rect = layout.caret(
+            at: units - layout.originUTF16,
+            downstream: prefersWrappedCaretDownstream(at: selection.head)
+        )
         if let reason = layout.unavailableReason {
             // 跳到更远窗口会触发新的原生测量，失败时不能滚到占位坐标。
             onStatus?(reason)

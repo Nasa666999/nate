@@ -25,6 +25,7 @@ extension EditorView {
         else {
             _ = try state.validated(in: document.text)
         }
+        wrappedCaretRun = nil
         adoptViewSelectionState(state)
     }
 
