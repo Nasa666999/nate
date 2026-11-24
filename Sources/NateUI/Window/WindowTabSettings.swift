@@ -27,6 +27,7 @@ extension EditorWindow {
             }
             editor.tabSettings = value
         }
+        documentMap.update(for: editor)
     }
 
     /// 业务作用：所有当前克隆采用明确的全局自动缩进和退格规则，不修改任何既有空白或视觉边缘。

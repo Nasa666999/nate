@@ -219,8 +219,11 @@ public struct WindowSessionLayout: Codable, Sendable, Equatable {
             }
             if let panels = entry.panels {
                 let selected = panels.filter(\.selected)
-                guard panels.count == WorkspacePanel.allCases.count,
-                    Set(panels.map(\.panel)).count == panels.count,
+                let identities = Set(panels.map(\.panel))
+                let allPanels = Set(WorkspacePanel.allCases)
+                // 旧归档可以完整保留原有面板，地图在重建窗口时沿用首次打开的默认状态。
+                guard (identities == allPanels || identities == allPanels.subtracting([.documentMap])),
+                    identities.count == panels.count,
                     panels.allSatisfy({ $0.floatingFrame?.isValid != false }),
                     panels.allSatisfy({ $0.extent.map { (1...65_536).contains($0) } != false }),
                     selected.allSatisfy({ $0.visible && $0.placement != .floating }),

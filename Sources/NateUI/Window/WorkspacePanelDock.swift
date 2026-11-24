@@ -26,7 +26,7 @@ final class WorkspacePanelDock: NSObject, NSWindowDelegate, NSTabViewDelegate {
     /// 参数说明:
     /// - owner: 持有当前正文和作出焦点决定的窗口。
     /// - editor: 实际正文分屏容器。
-    /// - views: 此窗口拥有的四个实际工具面板。
+    /// - views: 此窗口拥有的全部实际工具面板。
     /// 返回：原生可调整布局已构建，默认隐藏工具区域。
     func connect(owner: EditorWindow, editor: NSSplitView, views: [WorkspacePanel: NSView]) {
         self.owner = owner
@@ -289,7 +289,7 @@ final class WorkspacePanelDock: NSObject, NSWindowDelegate, NSTabViewDelegate {
 
     /// 业务作用：窗口恢复读取实际停靠标签、可见状态和浮动位置，而不是猜测面板是否有数据。
     /// 参数说明: 无。
-    /// 返回：当前窗口四个面板的独立布局。
+    /// 返回：当前窗口全部工作区工具的独立布局。
     func session() -> [WorkspacePanelSession] {
         WorkspacePanel.allCases.map {
             panel in
@@ -406,6 +406,17 @@ final class WorkspacePanelDock: NSObject, NSWindowDelegate, NSTabViewDelegate {
         }
         owner?.status.stringValue = "请先确认或取消结果筛选输入，再切换停靠标签。"
         return false
+    }
+
+    /// 业务作用：地图加入原生工具组后，只在其所在组发生切换时复验可见来源。
+    /// 参数说明:
+    /// - tabView: 实际切换的工具组。
+    /// - tabViewItem: AppKit 已选中的工具标签。
+    /// 返回：地图随选中的原生标签显示或释放旧正文投影。
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        if let owner, let map = items[.documentMap], tabView.tabViewItems.contains(where: { $0 === map }) {
+            owner.documentMap.update(for: owner.editor)
+        }
     }
 
     /// 业务作用：把原生框架坐标转为独立持久化数据。

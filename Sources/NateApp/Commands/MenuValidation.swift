@@ -55,6 +55,13 @@ extension ApplicationController {
                 && mainWindow?.hasDualEditorViews == true
                 && mainWindow?.searchResults.isEditingInput == false
         }
+        if id == "documentMap" {
+            guard !closing, let window = mainWindow else {
+                return false
+            }
+            menuItem.state = window.isDocumentMapVisible ? .on : .off
+            return true
+        }
         if id == "documentListSearch" {
             guard !closing, let window = mainWindow, window.window?.attachedSheet == nil,
                 !workspaceTabIDs(in: window).isEmpty

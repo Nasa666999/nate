@@ -212,7 +212,7 @@ extension ApplicationController: NSMenuItemValidation {
             ("打开目录工作区…", "folder"), ("刷新目录工作区", "refreshFolder"), ("关闭目录工作区", "closeFolder"),
             ("项目面板 1", "projectPanel:0"), ("项目面板 2", "projectPanel:1"), ("项目面板 3", "projectPanel:2"),
             ("搜索结果", "showSearchResults"), ("工具输出", "showToolOutput"), ("隐藏结果区域", "hideResults"),
-            ("函数列表", "symbolsList"), ("文档统计", "statistics"), ("全屏", "fullscreen"),
+            ("函数列表", "symbolsList"), ("文档地图", "documentMap"), ("文档统计", "statistics"), ("全屏", "fullscreen"),
         ] {
             add(view, title, id)
         }

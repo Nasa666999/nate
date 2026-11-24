@@ -58,6 +58,38 @@ extension EditorView {
         }
     }
 
+    /// 业务作用：文档地图的视口指示由正文当前真实像素投影得出。
+    /// 参数说明: 无。
+    /// 返回：当前可见的逻辑行范围，待确认输入或尚未形成视口时为空。
+    func documentMapVisibleLines() -> Range<Int>? {
+        guard !hasMarkedText(), let clip = enclosingScrollView?.contentView, clip.bounds.height > 0 else {
+            return nil
+        }
+        let top = projection.line(at: max(0, clip.bounds.minY - 8))
+        let bottom = projection.line(at: max(0, clip.bounds.maxY - 8))
+        let count = max(1, document.text.lineCount)
+        return min(top, count - 1)..<min(max(top, bottom) + 1, count)
+    }
+
+    /// 业务作用：地图导航滚动到用户指定逻辑行，使用实际折叠投影并保留当前光标。
+    /// 参数说明:
+    /// - line: 地图命中的当前正文逻辑行。
+    /// 返回：定位到目标行或其可见折叠标题；候选未确认时保持原视口。
+    func centerDocumentMapLine(_ line: Int) {
+        guard !hasMarkedText(), let clip = enclosingScrollView?.contentView,
+            (0..<document.text.lineCount).contains(line)
+        else {
+            return
+        }
+        restoreViewportAnchor(
+            EditorViewportAnchor(
+                line: hiddenLines.visibleBeforeOrAt(line),
+                offset: -clip.bounds.height / 2,
+                x: clip.bounds.minX
+            )
+        )
+    }
+
     /// 业务作用：将本视图已确认的收起范围合并成隐藏行区间，预编辑期间临时展示完整正文。
     /// 参数说明: 无。
     /// 返回：更新像素投影，完整正文树和其它视图不受影响。

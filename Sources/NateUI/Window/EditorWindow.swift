@@ -34,7 +34,13 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public let directoryPanel = DirectoryTreePanel(frame: .zero)
     public let projectPanels = ProjectPanelsView(frame: .zero)
     var incrementalHeight: NSLayoutConstraint?
-    public internal(set) var editor: EditorView
+    public internal(set) var editor: EditorView {
+        didSet {
+            if oldValue !== editor {
+                documentMap.update(for: editor)
+            }
+        }
+    }
     public let status = SaveStatusField(labelWithString: "")
     let results = ResultTextView()
     public var onOpenURLs: (([URL]) -> Void)?
@@ -58,6 +64,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     }
     let editorSplit = NSSplitView()
     public let structurePanel = StructurePanel(frame: .zero)
+    let documentMap = DocumentMapView(frame: .zero)
     public var isStructureVisible: Bool {
         !structurePanel.isHidden
     }
@@ -204,7 +211,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             editor: editorSplit,
             views: [
                 .directory: directoryPanel, .projects: projectPanels, .structure: structurePanel,
-                .results: resultHost,
+                .results: resultHost, .documentMap: documentMap,
             ]
         )
         root.addSubview(split)
@@ -290,6 +297,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         }
         window.center()
         editor.refresh()
+        documentMap.update(for: editor)
     }
 
     /// 业务作用：窗口不使用归档创建，工作区拥有唯一文档集合。
@@ -322,6 +330,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         editor.document = document
         editor.refresh()
         restoreTabViewPosition(in: container)
+        documentMap.update(for: editor)
         if focus {
             window?.makeFirstResponder(editor)
         }
@@ -335,6 +344,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         for container in editorSplit.arrangedSubviews {
             ((container as? NSScrollView)?.documentView as? EditorView)?.refresh()
         }
+        documentMap.update(for: editor)
     }
 
     /// 业务作用：更新标签呈现，标签上下文动作始终绑定被点击身份。

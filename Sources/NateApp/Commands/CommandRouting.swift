@@ -540,6 +540,11 @@ extension ApplicationController {
         case "syncVerticalScroll": toggleScrollSynchronization(vertical: true)
         case "syncHorizontalScroll": toggleScrollSynchronization(vertical: false)
         case "symbolsList": showSymbols()
+        case "documentMap":
+            if let window = mainWindow {
+                window.setWorkspacePanelVisible(.documentMap, !window.isDocumentMapVisible)
+                scheduleWorkspaceWindowLayout()
+            }
         case "refreshStructure": requestStructure(force: true)
         case "closeStructure": closeStructure()
         case "detectLanguage":

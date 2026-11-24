@@ -5,6 +5,7 @@ public enum WorkspacePanel: String, Codable, Sendable, CaseIterable {
     case projects
     case structure
     case results
+    case documentMap
 
     /// 业务作用：菜单、停靠标签和浮动面板共用一致的用户可见名称。
     /// 参数说明: 无。
@@ -15,16 +16,17 @@ public enum WorkspacePanel: String, Codable, Sendable, CaseIterable {
         case .projects: "项目"
         case .structure: "函数列表"
         case .results: "搜索结果与输出"
+        case .documentMap: "文档地图"
         }
     }
 
     /// 业务作用：首次打开窗口时给不同用途的面板提供既有工作区位置。
     /// 参数说明: 无。
-    /// 返回：目录和项目在左边，结构在右边，结果在底部。
+    /// 返回：目录和项目在左边，结构和地图在右边，结果在底部。
     public var defaultPlacement: WorkspacePanelPlacement {
         switch self {
         case .directory, .projects: .left
-        case .structure: .right
+        case .structure, .documentMap: .right
         case .results: .bottom
         }
     }

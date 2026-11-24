@@ -14,5 +14,6 @@ extension EditorWindow {
             editor.editorTheme = theme
             scroll.backgroundColor = editor.presentationBackground
         }
+        documentMap.needsDisplay = true
     }
 }

@@ -43,7 +43,17 @@ extension EditorWindow {
         case .projects: setProjectsVisible(visible)
         case .structure: setStructureVisible(visible)
         case .results: setResultsVisible(visible)
+        case .documentMap:
+            panelDock.setVisible(.documentMap, visible)
+            refreshEditors()
         }
+    }
+
+    /// 业务作用：地图可见性随窗口布局，菜单使用实际工具状态。
+    /// 参数说明: 无。
+    /// 返回：文档地图当前是否已打开。
+    public var isDocumentMapVisible: Bool {
+        !documentMap.isHidden
     }
 
     /// 业务作用：从浮动工具实际打开文件或激活标签后，将下一次正文输入交回所属原生编辑窗口。
