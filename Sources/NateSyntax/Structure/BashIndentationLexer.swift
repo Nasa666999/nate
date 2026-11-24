@@ -40,9 +40,11 @@ struct BashIndentationLexer {
     }
 
     private var contexts: [Context] = []
+    private var substitutionCases: [Int: Int] = [:]
     private var carriesWord = false
     private var expectingHereDocument: Bool?
     private var waitingHereDocuments: [HereDocument] = []
+    private var substitutionHereDocuments: [HereDocument] = []
     private var activeHereDocuments: ArraySlice<HereDocument> = []
     private var unknownHereDocument = false
 
@@ -66,10 +68,14 @@ struct BashIndentationLexer {
             let body = here.removesTabs ? bytes.drop(while: { $0 == 9 }) : bytes[...]
             if body.elementsEqual(here.word) {
                 activeHereDocuments.removeFirst()
+                if activeHereDocuments.isEmpty, contexts.isEmpty, !waitingHereDocuments.isEmpty {
+                    activeHereDocuments = waitingHereDocuments[...]
+                    waitingHereDocuments = []
+                }
             }
             return BashIndentationRow(
                 tokens: [],
-                continues: false,
+                continues: !contexts.isEmpty,
                 startsInLiteral: true,
                 holdsLiteral: true,
                 hereDocument: true
@@ -88,7 +94,7 @@ struct BashIndentationLexer {
                 nextCheck = cursor + 256
             }
             let byte = bytes[cursor]
-            if contexts.last == .expansion(41), byte == 35,
+            if substitutionCases[contexts.count] != nil, byte == 35,
                 cursor == 0 || [9, 32, 38, 40, 59, 124].contains(bytes[cursor - 1])
             {
                 // 命令替换里的注释可以包含闭合括号，必须等到后续真实定界再退出替换。
@@ -165,11 +171,16 @@ struct BashIndentationLexer {
         }
         carriesWord = holdsLiteral || continued && start != nil
         let continues = holdsLiteral || continued
+        if !continued && !substitutionHereDocuments.isEmpty {
+            // 替换仍持续时先消费其专属 here-document，外层尚未取得行结束语义。
+            activeHereDocuments = substitutionHereDocuments[...]
+            substitutionHereDocuments = []
+        }
+        else if !continues && !waitingHereDocuments.isEmpty {
+            activeHereDocuments = waitingHereDocuments[...]
+            waitingHereDocuments = []
+        }
         if !continues {
-            if !waitingHereDocuments.isEmpty {
-                activeHereDocuments = waitingHereDocuments[...]
-                waitingHereDocuments = []
-            }
             expectingHereDocument = nil
         }
         return BashIndentationRow(
@@ -356,14 +367,55 @@ struct BashIndentationLexer {
                 return true
             }
         case .expansion(let closing):
+            let depth = contexts.count
+            if let cases = substitutionCases[depth] {
+                if byte == 40, cursor + 1 < bytes.count, bytes[cursor + 1] == 40 {
+                    // 替换中的算术命令使用算术括号，移位运算符不登记 here-document。
+                    try push(.expansion(41))
+                    try push(.expansion(41))
+                    cursor += 2
+                    return true
+                }
+                if byte == 60, bytes[cursor...].starts(with: [60, 60]) {
+                    if bytes[cursor...].starts(with: [60, 60, 60]) {
+                        cursor += 3
+                    }
+                    else {
+                        consumeSubstitutionHereDocument(bytes, cursor: &cursor)
+                    }
+                    return true
+                }
+                // case 分支的 ) 不关闭外层命令替换，只有同一替换中的 esac 能恢复关闭资格。
+                if byte == 99, Self.substitutionWord([99, 97, 115, 101], in: bytes, at: cursor) {
+                    guard cases < 256 else {
+                        throw NateError.message("Bash 命令替换的 case 嵌套超过 256 层。")
+                    }
+                    substitutionCases[depth] = cases + 1
+                    cursor += 4
+                    return true
+                }
+                if byte == 101, cases > 0, Self.substitutionWord([101, 115, 97, 99], in: bytes, at: cursor) {
+                    substitutionCases[depth] = cases - 1
+                    cursor += 4
+                    return true
+                }
+                if byte == closing, cases > 0 {
+                    cursor += 1
+                    return true
+                }
+            }
             if byte == closing {
                 contexts.removeLast()
+                substitutionCases.removeValue(forKey: depth)
                 cursor += 1
                 return true
             }
             let opener: UInt8 = closing == 41 ? 40 : (closing == 93 ? 91 : 123)
             if byte == opener {
                 try push(.expansion(closing))
+                if substitutionCases[depth] != nil {
+                    substitutionCases[contexts.count] = 0
+                }
                 cursor += 1
                 return true
             }
@@ -374,6 +426,9 @@ struct BashIndentationLexer {
             switch bytes[cursor + 1] {
             case 40:
                 try push(.expansion(41))
+                if cursor + 2 == bytes.count || bytes[cursor + 2] != 40 {
+                    substitutionCases[contexts.count] = 0
+                }
             case 91:
                 try push(.expansion(93))
             case 123:
@@ -400,6 +455,90 @@ struct BashIndentationLexer {
         }
         cursor += 1
         return true
+    }
+
+    /// 业务作用：登记命令替换自己的 here-document，正文中的右括号不关闭外层替换。
+    /// 参数说明:
+    /// - bytes: 当前物理行原字节。
+    /// - cursor: 双小于号的起点，成功时移动到分隔符之后。
+    /// 返回：完整登记分隔符；无法取得可靠证据时后继行按原缩进处理。
+    private mutating func consumeSubstitutionHereDocument(_ bytes: [UInt8], cursor: inout Int) {
+        let stripsTabs = bytes[cursor...].starts(with: [60, 60, 45])
+        cursor += stripsTabs ? 3 : 2
+        while cursor < bytes.count && (bytes[cursor] == 9 || bytes[cursor] == 32) {
+            cursor += 1
+        }
+        let start = cursor
+        var quote: UInt8?
+        while cursor < bytes.count && cursor - start <= 4096 {
+            let byte = bytes[cursor]
+            if quote == byte {
+                quote = nil
+            }
+            else if quote == nil && (byte == 34 || byte == 39) {
+                quote = byte
+            }
+            else if byte == 92 && quote != 39 && cursor + 1 < bytes.count {
+                cursor += 1
+            }
+            else if quote == nil && (byte == 9 || byte == 32 || Self.isOperator(byte)) {
+                break
+            }
+            cursor += 1
+        }
+        guard cursor > start, quote == nil,
+            let word = Self.delimiter(bytes[start..<cursor]), substitutionHereDocuments.count < 256
+        else {
+            unknownHereDocument = true
+            return
+        }
+        substitutionHereDocuments.append(HereDocument(word: word, removesTabs: stripsTabs))
+    }
+
+    /// 业务作用：只从命令替换中的裸命令起始识别 case 或 esac，不把实参相同拼写作为块边界。
+    /// 参数说明:
+    /// - spelling: 原样匹配的 ASCII 保留字。
+    /// - bytes: 原物理行字节。
+    /// - cursor: 候选保留字起点。
+    /// 返回：当前词的两侧都具备命令位置证据时为真。
+    private static func substitutionWord(_ spelling: [UInt8], in bytes: [UInt8], at cursor: Int) -> Bool {
+        let end = cursor + spelling.count
+        guard bytes[cursor...].starts(with: spelling),
+            end == bytes.count || bytes[end] == 9 || bytes[end] == 32 || isOperator(bytes[end])
+        else {
+            return false
+        }
+        if cursor == 0 {
+            return true
+        }
+        let previous = bytes[cursor - 1]
+        let startsCase = spelling.first == 99
+        if [38, 40, 59, 124].contains(previous) || startsCase && previous == 41 {
+            return true
+        }
+        guard previous == 9 || previous == 32 else {
+            return false
+        }
+        var start = cursor - 1
+        while start > 0 && (bytes[start - 1] == 9 || bytes[start - 1] == 32) {
+            start -= 1
+        }
+        if start == 0 {
+            return true
+        }
+        if [38, 40, 59, 124].contains(bytes[start - 1]) || startsCase && bytes[start - 1] == 41 {
+            return true
+        }
+        // 同一命令的 then、do 或 else 之后可直接开始复合命令。完整裸词才可承担这个角色。
+        let wordEnd = start
+        while start > 0, wordEnd - start < 5, (97...122).contains(bytes[start - 1]) {
+            start -= 1
+        }
+        guard start == 0 || bytes[start - 1] == 9 || bytes[start - 1] == 32 || isOperator(bytes[start - 1])
+        else {
+            return false
+        }
+        return ["then", "do", "else"].contains(String(decoding: bytes[start..<wordEnd], as: UTF8.self))
     }
 
     /// 业务作用：限制为结构缩进保留的嵌套引用与替换上下文。
