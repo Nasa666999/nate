@@ -60,7 +60,7 @@ public struct StructuralIndentationPlan: Sendable {
             && (identifier == "python" || identifier == "lua" || identifier == "mssql" || identifier == "sql"
                 || identifier == "cmake" || identifier == "autoit" || identifier == "bash"
                 || identifier == "yaml" || identifier == "toml" || identifier == "html" || identifier == "xml"
-                || identifier == "pascal" || fortran || lisp
+                || identifier == "pascal" || identifier == "ruby" || fortran || lisp
                 || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
@@ -103,13 +103,9 @@ public struct StructuralIndentationPlan: Sendable {
             )
             return
         }
-        if identifier == "bash" {
-            actions = try BashIndentationPlan.actions(
-                snapshot: snapshot,
-                ranges: ranges,
-                deadline: deadline,
-                permit: permit
-            )
+        if identifier == "bash" || identifier == "ruby" {
+            let prepare = identifier == "bash" ? BashIndentationPlan.actions : RubyIndentationPlan.actions
+            actions = try prepare(snapshot, ranges, deadline, permit)
             return
         }
         if identifier == "yaml" {
