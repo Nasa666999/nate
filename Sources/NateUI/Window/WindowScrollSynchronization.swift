@@ -53,6 +53,19 @@ final class WindowScrollSynchronization: NSObject {
         secondary = nil
     }
 
+    /// 业务作用：布局重排及视口还原只属于原视图，布局通知不算用户滚动。
+    /// 参数说明:
+    /// - update: 同步执行的原生排版及独立位置恢复。
+    /// 返回：保留进入前的同步状态，操作期间不会向另一视图转发通知。
+    func preserveIndependentViewports(during update: () -> Void) {
+        let previous = applying
+        applying = true
+        defer {
+            applying = previous
+        }
+        update()
+    }
+
     /// 业务作用：实际视图、窗口和当前排版共同约束同步，不把其它窗口或已移除克隆当作来源。
     /// 参数说明:
     /// - notification: 两个已登记裁剪视图的原生边界通知。

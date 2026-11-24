@@ -206,6 +206,7 @@ extension ApplicationController: NSMenuItemValidation {
             ("上一处修改", "previousModification"), ("下一处修改", "nextModification"),
             ("重置缩放", "zoomReset"), ("浅色主题", "themeLight"), ("深色主题", "themeDark"), ("系统主题", "themeSystem"),
             ("左右分屏 / 克隆", "splitVertical"), ("上下分屏 / 克隆", "splitHorizontal"), ("关闭分屏", "unsplit"),
+            ("显示工具栏", "workspaceToolbar"),
             ("垂直同步滚动", "syncVerticalScroll"), ("水平同步滚动", "syncHorizontalScroll"),
             ("从右到左", "rtl"), ("固定标签", "pin"), ("编辑器只读", "readOnly"), ("监视文件", "monitor"),
             ("打开目录工作区…", "folder"), ("刷新目录工作区", "refreshFolder"), ("关闭目录工作区", "closeFolder"),
@@ -215,6 +216,19 @@ extension ApplicationController: NSMenuItemValidation {
         ] {
             add(view, title, id)
         }
+        let focusKey = "\u{F70B}"
+        let namedShortcuts =
+            macroLibrary.definitions.compactMap(\.shortcut)
+            + runCommands.library.commands.compactMap(\.shortcut)
+        // 既有快捷键、自定义宏和运行配置可持有 F8，新增默认入口只使用仍可用的组合。
+        let retainsExistingF8 =
+            namedShortcuts.contains { $0.key == focusKey && $0.modifiers == 0 }
+            || keyboardMap.configuration.overrides.contains {
+                $0.command != "focusOtherEditorPane"
+                    && $0.shortcuts.contains { $0.key == focusKey && $0.modifiers == 0 }
+            }
+        add(view, "切换分屏焦点", "focusOtherEditorPane", key: retainsExistingF8 ? "" : focusKey)
+        view.items.last?.keyEquivalentModifierMask = []
         addTabLayoutMenu(to: view)
         view.addItem(.separator())
         for (title, id, key, shifted) in [
@@ -337,6 +351,7 @@ extension ApplicationController: NSMenuItemValidation {
         attach(tabSwitching, to: windows)
         add(windows, "在新窗口克隆当前文档", "cloneToWindow")
         add(windows, "移动当前标签到另一窗口…", "moveTabToWindow")
+        add(windows, "当前窗口置顶", "workspaceWindowOnTop")
         add(windows, "文档列表…", "documentList")
         add(windows, "搜索已打开文档…", "documentListSearch")
         windows.delegate = self

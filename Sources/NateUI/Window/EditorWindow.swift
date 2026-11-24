@@ -63,6 +63,11 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     }
     let resultsScroll = NSScrollView()
     let toolbarStack = NSStackView()
+    let toolbarContainer = NSView()
+    static let toolbarVisibleHeight: CGFloat = 38
+    lazy var toolbarHeight = toolbarContainer.heightAnchor.constraint(
+        equalToConstant: Self.toolbarVisibleHeight
+    )
     var tabViewPositions: [UUID: WindowSessionView] = [:]
 
     /// 业务作用：组装工具栏、独立标签、编辑视口、结果面板和状态栏。
@@ -118,7 +123,8 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             toolbarStack.addArrangedSubview(button)
         }
         toolbarStack.addArrangedSubview(NSView())
-        root.addSubview(toolbarStack)
+        toolbarContainer.addSubview(toolbarStack)
+        root.addSubview(toolbarContainer)
         root.addSubview(tabs)
         root.addSubview(incrementalSearch)
         incrementalSearch.isHidden = true
@@ -210,17 +216,21 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         status.lineBreakMode = .byTruncatingMiddle
         root.addSubview(status)
         status.heightAnchor.constraint(equalToConstant: 25).isActive = true
-        for view in [toolbarStack, tabs, incrementalSearch, split, status] {
+        for view in [toolbarContainer, toolbarStack, tabs, incrementalSearch, split, status] {
             view.translatesAutoresizingMaskIntoConstraints = false
         }
         incrementalHeight = incrementalSearch.heightAnchor.constraint(equalToConstant: 0)
         incrementalHeight?.isActive = true
         NSLayoutConstraint.activate([
-            toolbarStack.topAnchor.constraint(equalTo: root.topAnchor),
-            toolbarStack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            toolbarStack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            toolbarStack.heightAnchor.constraint(equalToConstant: 38),
-            tabs.topAnchor.constraint(equalTo: toolbarStack.bottomAnchor),
+            toolbarContainer.topAnchor.constraint(equalTo: root.topAnchor),
+            toolbarContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            toolbarContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            toolbarHeight,
+            toolbarStack.topAnchor.constraint(equalTo: toolbarContainer.topAnchor),
+            toolbarStack.leadingAnchor.constraint(equalTo: toolbarContainer.leadingAnchor),
+            toolbarStack.trailingAnchor.constraint(equalTo: toolbarContainer.trailingAnchor),
+            toolbarStack.heightAnchor.constraint(equalToConstant: Self.toolbarVisibleHeight),
+            tabs.topAnchor.constraint(equalTo: toolbarContainer.bottomAnchor),
             incrementalSearch.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             split.topAnchor.constraint(equalTo: incrementalSearch.bottomAnchor),
             split.trailingAnchor.constraint(equalTo: root.trailingAnchor),

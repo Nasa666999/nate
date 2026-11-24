@@ -41,6 +41,20 @@ extension ApplicationController {
         if id == "documentList" {
             return !closing && mainWindow != nil && !documents.isEmpty
         }
+        if id == "workspaceToolbar" || id == "workspaceWindowOnTop" {
+            guard !closing, let window = mainWindow else {
+                return false
+            }
+            let enabled =
+                id == "workspaceToolbar" ? window.isWorkspaceToolbarVisible : window.isWorkspaceWindowOnTop
+            menuItem.state = enabled ? .on : .off
+            return true
+        }
+        if id == "focusOtherEditorPane" {
+            return !closing && mainWindow?.window?.attachedSheet == nil
+                && mainWindow?.hasDualEditorViews == true
+                && mainWindow?.searchResults.isEditingInput == false
+        }
         if id == "documentListSearch" {
             guard !closing, let window = mainWindow, window.window?.attachedSheet == nil,
                 !workspaceTabIDs(in: window).isEmpty

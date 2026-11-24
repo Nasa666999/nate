@@ -523,6 +523,19 @@ extension ApplicationController {
                 await trashDocument()
             }
         case "splitVertical", "splitHorizontal": mainWindow?.splitEditor(vertical: id == "splitVertical")
+        case "focusOtherEditorPane":
+            if let window = mainWindow, window.focusOtherEditorPane() {
+                finishWorkspaceTabCycle()
+                rememberWorkspaceTab(window.editor.document.id, in: window)
+            }
+        case "workspaceToolbar":
+            if let window = mainWindow {
+                window.setWorkspaceToolbarVisible(!window.isWorkspaceToolbarVisible)
+            }
+        case "workspaceWindowOnTop":
+            if let window = mainWindow {
+                window.setWorkspaceWindowOnTop(!window.isWorkspaceWindowOnTop)
+            }
         case "unsplit": mainWindow?.removeSplit()
         case "syncVerticalScroll": toggleScrollSynchronization(vertical: true)
         case "syncHorizontalScroll": toggleScrollSynchronization(vertical: false)

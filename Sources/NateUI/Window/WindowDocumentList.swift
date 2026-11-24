@@ -51,15 +51,15 @@ extension EditorWindow {
     /// 参数说明:
     /// - target: 共享业务路由的接收者。
     /// - action: 与窗口菜单相同的激活选择入口。
-    /// 返回：原生列表在工具栏锚点展开，选择继续交由接收者复验身份和代次。
+    /// 返回：原生列表从可见工具栏或标签栏展开，选择继续交由接收者复验身份和代次。
     public func showDocumentList(target: AnyObject, action: Selector) {
-        guard
-            let anchor = toolbarStack.arrangedSubviews.first(where: {
-                $0.identifier?.rawValue == "documentList"
-            }), !tabs.current.isEmpty
-        else {
+        guard !tabs.current.isEmpty else {
             return
         }
+        let toolbarButton = toolbarStack.arrangedSubviews.first {
+            $0.identifier?.rawValue == "documentList"
+        }
+        let anchor: NSView = isWorkspaceToolbarVisible ? toolbarButton ?? tabs : tabs
         let menu = documentListMenu(target: target, action: action)
         menu.insertItem(.separator(), at: 0)
         menu.insertItem(documentListOrderItem(target: target, action: action), at: 0)
