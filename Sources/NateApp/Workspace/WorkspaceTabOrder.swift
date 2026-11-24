@@ -15,14 +15,19 @@ extension ApplicationController {
             }),
             let sourceGeneration = move.sourceGeneration, let window = mainWindow,
             sourceGeneration == window.tabOrderIdentity,
-            documents.map({
-                $0.buffer.id
-            }) == move.original
+            workspaceTabIDs(in: window) == move.original
         else {
             mainWindow?.status.stringValue = "标签集合或原顺序已改变，旧移动未执行。"
             return false
         }
         guard move.result != move.original else {
+            return true
+        }
+        let key = ObjectIdentifier(window)
+        if windowTabGroups[key] != nil {
+            // 分组内重排只更新这扇窗口，其他窗口曾建立的独立顺序继续有效。
+            windowTabGroups[key] = move.result
+            refreshUI()
             return true
         }
         let byID = Dictionary(
@@ -49,9 +54,7 @@ extension ApplicationController {
     /// - action: 左移、右移、首位或末位的明确指令。
     /// 返回：合法指令按当前完整顺序建立计划，边界无变化保持原状态，旧身份不产生动作。
     func moveTab(_ documentID: UUID, action: String) {
-        let order = documents.map {
-            $0.buffer.id
-        }
+        let order = workspaceTabIDs(in: mainWindow)
         guard let index = order.firstIndex(of: documentID) else {
             return
         }

@@ -57,7 +57,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     }
     let resultsScroll = NSScrollView()
     let toolbarStack = NSStackView()
-    var scrollPositions: [UUID: NSPoint] = [:]
+    var tabViewPositions: [UUID: WindowTabViewPosition] = [:]
 
     /// 业务作用：组装工具栏、独立标签、编辑视口、结果面板和状态栏。
     /// 参数说明:
@@ -315,10 +315,10 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             return true
         }
         let container = editor.enclosingScrollView ?? scroll
-        scrollPositions[editor.document.id] = container.contentView.bounds.origin
+        tabViewPositions[editor.document.id] = currentTabViewPosition()
         editor.document = document
         editor.refresh()
-        container.contentView.scroll(to: scrollPositions[document.id] ?? .zero)
+        restoreTabViewPosition(in: container)
         if focus {
             window?.makeFirstResponder(editor)
         }
@@ -340,6 +340,14 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// 返回：当前标签栏反映真实文档状态。
     public func updateTabs(_ presentations: [TabPresentation]) {
         tabs.update(presentations)
+    }
+
+    /// 业务作用：只有存在另一扇编辑窗口时才显示移动标签的入口。
+    /// 参数说明:
+    /// - available: 工作区中现有的其它窗口可以接收标签。
+    /// 返回：更新后续标签上下文菜单，当前拖动仍由原顺序证据约束。
+    public func setTabTransferAvailable(_ available: Bool) {
+        tabs.canTransferTabs = available
     }
 
     /// 业务作用：更新独立工具输出，正在操作搜索树时保留当前交互，不借后台输出结束筛选或抢走焦点。

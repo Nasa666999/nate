@@ -108,6 +108,9 @@ extension ApplicationController {
             try applySidebarState(sidebars, in: window)
         }
         documents.append(contentsOf: additions)
+        for document in additions {
+            attachWorkspaceTab(document.buffer.id, to: window)
+        }
         if activateImported, let id = selected ?? additions.first?.buffer.id {
             activate(id)
             window.window?.makeFirstResponder(window.editor)

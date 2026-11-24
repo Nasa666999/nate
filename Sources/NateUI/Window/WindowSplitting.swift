@@ -19,7 +19,7 @@ extension EditorWindow {
             editor = primary
             window?.makeFirstResponder(primary)
         }
-        scrollPositions.removeValue(forKey: id)
+        tabViewPositions.removeValue(forKey: id)
     }
 
     /// 业务作用：克隆视图共享正文，排版、滚动容器和输入法状态分别持有。

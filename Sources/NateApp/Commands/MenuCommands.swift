@@ -330,6 +330,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(windows, "下一个标签", "nextTab")
         add(windows, "上一个标签", "previousTab")
         add(windows, "在新窗口克隆当前文档", "cloneToWindow")
+        add(windows, "移动当前标签到另一窗口…", "moveTabToWindow")
         add(windows, "文档列表…", "documentList")
         windows.delegate = self
         populateWindowDocuments(in: windows)

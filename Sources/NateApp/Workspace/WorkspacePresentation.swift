@@ -121,7 +121,7 @@ extension ApplicationController {
         }
     }
 
-    /// 业务作用：各窗口共享标签的文档状态，活动标记依据各自显示的正文。
+    /// 业务作用：各窗口按自己的标签顺序呈现，标签状态来自唯一登记的共享文档。
     /// 参数说明: 无。
     /// 返回：同步标签及窗口标题，后台窗口仍保留自身编辑视图与焦点。
     private func renderWorkspaceTabs() {
@@ -137,12 +137,17 @@ extension ApplicationController {
                 readOnly: $0.buffer.isReadOnly
             )
         }
-        for window in editorWindows {
+        let byID = Dictionary(uniqueKeysWithValues: presentations.map { ($0.id, $0) })
+        let windows = editorWindows
+        for window in windows {
             let id = window === mainWindow ? activeID : window.editor.document.id
+            window.setTabTransferAvailable(windows.count > 1)
             window.updateTabs(
-                presentations.map {
-                    var tab = $0
-                    tab.selected = tab.id == id
+                workspaceTabIDs(in: window).compactMap {
+                    guard var tab = byID[$0] else {
+                        return nil
+                    }
+                    tab.selected = $0 == id
                     return tab
                 }
             )

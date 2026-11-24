@@ -124,6 +124,9 @@ extension ApplicationController {
                         String.init
                     ) ?? ""
                 ) ?? "normal"
+            if activateOnOpen && placement?.needsWindow == true {
+                beginWorkspaceTabGroups()
+            }
             documents.append(document)
             recentFiles =
                 [url.path]
@@ -132,6 +135,7 @@ extension ApplicationController {
                 }
             let displayed = display(document)
             if !activateOnOpen || !displayed {
+                attachWorkspaceTab(document.buffer.id, to: window)
                 refreshUI()
             }
             buildMenus()
@@ -515,7 +519,7 @@ extension ApplicationController {
             $0 === document
         }
         if activeID == id {
-            activeID = documents.first?.buffer.id
+            activeID = workspaceTabDocuments(in: mainWindow).first?.buffer.id ?? documents.first?.buffer.id
         }
         guard await flushRecovery() else {
             documents.insert(document, at: min(oldIndex, documents.count))

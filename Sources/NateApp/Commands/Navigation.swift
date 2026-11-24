@@ -291,10 +291,14 @@ extension ApplicationController {
                 }
                 let document = WorkspaceDocument(name: url.lastPathComponent + " · 字节视图", text: display)
                 document.buffer.isReadOnly = true
+                if placement?.needsWindow == true {
+                    beginWorkspaceTabGroups()
+                }
                 documents.append(document)
                 let displayed =
                     placement?.present(document, using: self) ?? activate(document.buffer.id, in: window)
                 if !displayed {
+                    attachWorkspaceTab(document.buffer.id, to: window)
                     refreshUI()
                 }
                 return displayed ? document : nil

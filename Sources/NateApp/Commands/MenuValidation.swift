@@ -18,6 +18,7 @@ extension ApplicationController {
                 fields.count == 2, let source = UUID(uuidString: String(fields[0])),
                 UUID(uuidString: String(fields[1])) == documentID,
                 source == mainWindow?.tabOrderIdentity,
+                workspaceTabIDs(in: mainWindow).contains(documentID),
                 documents.contains(where: {
                     $0.buffer.id == documentID
                 })
@@ -43,6 +44,9 @@ extension ApplicationController {
         if id == "newWindow" || id == "cloneToWindow" {
             return !closing && editorWindows.count < 32
                 && (id == "newWindow" ? documents.count < 1024 : active?.closing == false)
+        }
+        if id == "moveTabToWindow" {
+            return !closing && editorWindows.count > 1 && active?.closing == false
         }
         if id.hasPrefix("tabLayout:") {
             guard let mode = DocumentTabLayout(rawValue: String(id.dropFirst("tabLayout:".count))) else {

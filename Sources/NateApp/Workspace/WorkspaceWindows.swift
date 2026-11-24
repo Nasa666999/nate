@@ -39,6 +39,7 @@ extension ApplicationController {
             return nil
         }
         let existing = editorWindows
+        beginWorkspaceTabGroups()
         let target = document ?? newDocument(activateOnCreate: false)
         let window = EditorWindow(document: target.buffer)
         window.window?.setFrameAutosaveName("")
@@ -50,6 +51,7 @@ extension ApplicationController {
         applyDisplaySettings(currentDisplaySettings(), to: window)
         window.setEditorTheme(themePreferences.compiled)
         workspaceWindows = existing + [window]
+        windowTabGroups[ObjectIdentifier(window)] = [target.buffer.id]
         connect(window)
         selectWorkspaceWindow(window)
         window.showWindow(nil)
@@ -119,6 +121,9 @@ extension ApplicationController {
                 return
             }
         }
+        if let destination = mainWindow {
+            retireWorkspaceTabGroup(window, preservingIn: destination, survivors: others)
+        }
         workspaceWindows = others
         if directoryWorkspace?.window === window {
             // 窗口退出前撤销关联目录读取与观察权限，迟到结果不能重建已关闭的侧栏。
@@ -131,6 +136,8 @@ extension ApplicationController {
         if wasCurrent, let mainWindow {
             mainWindow.window?.makeKeyAndOrderFront(nil)
         }
+        refreshUI()
+        scheduleRecovery()
     }
 
     /// 业务作用：关闭文档或退出时逐个确认关联窗口的组合状态。
@@ -148,10 +155,18 @@ extension ApplicationController {
     /// 返回：旧编辑视图停止持有已关闭正文，后台窗口更新时保留各自焦点。
     func retireWorkspaceDocument(_ id: UUID, fallback: WorkspaceDocument) {
         for window in editorWindows {
+            let key = ObjectIdentifier(window)
+            windowTabGroups[key]?.removeAll { $0 == id }
             window.retireDocument(id)
             if window.editor.document.id == id {
-                window.showDocument(fallback.buffer, focus: mainWindow === window)
+                let replacement = workspaceTabDocuments(in: window).first ?? fallback
+                attachWorkspaceTab(replacement.buffer.id, to: window)
+                window.showDocument(replacement.buffer, focus: mainWindow === window)
+                window.forgetTabViewPosition(id)
             }
+        }
+        if let mainWindow {
+            activeID = mainWindow.editor.document.id
         }
     }
 

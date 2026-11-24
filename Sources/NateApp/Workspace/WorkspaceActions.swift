@@ -9,14 +9,12 @@ extension ApplicationController {
     /// - forward: 是否切换到后一个标签。
     /// 返回：激活对应文档。
     func cycleTab(forward: Bool) {
-        guard !documents.isEmpty,
-            let index = documents.firstIndex(where: {
-                $0.buffer.id == activeID
-            })
+        let order = workspaceTabIDs(in: mainWindow)
+        guard let activeID, let index = order.firstIndex(of: activeID)
         else {
             return
         }
-        activate(documents[(index + (forward ? 1 : documents.count - 1)) % documents.count].buffer.id)
+        activate(order[(index + (forward ? 1 : order.count - 1)) % order.count])
     }
 
     /// 业务作用：批量关闭固定开始时的文档集合，逐个执行内容保护。
@@ -25,12 +23,16 @@ extension ApplicationController {
     /// - reference: 上下文被点击标签，为空时使用活动标签。
     /// 返回：新建的替代空标签不会误加入原关闭集合。
     func closeGroup(_ command: String, reference: UUID? = nil) {
+        guard let window = mainWindow else {
+            return
+        }
+        let tabs = workspaceTabDocuments(in: window)
         let reference = reference ?? activeID
         let index =
-            documents.firstIndex(where: {
+            tabs.firstIndex(where: {
                 $0.buffer.id == reference
             }) ?? 0
-        let targets = documents.enumerated().filter {
+        let targets = tabs.enumerated().filter {
             offset,
             document in
             switch command {
@@ -46,11 +48,12 @@ extension ApplicationController {
         }
         Task {
             for id in targets {
-                await closeDocument(id)
+                guard isWorkspaceWindowAvailable(window) else {
+                    break
+                }
+                await closeWorkspaceTab(id, in: window)
                 // 取消或保护失败仍保留原标签时停止整组动作，不能继续弹出其它关闭确认并遮住未确认候选。
-                if documents.contains(where: {
-                    $0.buffer.id == id
-                }) {
+                if isWorkspaceWindowAvailable(window) && workspaceTabIDs(in: window).contains(id) {
                     break
                 }
             }

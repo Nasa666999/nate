@@ -19,6 +19,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     }
     var mainWindow: EditorWindow?
     var workspaceWindows: [EditorWindow] = []
+    var windowTabGroups: [ObjectIdentifier: [UUID]] = [:]
     var registry: LanguageRegistry?
     var completionCatalog: CompletionCatalog?
     var functionListCatalog: FunctionListCatalog?
@@ -449,7 +450,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
                 guard let self, let window, self.isWorkspaceWindowAvailable(window) else {
                     return
                 }
-                await self.closeDocument(id)
+                await self.closeWorkspaceTab(id, in: window)
             }
         }
         window.onTabAction = {
@@ -577,6 +578,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         guard window?.showDocument(document.buffer, focus: isCurrent) != false else {
             return false
         }
+        attachWorkspaceTab(id, to: window)
         if isCurrent {
             activeID = id
             if window?.isIncrementalSearchVisible == true {

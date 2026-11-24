@@ -7,6 +7,7 @@ final class TabStrip: NSScrollView {
     var onClose: ((UUID) -> Void)?
     var onAction: ((UUID, String) -> Void)?
     var onReorder: ((DocumentOrderMove) -> Bool)?
+    var canTransferTabs = false
     let stack = TabCanvas()
     var layoutMode = DocumentTabLayout.horizontal
     var layoutPlan: DocumentTabLayoutPlan?

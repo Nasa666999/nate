@@ -122,6 +122,10 @@ extension ApplicationController {
         case "selectInsideBracket": mainWindow?.editor.navigateBracket(.selectInside)
         case "newWindow": openWorkspaceWindow()
         case "cloneToWindow": openActiveDocumentWindow()
+        case "moveTabToWindow":
+            if let activeID {
+                chooseWorkspaceTabDestination(activeID)
+            }
         case "new":
             // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
             guard mainWindow?.editor.finishComposition() != false else {
@@ -186,9 +190,9 @@ extension ApplicationController {
                 }
             }
         case "close":
-            if let activeID {
+            if let activeID, let window = mainWindow {
                 Task {
-                    await closeDocument(activeID)
+                    await closeWorkspaceTab(activeID, in: window)
                 }
             }
         case "closeAll", "closeOthers", "closeClean", "closeUnpinned": closeGroup(id)
@@ -551,48 +555,6 @@ extension ApplicationController {
             )
         case "quit": NSApp.terminate(nil)
         default: break
-        }
-    }
-
-    /// 业务作用：标签上下文动作明确使用被点击身份，不能误操作活动文档。
-    /// 参数说明:
-    /// - id: 被点击文档。
-    /// - action: 上下文命令。
-    /// 返回：按该文档执行动作。
-    func tabAction(_ id: UUID, _ action: String) {
-        // 退出期间允许任务观察，但标签动作不能另建关闭流程或修改已经固定的恢复元数据。
-        guard !closing else {
-            return
-        }
-        guard
-            let document = documents.first(where: {
-                $0.buffer.id == id
-            })
-        else {
-            return
-        }
-        switch action {
-        case "moveTabLeft", "moveTabRight", "moveTabFirst", "moveTabLast":
-            moveTab(id, action: action)
-        case "close":
-            Task {
-                await closeDocument(id)
-            }
-        case "pin":
-            document.pinned.toggle()
-            refreshUI()
-        case "copyPath":
-            if let path = document.url?.path {
-                SystemIntegration.copy(path)
-            }
-        case "reveal":
-            if let url = document.url {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-            }
-        case "clone":
-            activate(id)
-            mainWindow?.splitEditor(vertical: true)
-        default: closeGroup(action, reference: id)
         }
     }
 }

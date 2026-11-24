@@ -83,13 +83,17 @@ final class TabButton: NSButton {
     /// 返回：适用于被点击文档的操作与明确重排入口。
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
-        for (title, id) in [
+        var actions = [
             ("关闭", "close"), ("关闭其他", "closeOthers"), ("关闭左侧", "closeLeft"),
             ("关闭右侧", "closeRight"), ("固定 / 取消固定", "pin"),
             ("左移标签", "moveTabLeft"), ("右移标签", "moveTabRight"),
             ("移到首位", "moveTabFirst"), ("移到末位", "moveTabLast"),
             ("复制完整路径", "copyPath"), ("在 Finder 显示", "reveal"), ("克隆到分屏", "clone"),
-        ] {
+        ]
+        if owner?.canTransferTabs == true {
+            actions.append(("移动到另一窗口…", "moveTabToWindow"))
+        }
+        for (title, id) in actions {
             let item = NSMenuItem(
                 title: title,
                 action: #selector(contextAction(_:)),
