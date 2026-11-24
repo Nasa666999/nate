@@ -80,30 +80,17 @@ public struct PreparedBackTab: Sendable {
             guard !range.isEmpty else {
                 continue
             }
-            let prefix = text.text(in: range)
-            let changed = try NewlineIndentationPrefix.shift(
-                prefix,
-                levels: -1,
-                settings: settings,
-                budget: budget
-            )
-            var common = 0
-            for (old, new) in zip(prefix.utf8, changed.utf8) {
-                if common & 255 == 0 {
-                    try budget.check()
-                }
-                guard old == new else {
+            var end = range.lower
+            // 首个停靠位前的 Tab 会恰好到达该列，可从左侧移除整级并保留剩余原空白。
+            // 跨行 Tab 同样在左侧插入一级，紧接着退缩进可恢复全部原有混合字节。
+            while end < range.upper, end - range.lower < settings.width {
+                let isTab = text.byte(at: end) == 9
+                end += 1
+                if isTab {
                     break
                 }
-                common += 1
             }
-            // 只替换真实变化的空白后缀，开端不受影响的原选择和其它视图仍能精确映射。
-            edits.append(
-                TextEdit(
-                    ByteRange(range.lower + common, range.upper),
-                    String(decoding: changed.utf8.dropFirst(common), as: UTF8.self)
-                )
-            )
+            edits.append(TextEdit(ByteRange(range.lower, end), ""))
         }
         let map = try PositionMap(edits: edits)
         let after = try state.entries.map { entry in

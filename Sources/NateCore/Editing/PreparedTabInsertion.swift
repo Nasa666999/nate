@@ -3,7 +3,7 @@ import Foundation
 public struct PreparedTabInsertion: Sendable {
     public let transaction: PreparedTransaction
 
-    /// 业务作用：每个普通光标按自己的逻辑列插入 Tab 或到下个停靠位的空格，整批形成一个撤销单元。
+    /// 业务作用：普通光标执行配置的单点输入，跨行普通选择以原物理行增加一级，整批形成一个撤销单元。
     /// 参数说明:
     /// - snapshot: 带完整选择身份的固定正文。
     /// - settings: 当前语言的明确 Tab 宽度与输入方式。
@@ -18,6 +18,22 @@ public struct PreparedTabInsertion: Sendable {
             true
         }
     ) throws {
+        if let selection = snapshot.selectionState, case .stream = selection.shape,
+            selection.entries.contains(where: {
+                let range = $0.selection.range
+                return !range.isEmpty
+                    && snapshot.text.lineNumber(at: range.lower) != snapshot.text.lineNumber(at: range.upper)
+            })
+        {
+            transaction = try PreparedMultilineTab.transaction(
+                snapshot: snapshot,
+                selection: selection,
+                settings: settings,
+                overwrite: overwrite,
+                permit: permit
+            )
+            return
+        }
         if !settings.useSpaces {
             transaction = try PreparedTextInsertion(
                 snapshot: snapshot,
