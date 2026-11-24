@@ -9,6 +9,13 @@ private final class CompletionWindow: NSPanel {
 
 @MainActor
 final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+    private struct SignatureLocation: Equatable {
+        let documentID: UUID
+        let languageResource: UUID
+        let openingByte: Int
+        let name: String
+    }
+
     let table = NSTableView()
     let scroll = NSScrollView()
     let detail = NSTextField(wrappingLabelWithString: "")
@@ -17,6 +24,7 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
     var candidates: [CompletionCandidate] = []
     var signature: SignatureHint?
     var overload = 0
+    private var signatureLocation: SignatureLocation?
     private var limitMessage: String?
     var onChoose: ((String) -> Void)?
     var confirmsTab = true
@@ -95,8 +103,18 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
             hide()
             return
         }
-        if signature?.name != hint?.name {
-            overload = 0
+        if let hint {
+            let location = SignatureLocation(
+                documentID: editor.document.id,
+                languageResource: editor.brackets.resource,
+                openingByte: hint.openingByte,
+                name: hint.name
+            )
+            // 同一调用中的输入仅刷新活动参数；另一文档、语言规则或开端位置不沿用旧重载。
+            if signatureLocation != location {
+                overload = 0
+            }
+            signatureLocation = location
         }
         candidates = values
         signature = hint

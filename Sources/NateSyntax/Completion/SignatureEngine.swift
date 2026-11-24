@@ -11,7 +11,7 @@ extension CompletionEngine {
     /// - definition: 当前语言的函数与参数资源。
     /// - language: 获取原文中的不透明范围时采用的当前实际语言。
     /// - checkpoint: 同一正文和语言的已验证行首状态，缺少时从文档首行传播。
-    /// 返回：最近一层有资源定义的调用及全部重载；没有适用规则时为空。
+    /// 返回：最近一层有资源定义的实际开端字节及全部重载；没有适用规则时为空。
     public static func signature(
         snapshot: DocumentSnapshot,
         caret: Int,
@@ -47,10 +47,13 @@ extension CompletionEngine {
             else {
                 Array(source)
             }
-        var stack: [(close: Character, name: String?, argument: Int)] = []
+        var stack: [(close: Character, name: String?, argument: Int, openingByte: Int)] = []
+        var position = start
         var quote: Character?
         var escaped = false
         for (index, character) in characters.enumerated() {
+            let byte = position
+            position += character.utf8.count
             if index % 4096 == 0 {
                 try Task.checkCancellation()
             }
@@ -90,7 +93,7 @@ extension CompletionEngine {
                         name = String(characters[first..<end])
                     }
                 }
-                stack.append((character == opening ? closing : character == "[" ? "]" : "}", name, 0))
+                stack.append((character == opening ? closing : character == "[" ? "]" : "}", name, 0, byte))
                 if stack.count > 256 {
                     throw NateError.message("参数提示上下文超过 256 层。")
                 }
@@ -114,7 +117,12 @@ extension CompletionEngine {
             else {
                 continue
             }
-            return SignatureHint(name: entry.name, argument: frame.argument, overloads: entry.overloads)
+            return SignatureHint(
+                name: entry.name,
+                argument: frame.argument,
+                openingByte: frame.openingByte,
+                overloads: entry.overloads
+            )
         }
         return nil
     }

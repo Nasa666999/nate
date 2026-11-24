@@ -67,6 +67,7 @@ public struct CompletionResult: Sendable {
 public struct SignatureHint: Sendable {
     public let name: String
     public let argument: Int
+    public let openingByte: Int
     public let overloads: [CompletionOverload]
 }
 
