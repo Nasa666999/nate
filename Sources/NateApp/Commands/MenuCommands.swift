@@ -278,11 +278,17 @@ extension ApplicationController: NSMenuItemValidation {
         add(language, "复制当前 UDL…", "duplicateUDL")
         add(language, "导出当前 UDL…", "exportUDL")
         add(language, "删除当前自定义 UDL…", "deleteUDL")
-        let completion = NSMenu(title: "当前语言的补全 XML")
-        for action in CompletionOverrideCommand.allCases {
-            add(completion, action.title, action.rawValue)
+        for (kind, title) in [
+            (LanguageXMLOverrideStore.Kind.completion, "当前语言的补全 XML"),
+            (.functionList, "当前语言的函数列表 XML"),
+        ] {
+            let resources = NSMenu(title: title)
+            for action in LanguageXMLOverrideCommand.Action.allCases {
+                let command = LanguageXMLOverrideCommand(kind: kind, action: action)
+                add(resources, command.title, command.id)
+            }
+            attach(resources, to: language)
         }
-        attach(completion, to: language)
         language.addItem(.separator())
         add(language, "自动识别", "detectLanguage")
         for definition in registry?.languages ?? [] where definition.id != "searchResult" {

@@ -23,8 +23,19 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     let workspaceTabSwitching = WorkspaceTabSwitching()
     var registry: LanguageRegistry?
     var completionCatalog: CompletionCatalog?
-    let completionOverrides = CompletionOverridesRuntime()
+    let completionOverrides = CompletionOverridesRuntime(kind: .completion, label: "补全") { xml, permit in
+        guard permit() else {
+            throw CancellationError()
+        }
+        return try CompletionDefinition(importing: xml)
+    }
     var functionListCatalog: FunctionListCatalog?
+    let functionListOverrides = LanguageXMLOverrides<PreparedFunctionList>(kind: .functionList, label: "函数列表")
+    {
+        xml,
+        permit in
+        try PreparedFunctionList(FunctionListDefinition(data: xml), permit: permit)
+    }
     var structureTask: Task<Void, Never>?
     var directoryWorkspace: DirectoryWorkspaceController?
     let sidebarRecovery = SidebarRecoveryRuntime()
@@ -307,6 +318,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             }
             await loadUserLanguages()
             await loadCompletionOverrides()
+            await loadLanguageXMLOverrides(functionListOverrides)
             for (record, tree, reference) in restored.documents {
                 let document = WorkspaceDocument(
                     name: record.name,

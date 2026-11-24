@@ -77,8 +77,8 @@ extension ApplicationController {
             quickFind(action)
             return
         }
-        if let action = CompletionOverrideCommand(rawValue: id) {
-            manageCompletionOverride(action)
+        if let command = LanguageXMLOverrideCommand.named(id) {
+            manageLanguageXML(command)
             return
         }
         if id.hasPrefix("language:"), let active {

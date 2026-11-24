@@ -154,6 +154,9 @@ extension RegexParser {
             throw diagnostic("分组未闭合")
         }
         if let assertion {
+            guard !assertion.1 || allowsLookbehind else {
+                throw diagnostic("函数列表规则不支持后行断言")
+            }
             let width = assertion.1 ? fixedWidth(inside) : nil
             if assertion.1 && width == nil {
                 throw diagnostic("Lookbehind 必须使用固定长度")

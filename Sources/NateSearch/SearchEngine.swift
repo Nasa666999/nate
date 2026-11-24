@@ -49,6 +49,7 @@ public enum SearchEngine {
     /// - limitContextToScope: 为真时断言和全文终点受目标终点约束；结构规则可保留完整正文上下文。
     /// - allowEmptyAtStart: 是否接受本次调用起点的空匹配；已选中的空命中继续导航时关闭。
     /// - permit: 在解析、匹配及边界内持续复验的显式调用权限。
+    /// - structurePattern: 已按函数列表方言编译且与本请求选项绑定的执行树。
     /// - onHit: 非空时只同步提交命中坐标，不构建结果列表；计数因此不取得展示条目额度。
     /// 返回：普通调用提供绑定原文身份的命中列表；同步枚举调用的列表为空，数量由接收者累计，错误不返回部分执行结果。
     static func find(
@@ -64,6 +65,7 @@ public enum SearchEngine {
         permit: @escaping @Sendable () -> Bool = {
             true
         },
+        structurePattern: PreparedStructurePattern? = nil,
         onHit: ((NSRange) throws -> Void)? = nil
     ) throws -> SearchResult {
         try Task.checkCancellation()
@@ -89,12 +91,14 @@ public enum SearchEngine {
                 onHit: onHit
             )
         }
-        let compiled = try RegexParser.compile(
-            options.query,
-            caseSensitive: options.caseSensitive,
-            dotMatchesNewline: options.dotMatchesNewline,
-            permit: permit
-        )
+        let compiled =
+            try structurePattern?.compiled
+            ?? RegexParser.compile(
+                options.query,
+                caseSensitive: options.caseSensitive,
+                dotMatchesNewline: options.dotMatchesNewline,
+                permit: permit
+            )
         var matcher = CancellableMatcher(
             input: input,
             compiled: compiled,

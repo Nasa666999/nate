@@ -33,6 +33,7 @@ public struct FunctionListDefinition: Sendable {
     public init(data: Data) throws {
         let root = try ResourceXML.parse(data)
         guard root.name == "NotepadPlus",
+            root.children.filter({ $0.name == "functionList" }).count == 1,
             let list = root.children.first(where: {
                 $0.name == "functionList"
             }),
@@ -58,7 +59,12 @@ public struct FunctionListDefinition: Sendable {
         }
         id = identifier
         displayName = parser.attributes["displayName"] ?? identifier
-        commentExpression = parser.attributes["commentExpr"].flatMap {
+        if let canonical = parser.attributes["commentExpr"], let alternate = parser.attributes["comment"],
+            !canonical.utf8.elementsEqual(alternate.utf8)
+        {
+            throw NateError.message("函数列表的 commentExpr 与 comment 声明了不同注释规则。")
+        }
+        commentExpression = (parser.attributes["commentExpr"] ?? parser.attributes["comment"]).flatMap {
             $0.isEmpty ? nil : $0
         }
         functionRule = try parser.children.first(where: {
@@ -76,6 +82,7 @@ public struct FunctionListDefinition: Sendable {
                 $0.isEmpty ? nil : $0
             }
             guard (opening == nil) == (closing == nil),
+                node.children.filter({ $0.name == "function" }).count == 1,
                 let function = node.children.first(where: {
                     $0.name == "function"
                 })
@@ -84,7 +91,7 @@ public struct FunctionListDefinition: Sendable {
             }
             classRule = try ClassRule(
                 expression: Self.expression(node, key: "mainExpr"),
-                nameExpressions: Self.names(node, container: "className", item: "nameExpr"),
+                nameExpressions: Self.names(node, container: "className", items: ["nameExpr"]),
                 openingExpression: opening,
                 closingExpression: closing,
                 function: Self.function(function, nested: true),
@@ -98,7 +105,28 @@ public struct FunctionListDefinition: Sendable {
             throw NateError.message("函数列表没有类或函数主规则。")
         }
         originalXML = data
-        notices = Self.unknownFields(parser)
+        notices =
+            (Self.unknownFields(parser)
+            + root.children.filter({ $0.name != "functionList" }).map { "NotepadPlus/" + $0.name }
+            + list.children.filter({ $0.name != "parser" }).map { "functionList/" + $0.name }).sorted()
+    }
+
+    /// 业务作用：持久化前检查整份结构规则使用的每一个表达式，包括类内名称及边界。
+    /// 参数说明: 无。
+    /// 返回：按处理顺序排列的原文表达式，供结构执行器共享编译与失败说明。
+    public var expressions: [String] {
+        var values = commentExpression.map { [$0] } ?? []
+        if let rule = classRule {
+            values.append(rule.expression)
+            values += [rule.openingExpression, rule.closingExpression].compactMap { $0 }
+            values += rule.nameExpressions
+            values +=
+                [rule.function.expression] + rule.function.nameExpressions + rule.function.classExpressions
+        }
+        if let rule = functionRule {
+            values += [rule.expression] + rule.nameExpressions + rule.classExpressions
+        }
+        return values
     }
 
     /// 业务作用：装配单位函数的逐层名称提取规则，类内规则使用独立的 funcNameExpr 元素。
@@ -112,9 +140,9 @@ public struct FunctionListDefinition: Sendable {
             nameExpressions: names(
                 node,
                 container: "functionName",
-                item: nested ? "funcNameExpr" : "nameExpr"
+                items: nested ? ["funcNameExpr", "functionNameExpr"] : ["nameExpr"]
             ),
-            classExpressions: names(node, container: "className", item: "nameExpr"),
+            classExpressions: names(node, container: "className", items: ["nameExpr"]),
             displayMode: node.attributes["displayMode"]
         )
     }
@@ -135,18 +163,19 @@ public struct FunctionListDefinition: Sendable {
     /// 参数说明:
     /// - node: 类或函数规则节点。
     /// - container: 名称容器元素。
-    /// - item: 该容器内合法的表达式元素。
+    /// - items: 该容器内合法的表达式元素名。
     /// 返回：有序规则；单个名称最多允许 64 层。
-    static func names(_ node: ResourceXMLNode, container: String, item: String) throws -> [String] {
-        let children =
-            node.children.first(where: {
-                $0.name == container
-            })?.children ?? []
+    static func names(_ node: ResourceXMLNode, container: String, items: Set<String>) throws -> [String] {
+        let containers = node.children.filter { $0.name == container }
+        guard containers.count <= 1 else {
+            throw NateError.message("函数列表节点 \(node.name) 中出现重复的 \(container)。")
+        }
+        let children = containers.first?.children ?? []
         guard children.count <= 64 else {
             throw NateError.message("函数列表名称提取超过 64 层。")
         }
         return try children.filter {
-            $0.name == item
+            items.contains($0.name)
         }.map {
             try expression($0, key: "expr")
         }
@@ -158,10 +187,11 @@ public struct FunctionListDefinition: Sendable {
     /// 返回：稳定排序的字段路径，不改写资源正文。
     static func unknownFields(_ node: ResourceXMLNode) -> [String] {
         let attributes: [String: Set<String>] = [
-            "parser": ["id", "displayName", "commentExpr"],
+            "parser": ["id", "displayName", "commentExpr", "comment"],
             "classRange": ["mainExpr", "openSymbole", "closeSymbole", "displayMode"],
             "function": ["mainExpr", "displayMode"],
             "className": [], "functionName": [], "nameExpr": ["expr"], "funcNameExpr": ["expr"],
+            "functionNameExpr": ["expr"],
         ]
         var result = node.attributes.keys.filter {
             !(attributes[node.name] ?? []).contains($0)

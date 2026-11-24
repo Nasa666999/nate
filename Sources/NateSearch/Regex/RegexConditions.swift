@@ -29,6 +29,9 @@ extension RegexParser {
         }
         else if take(63) {
             let behind = take(60)
+            guard !behind || allowsLookbehind else {
+                throw diagnostic("函数列表规则不支持条件中的后行断言")
+            }
             let positive: Bool
             if take(61) {
                 positive = true

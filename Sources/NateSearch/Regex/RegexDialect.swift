@@ -43,6 +43,7 @@ struct CompiledRegex: Sendable {
 struct RegexParser {
     let units: [UInt16]
     var modes: RegexModes
+    var allowsLookbehind = true
     var index = 0
     var count = 0
     var names: [String: [Int]] = [:]
@@ -61,12 +62,14 @@ struct RegexParser {
     /// - pattern: 原始正则文本。
     /// - caseSensitive: 搜索界面给出的初始大小写规则。
     /// - dotMatchesNewline: 搜索界面给出的初始点号规则。
+    /// - allowsLookbehind: 调用方的规则格式是否允许后行断言。
     /// - permit: 调用方仍持有的计算权限，阻塞队列中也检查实际撤销。
     /// 返回：携带捕获和子程序定义的有界执行树。
     static func compile(
         _ pattern: String,
         caseSensitive: Bool,
         dotMatchesNewline: Bool,
+        allowsLookbehind: Bool = true,
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -85,6 +88,7 @@ struct RegexParser {
                 sensitive: caseSensitive,
                 dot: dotMatchesNewline
             ),
+            allowsLookbehind: allowsLookbehind,
             permit: permit
         )
         try parser.checkpoint(force: true)

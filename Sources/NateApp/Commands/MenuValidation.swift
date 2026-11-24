@@ -11,8 +11,8 @@ extension ApplicationController {
         guard let id = menuItem.representedObject as? String else {
             return true
         }
-        if let action = CompletionOverrideCommand(rawValue: id) {
-            return canManageCompletionOverride(action)
+        if let command = LanguageXMLOverrideCommand.named(id) {
+            return canManageLanguageXML(command)
         }
         if id.hasPrefix("activate:") {
             let fields =

@@ -1,6 +1,5 @@
 import AppKit
 import NateCore
-import NateSearch
 import NateSyntax
 
 extension ApplicationController {
@@ -45,19 +44,29 @@ extension ApplicationController {
     /// - force: 是否忽略同一请求的去重，供用户显式刷新。
     /// 返回：异步更新侧栏，主线程不运行正则或复制全文。
     func requestStructure(force: Bool = false) {
-        guard !closing, let document = active, let window = mainWindow, window.isStructureVisible else {
+        guard !closing, let document = active, let window = mainWindow, window.isStructureVisible,
+            window.editor.document === document.buffer, !document.closing
+        else {
             return
         }
         let language = document.language
         let catalogGeneration = functionListCatalog?.generation
-        let key =
-            "\(document.buffer.id):\(document.buffer.revision):\(language):\(catalogGeneration?.uuidString ?? "")"
+        let override = functionListOverrides.entries[language]
+        let overrideGeneration = override?.generation
+        let key = [
+            String(describing: ObjectIdentifier(window)), document.buffer.id.uuidString,
+            String(document.buffer.revision), language, catalogGeneration?.uuidString ?? "",
+            overrideGeneration?.uuidString ?? "",
+        ].joined(separator: ":")
         guard force || key != structureRequestKey else {
             return
         }
         cancelStructure()
         structureRequestKey = key
-        guard let definition = functionListCatalog?.definition(for: language) else {
+        guard
+            let definition = override?.definition?.definition
+                ?? functionListCatalog?.definition(for: language)
+        else {
             window.structurePanel.showState("当前语言没有适用的函数列表规则。")
             return
         }
@@ -74,32 +83,10 @@ extension ApplicationController {
                     try await Task.sleep(for: .milliseconds(180))
                 }
                 let worker = Task.detached(priority: .userInitiated) {
-                    guard snapshot.text.byteCount <= 64 * 1024 * 1024 else {
-                        throw NateError.message("函数列表正文超过 64 MB 预算。")
-                    }
-                    try Task.checkCancellation()
-                    let input = PreparedSearchInput(snapshot: snapshot)
-                    return try FunctionListEngine.analyze(snapshot: snapshot, definition: definition) {
-                        expression,
-                        scope,
-                        firstOnly in
-                        var options = SearchOptions()
-                        options.mode = .regex
-                        options.query = expression
-                        options.dotMatchesNewline = true
-                        return try input.find(
-                            options: options,
-                            scope: scope,
-                            firstOnly: firstOnly,
-                            allowEmpty: false
-                        )
-                        .hits.map {
-                            guard let range = $0.range else {
-                                throw NateError.invalidRange
-                            }
-                            return range
-                        }
-                    }
+                    let rules =
+                        try override?.definition
+                        ?? PreparedFunctionList(definition, allowsBundledLookbehind: true)
+                    return try rules.outline(in: snapshot)
                 }
                 let result = try await withTaskCancellationHandler(
                     operation: {
@@ -111,8 +98,10 @@ extension ApplicationController {
                 )
                 // 文档关闭、语言切换和资源重载都撤销旧任务的导航范围，不能只比较正文内容。
                 guard generation == self.structureGeneration, self.active === document,
+                    self.mainWindow === window, window.editor.document === document.buffer,
                     !document.closing, document.buffer.revision == snapshot.revision,
                     document.language == language, self.functionListCatalog?.generation == catalogGeneration,
+                    self.functionListOverrides.entries[language]?.generation == overrideGeneration,
                     window.isStructureVisible
                 else {
                     return
@@ -120,7 +109,9 @@ extension ApplicationController {
                 window.structurePanel.update(result, detail: definition.displayName + " · 双击或回车定位")
                 window.structurePanel.onNavigate = {
                     [weak self, weak document, weak window] range in
-                    guard let self, let document, let window else {
+                    guard let self, let document, let window, self.mainWindow === window,
+                        window.editor.document === document.buffer, generation == self.structureGeneration
+                    else {
                         return
                     }
                     // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
@@ -130,6 +121,7 @@ extension ApplicationController {
                     // 输入法确认可能提交新修订，定位前必须再次核验而不能把旧范围夹紧后使用。
                     guard self.active === document, document.buffer.revision == result.revision,
                         document.language == language, generation == self.structureGeneration,
+                        self.functionListOverrides.entries[language]?.generation == overrideGeneration,
                         !document.closing
                     else {
                         self.requestStructure(force: true)
@@ -143,10 +135,31 @@ extension ApplicationController {
             }
             catch is CancellationError {}
             catch {
-                if generation == self.structureGeneration, window.isStructureVisible {
+                if generation == self.structureGeneration, self.mainWindow === window,
+                    window.isStructureVisible
+                {
                     window.structurePanel.showState("函数列表未完成：" + error.localizedDescription)
                 }
             }
+        }
+    }
+
+    /// 业务作用：新规则生效后立即撤销所有相关窗口的导航权限，活动窗口重新提取，后台窗口在使用时重建。
+    /// 参数说明:
+    /// - language: 用户刚刚更新的实际语言标识。
+    /// 返回：相关面板不再持有旧字节范围，其它语言当前任务保持正常。
+    func invalidateFunctionLists(for language: String) {
+        for window in editorWindows where window.isStructureVisible {
+            guard documents.first(where: { $0.buffer === window.editor.document })?.language == language
+            else {
+                continue
+            }
+            window.structurePanel.onNavigate = nil
+            window.structurePanel.showState("函数列表规则已更新。")
+        }
+        if active?.language == language {
+            cancelStructure()
+            requestStructure(force: true)
         }
     }
 }
