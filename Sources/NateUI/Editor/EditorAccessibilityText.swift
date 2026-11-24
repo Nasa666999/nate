@@ -93,19 +93,40 @@ extension EditorView {
         return document.text.lineNumber(at: byte)
     }
 
-    /// 业务作用：报告此编辑视图实际可见逻辑行覆盖的正文范围。
+    /// 业务作用：报告此编辑视图的可见正文，超长软换行端点采用真实视口而不是整条逻辑行。
     /// 参数说明: 无。
-    /// 返回：可见范围的首尾物理行边界；无有效布局或候选未确认时返回无效范围。
+    /// 返回：可用的原 UTF-16 范围；缺少实际超长行布局或候选未确认时返回无效范围。
     public override func accessibilityVisibleCharacterRange() -> NSRange {
-        guard let visible = visibleLogicalLineRange() else {
+        guard let visible = visibleLogicalLineRange(), !visible.isEmpty else {
             return NSRange(location: NSNotFound, length: 0)
         }
-        return accessibilityRange(
-            forBytes: ByteRange(
-                document.text.lineStart(visible.lowerBound),
-                document.text.lineStart(visible.upperBound)
-            )
-        )
+        guard let start = accessibleViewportEndpoint(line: visible.lowerBound, leading: true),
+            let end = accessibleViewportEndpoint(line: visible.upperBound - 1, leading: false),
+            start <= end
+        else {
+            return NSRange(location: NSNotFound, length: 0)
+        }
+        return accessibilityRange(forBytes: ByteRange(start, end))
+    }
+
+    /// 业务作用：辅助客户端只收到当前实际超长软换行窗口的外端点，以免整行超过可读取额度。
+    /// 参数说明:
+    /// - line: 当前可见区域的首或末逻辑行。
+    /// - leading: 取该行可见起点时为真，取结束边界时为假。
+    /// 返回：原文实际端点；超长几何没有经过当前窗口复验时为空。
+    private func accessibleViewportEndpoint(line: Int, leading: Bool) -> Int? {
+        let source = document.text.lineRange(line)
+        guard wrapLines, source.count > EditorNativeLayoutPolicy.maximumParagraphBytes else {
+            return leading ? source.lower : source.upper
+        }
+        let layout = layoutLine(line)
+        if layout.range.count <= EditorNativeLayoutPolicy.maximumParagraphBytes {
+            return leading ? source.lower : source.upper
+        }
+        // 只从当前切片读取可见视觉行的原范围，暂不可见的长行尾部不带入系统查询。
+        let viewport = visibleRect.offsetBy(dx: -gutterWidth, dy: -projection.y(of: line) - 8)
+        let visible = layout.visibleByteRanges(in: viewport)
+        return leading ? visible.first?.lower : visible.last?.upper
     }
 
     /// 业务作用：以当前已提交版本转换字节范围，辅助功能与文档索引共享真实边界。

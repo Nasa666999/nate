@@ -2,7 +2,7 @@ import AppKit
 import NateCore
 
 @MainActor
-final class LongLineWindow {
+final class LongLineWindow: LongLineProjection {
     private struct TabProof: Hashable {
         let font: NSFont
         let width: Int
@@ -237,8 +237,9 @@ final class LongLineWindow {
     /// 业务作用：远处光标先投影附近原文，再从已经排版的字形取得插入位置。
     /// 参数说明:
     /// - local: 相对完整逻辑行的 UTF-16 偏移。
+    /// - downstream: 调用点的软换行亲和性，单个视觉行的两种亲和性使用同一位置。
     /// 返回：同一完整行坐标中的原生光标矩形，不建立前缀字形副本。
-    func caret(at local: Int) -> NSRect {
+    func caret(at local: Int, downstream: Bool) -> NSRect {
         let column = min(characterCount, max(0, local))
         guard ensureColumn(column) else {
             return .zero

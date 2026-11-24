@@ -387,7 +387,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     /// - line: 真实逻辑行号。
     /// 返回：本视图私有的 TextKit 2 段落缓存。
     func layoutLine(_ line: Int) -> LineLayout {
-        let viewport = visibleRect.offsetBy(dx: -gutterWidth, dy: 0)
+        let viewport = visibleRect.offsetBy(dx: -gutterWidth, dy: -projection.y(of: line) - 8)
         if let cached = layouts[line] {
             cached.updateViewport(viewport)
             return cached
@@ -407,7 +407,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             tokens: tokens,
             rtl: rtl,
             appearance: effectiveAppearance,
-            viewport: wrapLines ? nil : viewport,
+            viewport: viewport,
+            softWrapping: wrapLines,
             tabWidth: tabSettings.width,
             showSequences: showSymbols,
             theme: editorTheme?.definition,
@@ -465,8 +466,12 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         rect.origin.x += gutterWidth + selectionCaretOffset(for: selection)
         rect.origin.y += projection.y(of: line) + 8
         rect.size.height = lineHeight
-        if rect.maxX + 20 > frame.width {
-            setFrameSize(NSSize(width: rect.maxX + 20, height: frame.height))
+        let measuredHeight = wrapLines ? projection.y(of: displayTree.lineCount) + 60 : frame.height
+        if rect.maxX + 20 > frame.width || measuredHeight > frame.height {
+            // 导航可能比下一次绘制更早取得完整行高，先更新滚动范围才能显示远处的真实光标。
+            setFrameSize(
+                NSSize(width: max(frame.width, rect.maxX + 20), height: max(frame.height, measuredHeight))
+            )
         }
         scrollToVisible(rect.insetBy(dx: -20, dy: -20))
     }

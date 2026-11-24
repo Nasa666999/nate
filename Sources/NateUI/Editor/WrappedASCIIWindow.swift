@@ -1,0 +1,300 @@
+import AppKit
+import NateCore
+
+struct WrappedASCIIGeometry {
+    let columns: Int
+    let pitch: CGFloat
+    let firstTop: CGFloat
+    let firstBottom: CGFloat
+}
+
+@MainActor
+final class WrappedASCIIWindow: LongLineProjection {
+    private let snapshot: DocumentSnapshot
+    private let range: ByteRange
+    private let font: NSFont
+    private let appearance: NSAppearance
+    private let containerWidth: CGFloat
+    private let theme: EditorThemeDefinition?
+    private let language: String?
+    private let fontZoomAdjustment: CGFloat
+    private let advance: CGFloat
+    private let metrics: WrappedASCIIGeometry
+    private let rowCount: Int
+    private var rows: Range<Int>
+    private var native: LineLayout
+    private(set) var unavailableReason: String?
+
+    var content: EditorContentManager {
+        native.content
+    }
+    var manager: NSTextLayoutManager {
+        native.manager
+    }
+    var renderedRange: ByteRange {
+        native.range
+    }
+    var characterCount: Int {
+        range.count
+    }
+    var width: CGFloat {
+        CGFloat(metrics.columns) * advance
+    }
+    var height: CGFloat {
+        max(20, metrics.firstBottom + CGFloat(rowCount - 1) * metrics.pitch)
+    }
+    private var offsetY: CGFloat {
+        CGFloat(rows.lowerBound) * metrics.pitch
+    }
+
+    /// 业务作用：只有原始长行不会产生独立词间断点且实际字体提供固定列和行高时，才用行窗口呈现软换行。
+    /// 参数说明:
+    /// - snapshot: 当前完整固定正文。
+    /// - range: 本行的真实正文范围，排除原始物理行结束字节。
+    /// - font: 当前视图字体，实际主题字体在下方求取。
+    /// - appearance: 所属窗口当前外观。
+    /// - containerWidth: 当前正文实际的软换行容器宽度。
+    /// - theme: 当前编辑器的完整主题。
+    /// - language: 当前绑定的原语言。
+    /// - fontZoomAdjustment: 当前视图实际缩放差值。
+    /// 返回：具备完整原生断行证据的初始窗口；不支持的内容、字体或宽度交回普通段落门禁。
+    init?(
+        snapshot: DocumentSnapshot,
+        range: ByteRange,
+        font: NSFont,
+        appearance: NSAppearance,
+        containerWidth: CGFloat,
+        theme: EditorThemeDefinition?,
+        language: String?,
+        fontZoomAdjustment: CGFloat
+    ) {
+        let actual = EditorThemePresentation.baseFont(
+            font,
+            theme: theme,
+            language: language,
+            adjustment: fontZoomAdjustment
+        )
+        // 只有无词间软断点的单一 ASCII 串可复用固定行距，原文里的标点、空白和其它方向需要完整上下文。
+        guard range.count > EditorNativeLayoutPolicy.maximumParagraphBytes,
+            snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
+            snapshot.text.isAlphanumericASCII(in: range), containerWidth.isFinite, containerWidth > 0,
+            let advance = LongLineWindow.uniformAdvance(actual, appearance: appearance),
+            containerWidth / advance <= 8192
+        else {
+            return nil
+        }
+        let guess = max(1, Int(containerWidth / advance))
+        let sample = ByteRange(range.lower, range.lower + min(range.count, guess * 4))
+        let native = Self.layout(
+            snapshot: snapshot,
+            range: sample,
+            font: font,
+            appearance: appearance,
+            width: containerWidth,
+            theme: theme,
+            language: language,
+            fontZoomAdjustment: fontZoomAdjustment
+        )
+        guard let metrics = native.uniformWrapping(advance: advance) else {
+            return nil
+        }
+        self.snapshot = snapshot
+        self.range = range
+        self.font = font
+        self.appearance = appearance
+        self.containerWidth = containerWidth
+        self.theme = theme
+        self.language = language
+        self.fontZoomAdjustment = fontZoomAdjustment
+        self.advance = advance
+        self.metrics = metrics
+        rowCount = (range.count - 1) / metrics.columns + 1
+        // 只有末行也属于固定列边界时可复用试样窗口，避免将试样截断处冒用为完整长行的真实行末。
+        let completeSample = sample.count.isMultiple(of: metrics.columns)
+        rows = completeSample ? 0..<(sample.count / metrics.columns) : 0..<0
+        self.native = native
+        if !completeSample {
+            project(covering: 0...0)
+        }
+    }
+
+    /// 业务作用：用实际视口的纵坐标推导原生行窗口，远处滚动不排版先前的全部字形。
+    /// 参数说明:
+    /// - viewport: 相对本逻辑行起点的实际可见矩形。
+    /// 返回：可见视觉行获得完整投影，超过窗口限额时撤回坐标权限。
+    func updateViewport(_ viewport: NSRect) {
+        let visible = row(at: viewport.minY)...row(at: max(viewport.minY, viewport.maxY))
+        project(covering: visible)
+    }
+
+    /// 业务作用：只在真实命中行所在的有界 TextKit 窗口解释横纵坐标。
+    /// 参数说明:
+    /// - point: 相对完整逻辑行的视图坐标。
+    /// 返回：UTF-16 原位置；超出实际行底时采用文件行尾端点。
+    func character(at point: NSPoint) -> Int {
+        let line = row(at: point.y)
+        project(covering: line...line)
+        guard unavailableReason == nil, point.x.isFinite, point.y.isFinite else {
+            return 0
+        }
+        if point.y >= height {
+            return characterCount
+        }
+        return rows.lowerBound * metrics.columns
+            + native.character(at: NSPoint(x: point.x, y: point.y - offsetY))
+    }
+
+    /// 业务作用：真实软换行边界保留上游和下游视觉行的独立光标坐标。
+    /// 参数说明:
+    /// - local: 相对完整逻辑行的 UTF-16 端点。
+    /// - downstream: 字符边缘请求使用下一个视觉行时为真。
+    /// 返回：经原生确认的光标坐标；窗口无法验证时返回空矩形。
+    func caret(at local: Int, downstream: Bool) -> NSRect {
+        let position = min(characterCount, max(0, local))
+        let row = min(rowCount - 1, position / metrics.columns)
+        let prev = position > 0 && position.isMultiple(of: metrics.columns) ? max(0, row - 1) : row
+        project(covering: prev...row)
+        guard unavailableReason == nil else {
+            return .zero
+        }
+        return native.caret(
+            at: position - rows.lowerBound * metrics.columns,
+            downstream: downstream && position < characterCount
+        ).offsetBy(dx: 0, dy: offsetY)
+    }
+
+    /// 业务作用：由当前真实字形投影正文选择，离开视口的文本恢复为核心原范围。
+    /// 参数说明:
+    /// - selection: 完整逻辑行使用的原字节选择范围。
+    /// 返回：当前有界布局中的选择矩形。
+    func selectionRects(_ selection: ByteRange) -> [NSRect] {
+        let lower = max(selection.lower, renderedRange.lower)
+        let upper = min(selection.upper, renderedRange.upper)
+        guard unavailableReason == nil, lower < upper else {
+            return []
+        }
+        return native.selectionRects(ByteRange(lower, upper)).map {
+            $0.offsetBy(dx: 0, dy: offsetY)
+        }
+    }
+
+    /// 业务作用：查找标记及辅助读取按同一视口内的实际原生行取得可见正文。
+    /// 参数说明:
+    /// - viewport: 相对完整逻辑行的真实视口。
+    /// 返回：有界原字节范围，窗口外正文不复制到绘制层。
+    func visibleByteRanges(in viewport: NSRect) -> [ByteRange] {
+        guard unavailableReason == nil else {
+            return []
+        }
+        return native.visibleByteRanges(in: viewport.offsetBy(dx: 0, dy: -offsetY))
+    }
+
+    /// 业务作用：在完整逻辑行的正确纵坐标呈现局部原生段落。
+    /// 参数说明:
+    /// - origin: 完整逻辑行在视图中的起点。
+    /// - context: 实际绘制上下文。
+    /// 返回：当前可见段落完成绘制，正文和布局之外的选择保持。
+    func draw(at origin: NSPoint, in context: CGContext) {
+        native.draw(at: NSPoint(x: origin.x, y: origin.y + offsetY), in: context)
+    }
+
+    /// 业务作用：明确选择前景使用原来的软换行容器及字距证明。
+    /// 参数说明:
+    /// - origin: 完整逻辑行当前绘制起点。
+    /// - color: 主题指定的选择前景色。
+    /// - context: 已裁剪为原生选择片段的上下文。
+    /// 返回：只更改绘制前景。
+    func drawForeground(at origin: NSPoint, color: NSColor, in context: CGContext) {
+        native.drawForeground(at: NSPoint(x: origin.x, y: origin.y + offsetY), color: color, in: context)
+    }
+
+    /// 业务作用：有界整数行号只由真实首行底边和固定行距换算。
+    /// 参数说明:
+    /// - y: 相对完整逻辑行的原生纵坐标。
+    /// 返回：合法范围内的视觉行号。
+    private func row(at y: CGFloat) -> Int {
+        guard y.isFinite else {
+            return 0
+        }
+        let number = floor((y - metrics.firstBottom) / metrics.pitch) + 1
+        return Int(min(CGFloat(rowCount - 1), max(0, number)))
+    }
+
+    /// 业务作用：从真实视觉行开始重新交付原生段落，复验字形后才撤换旧片段。
+    /// 参数说明:
+    /// - requested: 本次需要完整覆盖的真实视觉行范围。
+    /// 返回：取得相关有界窗口或明确暂停，不使用部分测量提供新坐标。
+    private func project(covering requested: ClosedRange<Int>) {
+        if rows.contains(requested.lowerBound), rows.contains(requested.upperBound) {
+            unavailableReason = nil
+            return
+        }
+        let maximum = EditorNativeLayoutPolicy.maximumWindowCharacters / metrics.columns
+        let needed = requested.count
+        guard needed <= maximum else {
+            unavailableReason = "超长软换行的视口超过 65536 个字形的容量，已暂停当前呈现。"
+            return
+        }
+        let count = min(rowCount, min(maximum, max(8, needed + 12)))
+        let first = min(rowCount - count, max(0, requested.lowerBound - (count - needed) / 2))
+        let last = first + count
+        let segment = ByteRange(
+            range.lower + first * metrics.columns,
+            range.lower + min(characterCount, last * metrics.columns)
+        )
+        let candidate = Self.layout(
+            snapshot: snapshot,
+            range: segment,
+            font: font,
+            appearance: appearance,
+            width: containerWidth,
+            theme: theme,
+            language: language,
+            fontZoomAdjustment: fontZoomAdjustment
+        )
+        // 不同片段都必须重现原来的断行端点和像素几何，失配时不会发布旧窗口之外的坐标。
+        guard candidate.uniformWrapping(advance: advance, expected: metrics) != nil else {
+            unavailableReason = "超长软换行的原生断行位置无法确认，已暂停当前呈现。"
+            return
+        }
+        native = candidate
+        rows = first..<last
+        unavailableReason = nil
+    }
+
+    /// 业务作用：在当前真实宽度下用 TextKit 排版实际原文片段，关闭会破坏已确认等距的字距和连字。
+    /// 参数说明:
+    /// - snapshot: 当前完整固定正文。
+    /// - range: 当前有界原始字节段。
+    /// - font: 当前视图源字体。
+    /// - appearance: 当前视图的实际外观。
+    /// - width: 所属视口采用的完整排版宽度。
+    /// - theme: 当前主题。
+    /// - language: 当前语言。
+    /// - fontZoomAdjustment: 所属视图真实缩放差值。
+    /// 返回：绑定原字节的真实 TextKit 软换行段落。
+    private static func layout(
+        snapshot: DocumentSnapshot,
+        range: ByteRange,
+        font: NSFont,
+        appearance: NSAppearance,
+        width: CGFloat,
+        theme: EditorThemeDefinition?,
+        language: String?,
+        fontZoomAdjustment: CGFloat
+    ) -> LineLayout {
+        LineLayout(
+            snapshot: snapshot,
+            range: range,
+            font: font,
+            fontZoomAdjustment: fontZoomAdjustment,
+            width: width,
+            tokens: [],
+            rtl: false,
+            appearance: appearance,
+            nativeASCII: true,
+            theme: theme,
+            language: language
+        )
+    }
+}

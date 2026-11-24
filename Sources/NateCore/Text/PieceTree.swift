@@ -15,6 +15,7 @@ final class PieceNode: Sendable {
     let contentFingerprint: UInt64
     let fingerprintPower: UInt64
     let printableASCII: Bool
+    let alphanumericASCII: Bool
 
     /// 业务作用：缓存叶片的坐标与行索引，限制每次局部扫描的规模。
     /// 参数说明:
@@ -33,16 +34,21 @@ final class PieceNode: Sendable {
         var fingerprint: UInt64 = 0
         var power: UInt64 = 1
         var printableASCII = true
+        var alphanumericASCII = true
         for byte in bytes {
             fingerprint = fingerprint &* 1_099_511_628_211 &+ UInt64(byte) &+ 1
             power = power &* 1_099_511_628_211
             if byte < 32 || byte > 126 {
                 printableASCII = false
             }
+            if alphanumericASCII && !Self.isASCIIAlphanumeric(byte) {
+                alphanumericASCII = false
+            }
         }
         contentFingerprint = fingerprint
         fingerprintPower = power
         self.printableASCII = printableASCII
+        self.alphanumericASCII = alphanumericASCII
     }
 
     /// 业务作用：聚合子树索引，跨节点 CRLF 只计一行。
@@ -63,6 +69,15 @@ final class PieceNode: Sendable {
         contentFingerprint = left.contentFingerprint &* right.fingerprintPower &+ right.contentFingerprint
         fingerprintPower = left.fingerprintPower &* right.fingerprintPower
         printableASCII = left.printableASCII && right.printableASCII
+        alphanumericASCII = left.alphanumericASCII && right.alphanumericASCII
+    }
+
+    /// 业务作用：在不可变正文中固定能够复用等宽软换行证据的字母与数字范围。
+    /// 参数说明:
+    /// - byte: 当前正文的一个原字节。
+    /// 返回：仅 ASCII 数字及大小写字母为真。
+    static func isASCIIAlphanumeric(_ byte: UInt8) -> Bool {
+        (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
     }
 
     /// 业务作用：以文件真实换行统计逻辑行，CRLF 不重复计算。

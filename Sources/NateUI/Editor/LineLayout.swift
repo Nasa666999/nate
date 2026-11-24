@@ -11,7 +11,7 @@ final class LineLayout {
     var fragments: [NSTextLayoutFragment] = []
     var height: CGFloat = 20
     var width: CGFloat = 0
-    private let wideLine: LongLineWindow?
+    private let wideLine: (any LongLineProjection)?
     private let horizontallyOrderedASCII: Bool
     private(set) var unavailableReason: String?
     private var nativeLines: [NativeLineGeometry] = []
@@ -47,7 +47,8 @@ final class LineLayout {
     /// - tokens: 当前快照语法呈现。
     /// - rtl: 段落基础方向。
     /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
-    /// - viewport: 不换行时的真实可见正文矩形，省略时保留完整原生段落流程。
+    /// - viewport: 真实可见正文矩形，省略时保留完整原生段落流程。
+    /// - softWrapping: 当前视图使用真实软换行时为真。
     /// - nativeASCII: 已证明独立标量的有界内部段落，关闭上下文连字与字距调整。
     /// - nativeHanFont: 仅安全汉字窗口采用的已确认级联字体。
     /// - tabWidth: 当前语言的合法 Tab 停靠间距。
@@ -68,6 +69,7 @@ final class LineLayout {
         rtl: Bool,
         appearance: NSAppearance,
         viewport: NSRect? = nil,
+        softWrapping: Bool = false,
         nativeASCII: Bool = false,
         nativeHanFont: NativeHanLineFont? = nil,
         tabWidth: Int = 4,
@@ -105,7 +107,19 @@ final class LineLayout {
         horizontallyOrderedASCII = !rtl && snapshot.text.isPrintableASCII(in: range)
         let origin = snapshot.text.utf16Offset(byte: range.lower) ?? 0
         originUTF16 = origin
-        if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {
+        if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil, softWrapping {
+            wideLine = WrappedASCIIWindow(
+                snapshot: snapshot,
+                range: range,
+                font: font,
+                appearance: appearance,
+                containerWidth: width,
+                theme: theme,
+                language: language,
+                fontZoomAdjustment: fontZoomAdjustment
+            )
+        }
+        else if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {
             wideLine = LongLineWindow(
                 snapshot: snapshot,
                 range: range,
@@ -298,7 +312,7 @@ final class LineLayout {
     /// 返回：段落内光标矩形。
     func caret(at local: Int, downstream: Bool = false) -> NSRect {
         if let wideLine {
-            let result = wideLine.caret(at: local)
+            let result = wideLine.caret(at: local, downstream: downstream)
             synchronizeWideProjection()
             return result
         }
@@ -308,6 +322,40 @@ final class LineLayout {
         // 尾随空格的真实插入点可能超过原生容器，保留已证明的边缘以免重绘收回可见光标。
         width = max(width, result.maxX)
         return result
+    }
+
+    /// 业务作用：每个原生视口都确认同一软换行步距和完整顺序，只有证明一致才可沿纵向平移。
+    /// 参数说明:
+    /// - advance: 当前字体单个 ASCII 字形已确认的横向间距。
+    /// - expected: 首个原生段落固定的列数、纵向步距及行底。
+    /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
+    func uniformWrapping(advance: CGFloat, expected: WrappedASCIIGeometry? = nil) -> WrappedASCIIGeometry? {
+        guard unavailableReason == nil, orderedPositions, orderedHeights, let first = nativeLines.first else {
+            return nil
+        }
+        let columns = expected?.columns ?? first.upper
+        let pitch = expected?.pitch ?? ((nativeLines.dropFirst().first?.bounds.minY ?? 0) - first.bounds.minY)
+        let top = expected?.firstTop ?? first.bounds.minY
+        let bottom = expected?.firstBottom ?? first.bounds.maxY
+        guard columns > 0, pitch.isFinite, pitch > 0, bottom > top, characterCount > 0,
+            nativeLines.count == (characterCount - 1) / columns + 1
+        else {
+            return nil
+        }
+        for (index, row) in nativeLines.enumerated() {
+            let lower = index * columns
+            let count = min(columns, characterCount - lower)
+            let originY = CGFloat(index) * pitch
+            guard row.lower == lower, row.upper == lower + count,
+                abs(row.bounds.minY - (top + originY)) < 0.04,
+                abs(row.bounds.maxY - (bottom + originY)) < 0.04,
+                abs(row.caret(at: lower).minX) < 0.02,
+                abs(row.caret(at: row.upper).minX - CGFloat(count) * advance) < 0.04
+            else {
+                return nil
+            }
+        }
+        return WrappedASCIIGeometry(columns: columns, pitch: pitch, firstTop: top, firstBottom: bottom)
     }
 
     /// 业务作用：原生视觉行一次建立索引，只有实际范围与高度均有序时才允许二分查询。
