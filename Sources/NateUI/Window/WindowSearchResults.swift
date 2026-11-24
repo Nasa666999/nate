@@ -12,7 +12,7 @@ extension EditorWindow {
             resultsScroll.isHidden = true
             searchResults.isHidden = false
         }
-        revealResultArea()
+        revealResultArea(selecting: false)
     }
 
     /// 业务作用：显式重新显示已有搜索批次，隐藏结果不清除查询、文档或结果历史。
@@ -25,7 +25,7 @@ extension EditorWindow {
         resultGeneration = UUID()
         revealResultArea()
         if transfer {
-            window?.makeFirstResponder(searchResults.outline)
+            searchResults.window?.makeFirstResponder(searchResults.outline)
         }
     }
 
@@ -44,11 +44,11 @@ extension EditorWindow {
         resultGeneration = UUID()
         revealResultArea()
         if transfer {
-            window?.makeFirstResponder(results)
+            results.window?.makeFirstResponder(results)
         }
     }
 
-    /// 业务作用：关闭底部结果只改变显示，输入草稿未确认时保留其上下文，文档和批次始终独立存在。
+    /// 业务作用：隐藏停靠或浮动的结果只改变显示，输入草稿未确认时保留其上下文。
     /// 参数说明:
     /// - visible: 是否恢复当前结果视图。
     /// 返回：合法显示变更完成，关闭时撤销旧定位资格并在需要时交还正文焦点。
@@ -59,29 +59,24 @@ extension EditorWindow {
         }
         let transfer = !visible && resultContainsResponder(resultHost)
         resultGeneration = UUID()
-        resultHost.isHidden = !visible
         if visible {
             revealResultArea()
         }
         else {
-            window?.contentView?.layoutSubtreeIfNeeded()
-            split.adjustSubviews()
+            panelDock.setVisible(.results, false)
+            refreshEditors()
         }
         if transfer {
             window?.makeFirstResponder(editor)
         }
     }
 
-    /// 业务作用：结果区域按实际窗口尺寸分配底部空间，小窗口保留正文并让工具和结果保持可操作。
-    /// 参数说明: 无。
-    /// 返回：底部区域可见且布局完成，不调用输入确认或修改正文选择。
-    func revealResultArea() {
-        resultHost.isHidden = false
-        window?.contentView?.layoutSubtreeIfNeeded()
-        split.adjustSubviews()
-        let bottom = min(240, max(140, split.bounds.height * 0.45))
-        split.setPosition(max(100, split.bounds.height - bottom), ofDividerAt: 0)
-        window?.contentView?.layoutSubtreeIfNeeded()
+    /// 业务作用：在实际停靠边或浮动窗口显示同一份结果，正文使用剩余区域重新排版。
+    /// 参数说明:
+    /// - selecting: 是否将组合标签切到结果，后台发布保留用户当前工具。
+    /// 返回：原结果在当前配置的位置显示，输入与选择继续由原视图持有。
+    func revealResultArea(selecting: Bool = true) {
+        panelDock.setVisible(.results, true, selecting: selecting)
         refreshEditors()
     }
 
@@ -90,7 +85,7 @@ extension EditorWindow {
     /// - view: 需要保护的当前结果区域。
     /// 返回：实际原生首响应者属于该区域时为真，不获取或改变焦点。
     func resultContainsResponder(_ view: NSView) -> Bool {
-        guard let responder = window?.firstResponder as? NSView else {
+        guard let responder = view.window?.firstResponder as? NSView else {
             return false
         }
         return responder === view || responder.isDescendant(of: view)

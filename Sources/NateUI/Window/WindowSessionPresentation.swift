@@ -36,7 +36,8 @@ extension EditorWindow {
             verticalSplit: vertical,
             splitFraction: min(1, max(0, primaryExtent / available)),
             secondaryFocused: editor === secondary,
-            inactiveViews: inactive.isEmpty ? nil : inactive
+            inactiveViews: inactive.isEmpty ? nil : inactive,
+            panels: panelDock.session()
         )
     }
 
@@ -57,6 +58,9 @@ extension EditorWindow {
             display: false
         )
         window.contentView?.layoutSubtreeIfNeeded()
+        if let panels = session.panels {
+            panelDock.restore(panels)
+        }
         if let secondary = session.secondary, let secondaryDocument,
             secondary.documentID == secondaryDocument.id
         {
@@ -86,7 +90,7 @@ extension EditorWindow {
     /// 参数说明:
     /// - frame: 已验证的原屏幕坐标。
     /// 返回：尽量保持原位置和尺寸，超出可见区域时在最相关屏幕限位。
-    private func visibleRecoveryFrame(_ frame: NSRect) -> NSRect {
+    func visibleRecoveryFrame(_ frame: NSRect) -> NSRect {
         let displays = NSScreen.screens.map(\.visibleFrame)
         let enclosing = displays.first { $0.contains(frame) }
         if enclosing != nil {

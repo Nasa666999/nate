@@ -190,7 +190,11 @@ extension ApplicationController {
                 selected: restored.selected
             )
         }
-        window.setProjectsVisible(snapshot.projectsVisible, selected: snapshot.selectedProject)
+        window.setProjectsVisible(
+            snapshot.projectsVisible,
+            selected: snapshot.selectedProject,
+            selecting: false
+        )
         if let directory = snapshot.directory {
             if directoryWorkspace?.window !== window {
                 directoryWorkspace?.stop()

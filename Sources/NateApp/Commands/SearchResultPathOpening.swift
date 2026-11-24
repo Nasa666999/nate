@@ -53,13 +53,14 @@ extension ApplicationController {
             let revision = active?.buffer.revision
             let selections = window.editor.viewSelections
             let documentSelections = active?.buffer.selections
-            let responder = window.window?.firstResponder
+            let panel = window.searchResults.window
+            let responder = panel?.firstResponder
             let keyWindow = NSApp.keyWindow
             let modalWindow = NSApp.modalWindow
             let permitted: @MainActor () -> Bool = {
                 [
                     weak self, weak window, weak origin = active?.buffer, weak editor = window.editor,
-                    weak responder, weak keyWindow, weak modalWindow
+                    weak panel, weak responder, weak keyWindow, weak modalWindow
                 ] in
                 // 当前窗口、真实视图和原光标共同约束交接，等待期间的新选择不能被旧路径意图覆盖。
                 guard let self, let window, !self.closing, !Task.isCancelled,
@@ -70,7 +71,8 @@ extension ApplicationController {
                     self.findWindow?.inputIdentities == inputs, window.editor === editor,
                     editor?.document === origin, self.active?.buffer === origin, origin?.revision == revision,
                     editor?.viewSelections == selections, origin?.selections == documentSelections,
-                    window.window?.firstResponder === responder, NSApp.keyWindow === keyWindow,
+                    window.searchResults.window === panel, panel?.firstResponder === responder,
+                    NSApp.keyWindow === keyWindow,
                     NSApp.modalWindow === modalWindow
                 else {
                     return false

@@ -18,6 +18,10 @@ extension ApplicationController {
             return
         }
         noteUnrecordedMacroCommand(id)
+        if id.hasPrefix("workspacePanelPlacement:") {
+            applyWorkspacePanelCommand(id)
+            return
+        }
         if id.hasPrefix("tabLayout:"),
             let mode = DocumentTabLayout(rawValue: String(id.dropFirst("tabLayout:".count)))
         {

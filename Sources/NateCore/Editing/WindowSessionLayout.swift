@@ -19,6 +19,14 @@ public struct WindowSessionFrame: Codable, Sendable, Equatable {
         self.width = width
         self.height = height
     }
+
+    /// 业务作用：窗口与面板共用有界屏幕几何，避免把损坏数值送入原生排版。
+    /// 参数说明: 无。
+    /// 返回：坐标有限且大小在可解释范围时为真。
+    var isValid: Bool {
+        (-1_048_576...1_048_576).contains(x) && (-1_048_576...1_048_576).contains(y)
+            && (1...65_536).contains(width) && (1...65_536).contains(height)
+    }
 }
 
 public struct WindowSessionViewport: Codable, Sendable, Equatable {
@@ -125,6 +133,7 @@ public struct WindowSession: Codable, Sendable, Equatable {
     public let splitFraction: Double
     public let secondaryFocused: Bool
     public let inactiveViews: [WindowSessionView]?
+    public let panels: [WorkspacePanelSession]?
 
     /// 业务作用：保留原窗口标签顺序、几何与最多两个独立正文视图。
     /// 参数说明:
@@ -136,6 +145,7 @@ public struct WindowSession: Codable, Sendable, Equatable {
     /// - splitFraction: 分隔位置占可用宽度或高度的比例。
     /// - secondaryFocused: 第二视图是否曾持有本窗口的编辑焦点。
     /// - inactiveViews: 已访问但现在隐藏的标签曾保留的窗口独立位置。
+    /// - panels: 已建立的停靠组与浮动面板布局，早期归档可为空。
     /// 返回：待整份窗口布局复验的一个窗口。
     public init(
         tabs: [UUID],
@@ -145,7 +155,8 @@ public struct WindowSession: Codable, Sendable, Equatable {
         verticalSplit: Bool,
         splitFraction: Double,
         secondaryFocused: Bool,
-        inactiveViews: [WindowSessionView]? = nil
+        inactiveViews: [WindowSessionView]? = nil,
+        panels: [WorkspacePanelSession]? = nil
     ) {
         self.tabs = tabs
         self.frame = frame
@@ -155,6 +166,7 @@ public struct WindowSession: Codable, Sendable, Equatable {
         self.splitFraction = splitFraction
         self.secondaryFocused = secondaryFocused
         self.inactiveViews = inactiveViews
+        self.panels = panels
     }
 
     /// 业务作用：窗口焦点恢复时确定原编辑视图和活动标签共用的实际文档。
@@ -200,12 +212,22 @@ public struct WindowSessionLayout: Codable, Sendable, Equatable {
         for entry in windows {
             let tabs = Set(entry.tabs)
             guard (1...1024).contains(entry.tabs.count), tabs.count == entry.tabs.count,
-                (-1_048_576...1_048_576).contains(entry.frame.x),
-                (-1_048_576...1_048_576).contains(entry.frame.y),
-                (1...65_536).contains(entry.frame.width), (1...65_536).contains(entry.frame.height),
+                entry.frame.isValid,
                 (0...1).contains(entry.splitFraction), !entry.secondaryFocused || entry.secondary != nil
             else {
                 throw NateError.message("窗口尺寸、标签集合或分屏位置无效。")
+            }
+            if let panels = entry.panels {
+                let selected = panels.filter(\.selected)
+                guard panels.count == WorkspacePanel.allCases.count,
+                    Set(panels.map(\.panel)).count == panels.count,
+                    panels.allSatisfy({ $0.floatingFrame?.isValid != false }),
+                    panels.allSatisfy({ $0.extent.map { (1...65_536).contains($0) } != false }),
+                    selected.allSatisfy({ $0.visible && $0.placement != .floating }),
+                    Set(selected.map(\.placement)).count == selected.count
+                else {
+                    throw NateError.message("停靠面板身份、组合或浮动几何无效。")
+                }
             }
             shared.formUnion(tabs)
             guard shared.count <= 1024 else {

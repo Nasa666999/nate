@@ -97,7 +97,7 @@ final class DirectoryWorkspaceController {
         restoredTree = snapshot
         awaitingConnection = true
         window.directoryPanel.setRoot(snapshot.root, restored: true)
-        window.setDirectoryVisible(true)
+        window.setDirectoryVisible(true, selecting: false)
     }
 
     /// 业务作用：目录文件激活绑定原树、实际正文视图和光标，等待中的旧读取不能覆盖新输入意图。
@@ -127,13 +127,14 @@ final class DirectoryWorkspaceController {
         let query = application.findWindow?.inputIdentities
         let rootGeneration = generation
         let request = openGeneration
-        let responder = window.window?.firstResponder
+        let panel = window.directoryPanel.window
+        let responder = panel?.firstResponder
         let keyWindow = NSApp.keyWindow
         let modalWindow = NSApp.modalWindow
         openTask = Task {
             [
                 weak self, weak application, weak window, weak editor, weak buffer, weak responder,
-                weak keyWindow, weak modalWindow
+                weak panel, weak keyWindow, weak modalWindow
             ] in
             guard let self, let application, let window else {
                 return
@@ -146,7 +147,7 @@ final class DirectoryWorkspaceController {
             let permitted: @MainActor () -> Bool = {
                 [
                     weak self, weak application, weak window, weak editor, weak buffer, weak responder,
-                    weak keyWindow, weak modalWindow
+                    weak panel, weak keyWindow, weak modalWindow
                 ] in
                 guard let self, let application, let window, let editor, let buffer,
                     !application.closing, !Task.isCancelled,
@@ -160,7 +161,8 @@ final class DirectoryWorkspaceController {
                     application.findWindow?.inputIdentities == query,
                     application.findWindow?.isEditingInput != true,
                     NSApp.keyWindow === keyWindow, NSApp.modalWindow === modalWindow,
-                    !window.hasMarkedEditorInput, window.window?.firstResponder === responder
+                    !window.hasMarkedEditorInput, window.directoryPanel.window === panel,
+                    panel?.firstResponder === responder
                 else {
                     return false
                 }

@@ -232,6 +232,7 @@ extension ApplicationController: NSMenuItemValidation {
             add(levels, "第 \(level) 层", "foldLevel:\(level)")
         }
         attach(levels, to: view)
+        addWorkspacePanelMenus(to: view)
         attach(view, to: bar)
         let encoding = NSMenu(title: "编码")
         let convert = NSMenu(title: "转换为编码")

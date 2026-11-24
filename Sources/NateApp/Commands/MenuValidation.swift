@@ -48,6 +48,15 @@ extension ApplicationController {
         if id == "moveTabToWindow" {
             return !closing && editorWindows.count > 1 && active?.closing == false
         }
+        if id.hasPrefix("workspacePanelPlacement:") {
+            guard !closing, let window = mainWindow,
+                let (panel, placement) = workspacePanelPlacementCommand(id)
+            else {
+                return false
+            }
+            menuItem.state = window.workspacePanelPlacement(panel) == placement ? .on : .off
+            return panel != .results || !window.searchResults.isEditingInput
+        }
         if id.hasPrefix("tabLayout:") {
             guard let mode = DocumentTabLayout(rawValue: String(id.dropFirst("tabLayout:".count))) else {
                 return false

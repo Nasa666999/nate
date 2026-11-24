@@ -554,6 +554,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         attachWorkspaceTab(id, to: window)
         if isCurrent {
             activeID = id
+            window?.restoreEditorFocusFromFloatingPanel()
             if window?.isIncrementalSearchVisible == true {
                 window?.incrementalSearch.feedback.stringValue = "文档已切换，可继续查找。"
             }

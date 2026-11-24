@@ -33,7 +33,6 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public let incrementalSearch = IncrementalSearchBar(frame: .zero)
     public let directoryPanel = DirectoryTreePanel(frame: .zero)
     public let projectPanels = ProjectPanelsView(frame: .zero)
-    let navigationSplit = NSSplitView()
     var incrementalHeight: NSLayoutConstraint?
     public internal(set) var editor: EditorView
     public let status = SaveStatusField(labelWithString: "")
@@ -50,9 +49,14 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     var tabLayoutConstraints: [NSLayoutConstraint] = []
     let scroll = NSScrollView()
     let scrollSynchronization = WindowScrollSynchronization()
-    let split = NSSplitView()
+    let panelDock = WorkspacePanelDock()
+    /// 业务作用：工具栏、标签和状态栏共同约束工作区原生容器。
+    /// 参数说明: 无。
+    /// 返回：实际承载正文和停靠面板的外层视图。
+    var split: NSSplitView {
+        panelDock.container
+    }
     let editorSplit = NSSplitView()
-    let workspaceSplit = NSSplitView()
     public let structurePanel = StructurePanel(frame: .zero)
     public var isStructureVisible: Bool {
         !structurePanel.isHidden
@@ -151,34 +155,15 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         scroll.documentView = editor
-        split.isVertical = false
-        split.dividerStyle = .thin
         editorSplit.isVertical = true
         editorSplit.dividerStyle = .thin
         editorSplit.addArrangedSubview(scroll)
-        workspaceSplit.isVertical = true
-        workspaceSplit.dividerStyle = .thin
-        navigationSplit.isVertical = false
-        navigationSplit.dividerStyle = .thin
-        navigationSplit.addArrangedSubview(directoryPanel)
-        navigationSplit.addArrangedSubview(projectPanels)
-        navigationSplit.isHidden = true
-        projectPanels.isHidden = true
-        workspaceSplit.addArrangedSubview(navigationSplit)
-        workspaceSplit.addArrangedSubview(editorSplit)
-        workspaceSplit.addArrangedSubview(structurePanel)
-        // 尺寸保持优先级低于系统拖动约束，侧栏才能保留初始宽度并允许用户调整。
-        workspaceSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 0)
-        workspaceSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 2)
-        directoryPanel.isHidden = true
-        structurePanel.isHidden = true
         structurePanel.onRefresh = {
             [weak self] in self?.onCommand?("refreshStructure")
         }
         structurePanel.onClose = {
             [weak self] in self?.onCommand?("closeStructure")
         }
-        split.addArrangedSubview(workspaceSplit)
         results.isEditable = false
         results.onActivate = {
             [weak self] row in self?.onResult?(row)
@@ -208,9 +193,14 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         searchResults.onClose = {
             [weak self] in self?.setResultsVisible(false)
         }
-        resultHost.isHidden = true
-        split.addArrangedSubview(resultHost)
-        split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
+        panelDock.connect(
+            owner: self,
+            editor: editorSplit,
+            views: [
+                .directory: directoryPanel, .projects: projectPanels, .structure: structurePanel,
+                .results: resultHost,
+            ]
+        )
         root.addSubview(split)
         status.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         status.toolTip = "单击处理保存状态、重试或外部冲突。"
@@ -368,7 +358,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
             resultsScroll.isHidden = false
             searchResults.isHidden = true
         }
-        revealResultArea()
+        revealResultArea(selecting: false)
     }
 
     /// 业务作用：侧栏与克隆编辑区分别占用独立分隔区域，关闭侧栏不改变共享正文关系。
@@ -376,12 +366,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// - visible: 是否展示函数列表。
     /// 返回：显示时分配可调整宽度，编辑视图按实际剩余空间重新排版。
     public func setStructureVisible(_ visible: Bool) {
-        structurePanel.isHidden = !visible
-        window?.contentView?.layoutSubtreeIfNeeded()
-        workspaceSplit.adjustSubviews()
-        if visible {
-            workspaceSplit.setPosition(max(280, workspaceSplit.bounds.width - 280), ofDividerAt: 1)
-        }
+        panelDock.setVisible(.structure, visible)
         refreshEditors()
     }
 
@@ -410,12 +395,33 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     /// 返回：同一窗口取得焦点时报告当前路由来源。
     public func windowDidBecomeKey(_ notification: Notification) {
         if notification.object as? NSWindow === window {
+            panelDock.synchronizeFloatingVisibility()
             // AppKit 可沿用原首响应者而不再发出 becomeFirstResponder，交接时显式同步本视图的选择来源。
             if window?.firstResponder === editor {
                 editor.synchronizeViewSelectionRevision()
                 editor.synchronizeDocumentSelectionState()
             }
             onWorkspaceFocus?()
+        }
+    }
+
+    /// 业务作用：原编辑窗口显示或遮挡状态变化后，浮动工具保持所属窗口的可见关系。
+    /// 参数说明:
+    /// - notification: 实际原生窗口的可见状态通知。
+    /// 返回：同步所拥有的浮动面板，不改变编辑焦点。
+    public func windowDidChangeOcclusionState(_ notification: Notification) {
+        if notification.object as? NSWindow === window {
+            panelDock.synchronizeFloatingVisibility()
+        }
+    }
+
+    /// 业务作用：编辑窗口关闭时统一释放绑定的浮动工具，旧工具不能继续向工作区发出动作。
+    /// 参数说明:
+    /// - notification: 当前编辑窗口的关闭通知。
+    /// 返回：所属独立容器全部收束。
+    public func windowWillClose(_ notification: Notification) {
+        if notification.object as? NSWindow === window {
+            panelDock.closeFloatingWindows()
         }
     }
 
