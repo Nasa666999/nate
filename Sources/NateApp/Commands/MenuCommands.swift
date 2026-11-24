@@ -30,6 +30,16 @@ extension ApplicationController: NSMenuItemValidation {
         add(application, "恢复存储设置…", "recoveryStoragePreferences")
         add(application, "快捷键映射器…", "keyboardMap")
         application.addItem(.separator())
+        let services = NSApp.servicesMenu ?? NSMenu(title: "服务")
+        // AppKit 持有首次注册的服务菜单，重建菜单栏时迁移同一对象才能更新当前可见的子菜单。
+        if let previous = services.supermenu?.items.first(where: { $0.submenu === services }) {
+            previous.submenu = nil
+        }
+        services.title = "服务"
+        let servicesItem = NSMenuItem(title: "服务", action: nil, keyEquivalent: "")
+        servicesItem.identifier = NSUserInterfaceItemIdentifier("nate.systemServices")
+        servicesItem.submenu = services
+        application.addItem(servicesItem)
         let hide = NSMenuItem(title: "隐藏 Nate", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hide.target = NSApp
         application.addItem(hide)
@@ -365,6 +375,7 @@ extension ApplicationController: NSMenuItemValidation {
         appendMacroLibraryMenu(to: macro, root: bar)
         appendRunCommandMenu(to: run, root: bar)
         NSApp.mainMenu = bar
+        NSApp.servicesMenu = services
     }
 
     /// 业务作用：将独立功能组接到上层菜单。

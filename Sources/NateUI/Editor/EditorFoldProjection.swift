@@ -58,10 +58,10 @@ extension EditorView {
         }
     }
 
-    /// 业务作用：文档地图的视口指示由正文当前真实像素投影得出。
+    /// 业务作用：工具与系统辅助读取使用当前正文的真实像素投影。
     /// 参数说明: 无。
     /// 返回：当前可见的逻辑行范围，待确认输入或尚未形成视口时为空。
-    func documentMapVisibleLines() -> Range<Int>? {
+    func visibleLogicalLineRange() -> Range<Int>? {
         guard !hasMarkedText(), let clip = enclosingScrollView?.contentView, clip.bounds.height > 0 else {
             return nil
         }

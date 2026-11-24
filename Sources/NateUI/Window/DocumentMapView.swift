@@ -239,7 +239,7 @@ final class DocumentMapView: NSView {
     /// 返回：合法的视口框，任何身份冲突或隐藏控件均为空。
     var viewportBounds: NSRect? {
         guard let overview, let chart = chartBounds, let editor, sourceDocument === editor.document,
-            let lines = editor.documentMapVisibleLines()
+            let lines = editor.visibleLogicalLineRange()
         else {
             return nil
         }

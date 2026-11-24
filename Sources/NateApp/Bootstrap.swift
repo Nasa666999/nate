@@ -183,6 +183,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// 返回：异步装配，主事件循环保持可响应。
     func applicationDidFinishLaunching(_ notification: Notification) {
         connectConfigurationDefaults(.standard)
+        NSApp.registerServicesMenuSendTypes([.string], returnTypes: [.string])
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(receiveInstanceRequest(_:)),

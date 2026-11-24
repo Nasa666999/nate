@@ -26,6 +26,10 @@ extension ApplicationController {
         }
         while let (item, parent) = pending.popLast() {
             if let submenu = item.submenu {
+                // 服务命令及其快捷键由系统和当前响应者管理，不能进入可迁移的 Nate 命令目录。
+                if item.identifier?.rawValue == "nate.systemServices" {
+                    continue
+                }
                 let category = parent.isEmpty ? item.title : parent + " / " + item.title
                 pending.append(
                     contentsOf: submenu.items.reversed().map {

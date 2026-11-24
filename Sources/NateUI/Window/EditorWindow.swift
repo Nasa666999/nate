@@ -425,6 +425,17 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// 业务作用：编辑窗口失去键盘资格时收回原视图的焦点证据。
+    /// 参数说明:
+    /// - notification: AppKit 对所属窗口发出的失去键盘焦点通知。
+    /// 返回：附件或其它窗口的通知保持原状；原窗口焦点往返也不能复活等待中的系统文字或导航动作。
+    public func windowDidResignKey(_ notification: Notification) {
+        if let sender = notification.object as? NSWindow, sender === window {
+            // AppKit 可以保留该窗口的 firstResponder，失去键盘资格仍须推进来源代次。
+            editor.focusGeneration = UUID()
+        }
+    }
+
     /// 业务作用：原编辑窗口显示或遮挡状态变化后，浮动工具保持所属窗口的可见关系。
     /// 参数说明:
     /// - notification: 实际原生窗口的可见状态通知。

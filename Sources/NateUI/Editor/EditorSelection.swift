@@ -242,35 +242,4 @@ extension EditorView {
         performEditorCommand(.selectAll)
     }
 
-    /// 业务作用：让 VoiceOver 获取唯一已提交正文。
-    /// 参数说明: 无。
-    /// 返回：不包含预编辑的正文。
-    public override func accessibilityValue() -> Any? {
-        document.text.text()
-    }
-
-    /// 业务作用：辅助功能与原生文本服务使用同一选区单位。
-    /// 参数说明: 无。
-    /// 返回：主选区 UTF-16 范围。
-    public override func accessibilitySelectedTextRange() -> NSRange {
-        selectedRange()
-    }
-
-    /// 业务作用：允许系统辅助服务通过事务替换整篇正文。
-    /// 参数说明:
-    /// - value: 系统提交的新正文。
-    /// 返回：可撤销正文修改；只读时拒绝。
-    public override func setAccessibilityValue(_ value: Any?) {
-        guard let text = value as? String else {
-            return
-        }
-        do {
-            try document.commit([TextEdit(ByteRange(0, document.text.byteCount), text)], name: "辅助功能编辑")
-            refresh()
-            onChange?()
-        }
-        catch {
-            NSSound.beep()
-        }
-    }
 }
