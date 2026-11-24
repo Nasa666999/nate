@@ -27,6 +27,16 @@ extension ApplicationController {
             menuItem.state = documentID == activeID ? .on : .off
             return !closing
         }
+        if id.hasPrefix("documentListOrder:") {
+            guard !closing, let window = mainWindow, !documents.isEmpty,
+                menuItem.identifier?.rawValue == window.tabOrderIdentity.uuidString,
+                let order = DocumentListOrder(rawValue: String(id.dropFirst("documentListOrder:".count)))
+            else {
+                return false
+            }
+            menuItem.state = window.documentListOrder == order ? .on : .off
+            return true
+        }
         if id == "documentList" {
             return !closing && mainWindow != nil && !documents.isEmpty
         }

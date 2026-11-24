@@ -41,6 +41,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public let searchResults = SearchResultsPanel(frame: .zero)
     let resultHost = NSView()
     let tabs = TabStrip()
+    public var documentListOrder = DocumentListOrder.tabOrder
     weak var tabLayoutRoot: NSView?
     var tabHeight: NSLayoutConstraint?
     var tabLayoutConstraints: [NSLayoutConstraint] = []

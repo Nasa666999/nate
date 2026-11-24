@@ -19,13 +19,16 @@ extension ApplicationController: NSMenuDelegate {
     func populateWindowDocuments(in menu: NSMenu) {
         let previous = menu.items.filter {
             ($0.representedObject as? String)?.hasPrefix("activate:") == true
+                || $0.identifier?.rawValue == "nate.documentListOrder"
         }
         for item in previous {
             menu.removeItem(item)
         }
-        guard let list = mainWindow?.documentListMenu(target: self, action: #selector(menuAction(_:))) else {
+        guard let window = mainWindow else {
             return
         }
+        let list = window.documentListMenu(target: self, action: #selector(menuAction(_:)))
+        menu.addItem(window.documentListOrderItem(target: self, action: #selector(menuAction(_:))))
         for item in list.items {
             list.removeItem(item)
             menu.addItem(item)

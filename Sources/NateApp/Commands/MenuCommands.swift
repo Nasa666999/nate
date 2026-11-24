@@ -379,8 +379,15 @@ extension ApplicationController: NSMenuItemValidation {
     @objc func menuAction(_ sender: NSMenuItem) {
         if let id = sender.representedObject as? String {
             // 动态列表只拥有生成时的标签集合与布局，旧菜单不能先确认候选再发现目标已经改变。
-            if id.hasPrefix("activate:"), !validateMenuItem(sender) {
+            if (id.hasPrefix("activate:") || id.hasPrefix("documentListOrder:")), !validateMenuItem(sender) {
                 mainWindow?.status.stringValue = "文档列表已改变，请重新打开后选择。"
+                return
+            }
+            if id.hasPrefix("documentListOrder:"),
+                let order = DocumentListOrder(rawValue: String(id.dropFirst("documentListOrder:".count)))
+            {
+                // 排序只更新下次展开时的列表，当前候选、正文视图和标签顺序仍由原窗口持有。
+                mainWindow?.documentListOrder = order
                 return
             }
             route(id)
