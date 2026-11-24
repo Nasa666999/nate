@@ -132,7 +132,8 @@ final class LineLayout {
                 tabWidth: tabWidth,
                 tabs: wideTabs?.columns,
                 hanLine: wideTabs?.han,
-                hanTabLine: wideTabs?.hanTabs
+                hanTabLine: wideTabs?.hanTabs,
+                narrowLine: wideTabs?.narrow
             )
         }
         else {

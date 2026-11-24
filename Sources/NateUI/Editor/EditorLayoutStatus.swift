@@ -13,7 +13,7 @@ enum EditorNativeLayoutPolicy {
     /// 返回：当前窗口、段落与连字字距策略的稳定完整配置字节。
     static var identityData: Data {
         Data(
-            "asciiMinimum=\(asciiMinimumBytes);windowCharacters=\(maximumWindowCharacters);paragraphBytes=\(maximumParagraphBytes);documentBytes=\(maximumDocumentBytes);asciiLigature=0;asciiKern=0;virtualSpace=endBodyStyle;tabColumns=actualGlyphFont;geometrySyntax=complete;wrapASCII=wordBreaks"
+            "asciiMinimum=\(asciiMinimumBytes);windowCharacters=\(maximumWindowCharacters);paragraphBytes=\(maximumParagraphBytes);documentBytes=\(maximumDocumentBytes);asciiLigature=0;asciiKern=0;virtualSpace=endBodyStyle;tabColumns=actualGlyphFont;geometrySyntax=complete;wrapASCII=wordBreaks;narrowUnicode=fontProven"
                 .utf8
         )
     }

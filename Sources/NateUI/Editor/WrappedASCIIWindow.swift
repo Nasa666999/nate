@@ -81,7 +81,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         guard range.count > EditorNativeLayoutPolicy.maximumParagraphBytes,
             snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
             containerWidth.isFinite, containerWidth > 0,
-            let advance = LongLineWindow.uniformAdvance(actual, appearance: appearance),
+            let advance = NativeMonospaceGeometry.uniformAdvance(actual, appearance: appearance),
             containerWidth / advance <= 8192
         else {
             return nil
@@ -164,7 +164,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         -> WrappedASCIIGeometry?
     {
         guard width.isFinite, width > 0,
-            let advance = LongLineWindow.uniformAdvance(font, appearance: appearance),
+            let advance = NativeMonospaceGeometry.uniformAdvance(font, appearance: appearance),
             width / advance <= 8192
         else {
             return nil

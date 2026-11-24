@@ -22,7 +22,7 @@ public struct LogicalColumnReader {
     /// - tabWidth: 已确认的 Tab 停靠间距。
     /// - deadline: 所有目标共享的截止，最多五秒。
     /// - preparedColumns: 视图已经确认的最多 1024 个长行列索引，只有同源证明可复用。
-    /// - preparedHan: 同一原文中实际已确认的汉字长行，逻辑列按独立字素计数。
+    /// - preparedHan: 同一原文中已确认的汉字或其它独立 Unicode 字母长行，逻辑列按独立字素计数。
     /// - permit: 当前操作的继续资格，失去资格后整批失败。
     /// 返回：尚未遍历正文的列读取器；非法宽度或字素导航不可用时拒绝建立。
     public init(

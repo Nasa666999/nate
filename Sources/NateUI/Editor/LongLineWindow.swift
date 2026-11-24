@@ -3,11 +3,6 @@ import NateCore
 
 @MainActor
 final class LongLineWindow: LongLineProjection {
-    private struct TabProof: Hashable {
-        let font: NSFont
-        let width: Int
-    }
-
     let snapshot: DocumentSnapshot
     let range: ByteRange
     let advance: CGFloat
@@ -19,14 +14,12 @@ final class LongLineWindow: LongLineProjection {
     let characterCount: Int
     private let tabs: ASCIITabColumns?
     private let han: NativeHanProjection?
+    private let narrow: PlainNarrowUnicodeLine?
     private(set) var unavailableReason: String?
     private(set) var renderedRange: ByteRange
     private var renderedCharacters: Range<Int>
     private var offsetX: CGFloat = 0
     private var native: LineLayout
-    private static var advances: [NSFont: CGFloat] = [:]
-    private static var rejected: Set<NSFont> = []
-    private static var tabProofs: [TabProof: Bool] = [:]
 
     var rendered: NSAttributedString {
         native.content.rendered
@@ -57,6 +50,7 @@ final class LongLineWindow: LongLineProjection {
     /// - tabs: 本行原文已经准备好的真实 Tab 列索引；纯可打印 ASCII 可省略。
     /// - hanLine: 完整原文为基本汉字与可打印 ASCII 时使用的不可变行索引。
     /// - hanTabLine: 含真实 Tab 且已绑定原文、字体及制表网格的证据。
+    /// - narrowLine: 当前原文中使用同一基础字体的独立 Unicode 字母证据。
     /// 返回：符合安全条件时保留有界原生窗口，否则不授予安全坐标资格。
     init?(
         snapshot: DocumentSnapshot,
@@ -69,7 +63,8 @@ final class LongLineWindow: LongLineProjection {
         tabWidth: Int = 4,
         tabs: ASCIITabColumns? = nil,
         hanLine: PlainHanLine? = nil,
-        hanTabLine: HanTabColumns? = nil
+        hanTabLine: HanTabColumns? = nil,
+        narrowLine: PlainNarrowUnicodeLine? = nil
     ) {
         let actualFont = EditorThemePresentation.baseFont(
             font,
@@ -87,14 +82,33 @@ final class LongLineWindow: LongLineProjection {
             hanTabLine == nil
                 || (tabs == nil && hanLine == nil && hanTabLine?.range == range
                     && hanTabLine?.matches(snapshot.text, tabWidth: tabWidth) == true),
-            tabs != nil || hanLine != nil || hanTabLine != nil || snapshot.text.isPrintableASCII(in: range),
-            let advance = Self.uniformAdvance(actualFont, appearance: appearance)
+            narrowLine == nil
+                || (tabs == nil && hanLine == nil && hanTabLine == nil
+                    && narrowLine?.range == range && narrowLine?.matches(snapshot.text) == true),
+            tabs != nil || hanLine != nil || hanTabLine != nil || narrowLine != nil
+                || snapshot.text.isPrintableASCII(in: range),
+            let advance = NativeMonospaceGeometry.uniformAdvance(actualFont, appearance: appearance)
         else {
             return nil
         }
         // 只有实际字体的原生 Tab 停靠与列索引完全一致时，才允许平移远处段落。
         if let tabs,
-            !Self.provesTabStops(actualFont, width: tabs.tabWidth, advance: advance, appearance: appearance)
+            !NativeMonospaceGeometry.provesTabStops(
+                actualFont,
+                width: tabs.tabWidth,
+                advance: advance,
+                appearance: appearance
+            )
+        {
+            return nil
+        }
+        if let narrowLine,
+            !NativeNarrowUnicodeFont.proves(
+                narrowLine.scalars,
+                font: actualFont,
+                advance: advance,
+                appearance: appearance
+            )
         {
             return nil
         }
@@ -125,7 +139,8 @@ final class LongLineWindow: LongLineProjection {
         self.advance = advance
         self.tabs = tabs
         self.han = han
-        let count = han?.characterCount ?? range.count
+        narrow = narrowLine
+        let count = han?.characterCount ?? narrowLine?.characterCount ?? range.count
         characterCount = count
         let upper = min(count, 8192)
         let initialByte: Int
@@ -137,6 +152,13 @@ final class LongLineWindow: LongLineProjection {
             }
             initialByte = byte
             initialWidth = point.distance
+        }
+        else if let narrowLine {
+            guard let byte = narrowLine.byte(at: upper) else {
+                return nil
+            }
+            initialByte = byte
+            initialWidth = CGFloat(upper) * advance
         }
         else {
             initialByte = range.lower + upper
@@ -157,7 +179,7 @@ final class LongLineWindow: LongLineProjection {
             hanFont: han?.font
         )
         // 只有真实原生段落与已确认字体度量一致，才允许沿正文前缀平移后续窗口。
-        if han != nil {
+        if han != nil || narrow != nil {
             let start = native.caret(at: 0)
             let end = native.caret(at: upper)
             guard native.isSingleVisualLine, native.characterCount == upper,
@@ -194,8 +216,8 @@ final class LongLineWindow: LongLineProjection {
     func character(at point: NSPoint) -> Int {
         let x = point.x.isFinite ? min(width, max(0, point.x)) : 0
         let approximate = offset(at: x)
-        if han != nil {
-            return nearestHanInsertion(to: x, around: approximate)
+        if han != nil || narrow != nil {
+            return nearestInsertion(to: x, around: approximate)
         }
         guard ensureColumn(approximate) else {
             return 0
@@ -209,12 +231,12 @@ final class LongLineWindow: LongLineProjection {
         return renderedCharacters.lowerBound + index
     }
 
-    /// 业务作用：独立汉字或 ASCII 的命中采用邻近真实插入点，避免百万像素平移下浮点消减跨到前一标量。
+    /// 业务作用：独立 Unicode 字形的命中采用相邻真实插入点，避免百万像素平移后落到前一标量。
     /// 参数说明:
     /// - x: 长行完整坐标中的实际命中位置。
     /// - approximate: 由已验证前缀步距定位的相邻字符。
     /// 返回：最接近位置的原生插入点；等距时选前一个真实端点。
-    private func nearestHanInsertion(to x: CGFloat, around approximate: Int) -> Int {
+    private func nearestInsertion(to x: CGFloat, around approximate: Int) -> Int {
         guard ensureColumn(approximate), ensureColumn(min(characterCount, approximate + 1)) else {
             return 0
         }
@@ -371,14 +393,17 @@ final class LongLineWindow: LongLineProjection {
             hanFont: han?.font,
             tabPhase: phase
         )
-        if han?.tabWidth != nil {
+        if han?.tabWidth != nil || narrow != nil {
             let start = candidate.caret(at: 0)
             let end = candidate.caret(at: count)
             // 每个混合窗口也必须复验真实段落几何，浮点或原生布局失配时立即撤回坐标权限。
             guard candidate.isSingleVisualLine, abs(start.minX - phase) < 0.02,
                 abs(end.minX - start.minX - windowWidth) < 0.02
             else {
-                unavailableReason = "超长汉字行的原生 Tab 停靠位置无法确认，已暂停字形呈现。"
+                unavailableReason =
+                    narrow != nil
+                    ? "超长 Unicode 行的实际字形间距无法确认，已暂停字形呈现。"
+                    : "超长汉字行的原生 Tab 停靠位置无法确认，已暂停字形呈现。"
                 return
             }
         }
@@ -418,6 +443,9 @@ final class LongLineWindow: LongLineProjection {
         if let han {
             return han.byte(at: character)
         }
+        if let narrow {
+            return narrow.byte(at: character)
+        }
         return (0...characterCount).contains(character) ? range.lower + character : nil
     }
 
@@ -446,7 +474,7 @@ final class LongLineWindow: LongLineProjection {
     /// - hanFont: 已经验证并应用于基本汉字的原生度量。
     /// - tabPhase: 裁剪后原生第一行相对同一实际制表网格的偏量。
     /// 返回：已完成 TextKit 2 排版的只读片段，不强制排版未请求正文。
-    private static func project(
+    static func project(
         snapshot: DocumentSnapshot,
         range: ByteRange,
         font: NSFont,
@@ -475,105 +503,5 @@ final class LongLineWindow: LongLineProjection {
             theme: theme,
             language: language
         )
-    }
-
-    /// 业务作用：用真实原生段落复验每种起始余数，固定字体声明不足以单独证明制表坐标。
-    /// 参数说明:
-    /// - font: 完整窗口使用的实际字体。
-    /// - width: 当前语言的实际 Tab 宽度。
-    /// - advance: 已验证的单列原生步距。
-    /// - appearance: 该视图实际采用的系统外观。
-    /// 返回：所有原文端点均与真实原生制表位一致时为真；其余情况不使用长行快速布局。
-    private static func provesTabStops(
-        _ font: NSFont,
-        width: Int,
-        advance: CGFloat,
-        appearance: NSAppearance
-    ) -> Bool {
-        let key = TabProof(font: font, width: width)
-        if let valid = tabProofs[key] {
-            return valid
-        }
-        let text = PieceTree((0..<width).map { String(repeating: "x", count: $0) + "\t" }.joined() + "x")
-        let range = ByteRange(0, text.byteCount)
-        guard let columns = try? ASCIITabColumns(text: text, range: range, tabWidth: width) else {
-            return false
-        }
-        let sample = Self.project(
-            snapshot: DocumentSnapshot(id: UUID(), revision: 0, text: text),
-            range: range,
-            font: font,
-            appearance: appearance,
-            width: CGFloat(columns.columnCount) * advance,
-            theme: nil,
-            language: nil,
-            fontZoomAdjustment: 0,
-            tabWidth: width
-        )
-        let origin = sample.caret(at: 0)
-        let valid = (0...text.byteCount).allSatisfy { offset in
-            let caret = sample.caret(at: offset)
-            guard let column = columns.column(at: offset) else {
-                return false
-            }
-            return abs(caret.minX - origin.minX - CGFloat(column) * advance) < 0.01
-                && abs(caret.minY - origin.minY) < 0.01
-        }
-        if tabProofs.count >= 32 {
-            tabProofs.removeAll()
-        }
-        tabProofs[key] = valid
-        return valid
-    }
-
-    /// 业务作用：字体声明与全部已排版 ASCII 位置共同决定等宽资格，未排版片段不能提供步距证据。
-    /// 参数说明:
-    /// - font: 当前真实字体。
-    /// - appearance: 当前真实视图外观。
-    /// 返回：全部字符位置一致时提供真实步距，否则拒绝；证据缓存各最多三十二项。
-    static func uniformAdvance(_ font: NSFont, appearance: NSAppearance) -> CGFloat? {
-        if let value = advances[font] {
-            return value
-        }
-        guard font.isFixedPitch, !rejected.contains(font) else {
-            return nil
-        }
-        let text = PieceTree(String(decoding: Array(UInt8(32)...UInt8(126)), as: UTF8.self))
-        // 未经布局管理器处理的片段没有有效坐标，先完成这个有界段落再读取真实字符位置。
-        let sample = LineLayout(
-            snapshot: DocumentSnapshot(
-                id: UUID(),
-                revision: 0,
-                text: text
-            ),
-            range: ByteRange(0, text.byteCount),
-            font: font,
-            width: 1_000_000,
-            tokens: [],
-            rtl: false,
-            appearance: appearance,
-            nativeASCII: true
-        )
-        let origin = sample.caret(at: 0)
-        let advance = sample.caret(at: 1).minX - origin.minX
-        let valid =
-            advance.isFinite && advance > 0 && advance <= 4096
-            && (0...95).allSatisfy {
-                let point = sample.caret(at: $0)
-                return abs(point.minX - origin.minX - CGFloat($0) * advance) < 0.01
-                    && abs(point.minY - origin.minY) < 0.01
-            }
-        if advances.count >= 32 {
-            advances.removeAll()
-        }
-        if rejected.count >= 32 {
-            rejected.removeAll()
-        }
-        if valid {
-            advances[font] = advance
-            return advance
-        }
-        rejected.insert(font)
-        return nil
     }
 }
