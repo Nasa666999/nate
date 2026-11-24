@@ -4,9 +4,9 @@ import NateCore
 extension EditorWindow {
     /// 业务作用：从实际窗口和分屏控件固定各自的正文、选择、视口及布局，而不取得写入原文件的权限。
     /// 参数说明:
-    /// - tabs: 此窗口已登记的完整标签顺序。
+    /// - tabs: 此窗口按顺序登记的共享正文，用于复验隐藏标签的修订与位置。
     /// 返回：原生窗口和主编辑视图齐备时的窗口快照，尚未创建完整控件时为空。
-    public func windowSession(tabs: [UUID]) -> WindowSession? {
+    public func windowSession(tabs: [DocumentBuffer]) -> WindowSession? {
         guard let window, let primary = scroll.documentView as? EditorView else {
             return nil
         }
@@ -17,14 +17,26 @@ extension EditorWindow {
         let primaryExtent = vertical ? scroll.frame.width : scroll.frame.height
         let available = max(1, extent - editorSplit.dividerThickness)
         let frame = window.frame
+        let visible = Set([primary.document.id, secondary?.document.id].compactMap { $0 })
+        let inactive = tabs.compactMap {
+            document -> WindowSessionView? in
+            guard !visible.contains(document.id),
+                let saved = tabViewPositions[document.id]?.rebased(for: document)
+            else {
+                return nil
+            }
+            tabViewPositions[document.id] = saved
+            return saved
+        }
         return WindowSession(
-            tabs: tabs,
+            tabs: tabs.map(\.id),
             frame: WindowSessionFrame(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height),
             primary: primary.sessionView(),
             secondary: secondary?.sessionView(),
             verticalSplit: vertical,
             splitFraction: min(1, max(0, primaryExtent / available)),
-            secondaryFocused: editor === secondary
+            secondaryFocused: editor === secondary,
+            inactiveViews: inactive.isEmpty ? nil : inactive
         )
     }
 
@@ -63,6 +75,10 @@ extension EditorWindow {
             }
         }
         primary.restoreSessionView(session.primary)
+        tabViewPositions = Dictionary(
+            (session.inactiveViews ?? []).map { ($0.documentID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         window.initialFirstResponder = editor
     }
 
@@ -98,16 +114,24 @@ extension EditorView {
     /// 业务作用：会话捕获此视图独立的完整选择与真实行锚点，预编辑文本不进入恢复数据。
     /// 参数说明: 无。
     /// 返回：属于实际提交修订的视图状态，组合输入期间不记录临时像素位置。
-    fileprivate func sessionView() -> WindowSessionView {
+    func sessionView() -> WindowSessionView {
         synchronizeViewSelectionRevision()
         let anchor = hasComposition ? nil : viewportAnchor()
         return WindowSessionView(
             documentID: document.id,
             revision: document.revision,
             selection: viewSelectionState,
-            viewport: anchor.map { WindowSessionViewport(line: $0.line, offset: $0.offset, x: $0.x) },
+            viewport: anchor.map {
+                WindowSessionViewport(
+                    line: $0.line,
+                    offset: $0.offset,
+                    x: $0.x,
+                    byteOffset: document.text.lineStart($0.line)
+                )
+            },
             wrapLines: wrapLines,
-            rightToLeft: rtl
+            rightToLeft: rtl,
+            zoomPoints: fontZoomAdjustment
         )
     }
 
@@ -118,9 +142,18 @@ extension EditorView {
     fileprivate func restoreSessionView(_ state: WindowSessionView) {
         wrapLines = state.wrapLines
         rtl = state.rightToLeft
+        zoomFont(by: state.zoomPoints - fontZoomAdjustment)
         refresh()
+        restoreSessionPosition(state)
+    }
+
+    /// 业务作用：显示已验证的视图或隐藏标签位置，保持当前窗口的呈现选项。
+    /// 参数说明:
+    /// - state: 已属于本次实际正文的快照或已完成映射的状态。
+    /// 返回：合法坐标更新独立选择与滚动位置，其余状态继续沿用当前正文。
+    func restoreSessionPosition(_ state: WindowSessionView) {
         // 恢复可能选用了更早的正文记录，只有完全相同的修订才允许使用原坐标。
-        guard state.revision == document.revision else {
+        guard state.documentID == document.id, state.revision == document.revision else {
             return
         }
         if let selection = state.selection, let valid = try? selection.validated(in: document.text) {

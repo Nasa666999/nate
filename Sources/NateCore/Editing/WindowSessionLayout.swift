@@ -25,17 +25,20 @@ public struct WindowSessionViewport: Codable, Sendable, Equatable {
     public let line: Int
     public let offset: Double
     public let x: Double
+    public let byteOffset: Int?
 
     /// 业务作用：保存顶端逻辑行与行内像素偏移，使屏幕和排版改变后仍可定位原位置。
     /// 参数说明:
     /// - line: 顶端实际逻辑行。
     /// - offset: 对该行起点的垂直偏移。
     /// - x: 视口横向滚动位置。
+    /// - byteOffset: 捕获时该行的原始字节起点，用于同次运行中的修订映射。
     /// 返回：待页面按实际几何复验的只读锚点。
-    public init(line: Int, offset: Double, x: Double) {
+    public init(line: Int, offset: Double, x: Double, byteOffset: Int? = nil) {
         self.line = line
         self.offset = offset
         self.x = x
+        self.byteOffset = byteOffset
     }
 }
 
@@ -46,9 +49,10 @@ public struct WindowSessionView: Codable, Sendable, Equatable {
     public let viewport: WindowSessionViewport?
     public let wrapLines: Bool
     public let rightToLeft: Bool
+    public let zoomPoints: Double
 
     private enum CodingKeys: String, CodingKey {
-        case documentID, revision, selection, viewport, wrapLines, rightToLeft
+        case documentID, revision, selection, viewport, wrapLines, rightToLeft, zoomPoints
     }
 
     /// 业务作用：独立编辑视图与共享正文用身份和修订关联，两个克隆仍可保留不同的选择和视口。
@@ -59,6 +63,7 @@ public struct WindowSessionView: Codable, Sendable, Equatable {
     /// - viewport: 当前可追踪的顶行及像素偏移。
     /// - wrapLines: 此视图是否软换行。
     /// - rightToLeft: 此视图是否从右向左呈现。
+    /// - zoomPoints: 相对于当前基础字体的独立缩放点数。
     /// 返回：与某一正文修订关联的待恢复视图状态。
     public init(
         documentID: UUID,
@@ -66,7 +71,8 @@ public struct WindowSessionView: Codable, Sendable, Equatable {
         selection: SelectionState?,
         viewport: WindowSessionViewport?,
         wrapLines: Bool,
-        rightToLeft: Bool
+        rightToLeft: Bool,
+        zoomPoints: Double = 0
     ) {
         self.documentID = documentID
         self.revision = revision
@@ -74,6 +80,7 @@ public struct WindowSessionView: Codable, Sendable, Equatable {
         self.viewport = viewport
         self.wrapLines = wrapLines
         self.rightToLeft = rightToLeft
+        self.zoomPoints = zoomPoints
     }
 
     /// 业务作用：全量稳定选择使用已有紧凑协议，损坏选择不能降级为部分身份后安装。
@@ -90,6 +97,7 @@ public struct WindowSessionView: Codable, Sendable, Equatable {
         viewport = try fields.decodeIfPresent(WindowSessionViewport.self, forKey: .viewport)
         wrapLines = try fields.decode(Bool.self, forKey: .wrapLines)
         rightToLeft = try fields.decode(Bool.self, forKey: .rightToLeft)
+        zoomPoints = try fields.decodeIfPresent(Double.self, forKey: .zoomPoints) ?? 0
     }
 
     /// 业务作用：布局归档嵌入完整选择摘要而不展开重复的 UUID 字符串。
@@ -104,6 +112,7 @@ public struct WindowSessionView: Codable, Sendable, Equatable {
         try fields.encodeIfPresent(viewport, forKey: .viewport)
         try fields.encode(wrapLines, forKey: .wrapLines)
         try fields.encode(rightToLeft, forKey: .rightToLeft)
+        try fields.encode(zoomPoints, forKey: .zoomPoints)
     }
 }
 
@@ -115,6 +124,7 @@ public struct WindowSession: Codable, Sendable, Equatable {
     public let verticalSplit: Bool
     public let splitFraction: Double
     public let secondaryFocused: Bool
+    public let inactiveViews: [WindowSessionView]?
 
     /// 业务作用：保留原窗口标签顺序、几何与最多两个独立正文视图。
     /// 参数说明:
@@ -125,6 +135,7 @@ public struct WindowSession: Codable, Sendable, Equatable {
     /// - verticalSplit: 为真时左右排列，否则上下排列。
     /// - splitFraction: 分隔位置占可用宽度或高度的比例。
     /// - secondaryFocused: 第二视图是否曾持有本窗口的编辑焦点。
+    /// - inactiveViews: 已访问但现在隐藏的标签曾保留的窗口独立位置。
     /// 返回：待整份窗口布局复验的一个窗口。
     public init(
         tabs: [UUID],
@@ -133,7 +144,8 @@ public struct WindowSession: Codable, Sendable, Equatable {
         secondary: WindowSessionView?,
         verticalSplit: Bool,
         splitFraction: Double,
-        secondaryFocused: Bool
+        secondaryFocused: Bool,
+        inactiveViews: [WindowSessionView]? = nil
     ) {
         self.tabs = tabs
         self.frame = frame
@@ -142,6 +154,7 @@ public struct WindowSession: Codable, Sendable, Equatable {
         self.verticalSplit = verticalSplit
         self.splitFraction = splitFraction
         self.secondaryFocused = secondaryFocused
+        self.inactiveViews = inactiveViews
     }
 
     /// 业务作用：窗口焦点恢复时确定原编辑视图和活动标签共用的实际文档。
@@ -198,12 +211,21 @@ public struct WindowSessionLayout: Codable, Sendable, Equatable {
             guard shared.count <= 1024 else {
                 throw NateError.message("窗口布局包含超过 1024 个共享文档。")
             }
-            for view in [entry.primary, entry.secondary].compactMap({ $0 }) {
-                guard tabs.contains(view.documentID) else {
-                    throw NateError.message("分屏引用了窗口标签之外的正文。")
+            let visible = [entry.primary, entry.secondary].compactMap { $0 }
+            let inactive = entry.inactiveViews ?? []
+            let hiddenIDs = Set(inactive.map(\.documentID))
+            guard hiddenIDs.count == inactive.count, hiddenIDs.isSubset(of: tabs),
+                hiddenIDs.isDisjoint(with: visible.map(\.documentID))
+            else {
+                throw NateError.message("隐藏标签位置存在重复或超出窗口范围。")
+            }
+            for view in visible + inactive {
+                guard tabs.contains(view.documentID), (-65...65).contains(view.zoomPoints) else {
+                    throw NateError.message("视图正文身份或缩放点数不在有效范围。")
                 }
                 if let viewport = view.viewport {
-                    guard viewport.line >= 0, viewport.offset.isFinite, viewport.x.isFinite, viewport.x >= 0
+                    guard viewport.line >= 0, viewport.offset.isFinite, viewport.x.isFinite, viewport.x >= 0,
+                        viewport.byteOffset.map({ (0...1_073_741_824).contains($0) }) != false
                     else {
                         throw NateError.message("窗口滚动锚点无效。")
                     }

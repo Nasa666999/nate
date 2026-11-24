@@ -109,8 +109,15 @@ extension ApplicationController {
         guard let selected = windows.firstIndex(where: { $0 === mainWindow }) else {
             return nil
         }
-        let sessions = windows.compactMap { $0.windowSession(tabs: workspaceTabIDs(in: $0)) }
-        guard sessions.count == windows.count else {
+        let sessions = windows.compactMap {
+            $0.windowSession(tabs: workspaceTabDocuments(in: $0).map(\.buffer))
+        }
+        guard sessions.count == windows.count,
+            sessions.allSatisfy({ session in
+                session.tabs.contains(session.primary.documentID)
+                    && (session.secondary.map { session.tabs.contains($0.documentID) } ?? true)
+            })
+        else {
             return nil
         }
         let layout = WindowSessionLayout(windows: sessions, activeWindow: selected)

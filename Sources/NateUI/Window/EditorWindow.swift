@@ -59,7 +59,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     }
     let resultsScroll = NSScrollView()
     let toolbarStack = NSStackView()
-    var tabViewPositions: [UUID: WindowTabViewPosition] = [:]
+    var tabViewPositions: [UUID: WindowSessionView] = [:]
 
     /// 业务作用：组装工具栏、独立标签、编辑视口、结果面板和状态栏。
     /// 参数说明:
