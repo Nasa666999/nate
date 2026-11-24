@@ -13,6 +13,12 @@ public struct LanguageDefinition: Codable, Sendable, Identifiable {
     var identifierRules: UnicodeIdentifierRules?
     var terminalStyles: [String: LanguageTokenStyle]?
     var lexicalStyles: [String: LanguageTokenStyle]?
+    var embeddedScriptRules: ScriptRules? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, extensions, lineComment, blockStart, blockEnd, keywords, keywordGroups
+        case identifierRules, terminalStyles, lexicalStyles
+    }
 
     /// 业务作用：按内置语言身份选择共享 C 词法与折叠规则，避免把仅有相似括号的语言误归入同一语法。
     /// 参数说明: 无。
@@ -82,15 +88,24 @@ public struct LanguageRegistry: Sendable {
         )
     }
 
-    /// 业务作用：从随包语言清单载入所有官方模式和预装补充语言。
+    /// 业务作用：载入随包语言，并让 HTML 从同一份已确认清单获取实际 JavaScript 词法规则。
     /// 参数说明:
     /// - directory: 注入的语言资源目录。
-    /// 返回：完整注册表；资源缺失明确失败。
+    /// 返回：完整注册表；主清单无法读取时失败，内嵌词法规则缺席时保留标记语言本身。
     public init(directory: URL) throws {
-        languages = try JSONDecoder().decode(
+        var loaded = try JSONDecoder().decode(
             [LanguageDefinition].self,
             from: Data(contentsOf: directory.appendingPathComponent("registry.json"))
         )
+        if let markup = loaded.firstIndex(where: { $0.id == "html" }),
+            let script = loaded.first(where: { $0.id == "javascript.js" })
+        {
+            loaded[markup].embeddedScriptRules = ScriptRules(
+                language: script,
+                deadline: ContinuousClock.now.advanced(by: .seconds(5))
+            )
+        }
+        languages = loaded
     }
 
     /// 业务作用：按稳定标识查找语言规则，不依赖显示名称。

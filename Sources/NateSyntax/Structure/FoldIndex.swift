@@ -85,6 +85,7 @@ public struct FoldIndex: Sendable {
             candidates = try MarkupFolding.regions(
                 snapshot: snapshot,
                 dialect: language.id == "html" ? .html : .xml,
+                scriptRules: language.embeddedScriptRules,
                 deadline: deadline
             )
         }

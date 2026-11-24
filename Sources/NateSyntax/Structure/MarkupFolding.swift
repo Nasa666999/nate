@@ -6,11 +6,13 @@ enum MarkupFolding {
     /// 参数说明:
     /// - snapshot: 折叠视图固定的完整原文。
     /// - dialect: 采用真实 HTML 或 XML 边界，HTML 可记录已确认结束的可省略元素。
+    /// - scriptRules: 同一注册表提供的内嵌 JavaScript 规则。
     /// - deadline: 标签读取、范围归并及结果发布的共同截止。
     /// 返回：完整且有界的多行范围；预算、容量或取消不满足时不隐藏部分原文。
     static func regions(
         snapshot: DocumentSnapshot,
         dialect: MarkupDialect,
+        scriptRules: ScriptRules? = nil,
         deadline: ContinuousClock.Instant
     ) throws -> [FoldRegion] {
         let text = snapshot.text
@@ -33,6 +35,7 @@ enum MarkupFolding {
         var blockCount = 0
         var literalStart: Int?
         var declarationStart: Int?
+        var inlineScriptStart: Int?
 
         /// 业务作用：只在通过配对确认后登记物理行变化，同行开闭不会生成折叠。
         /// 参数说明:
@@ -76,9 +79,29 @@ enum MarkupFolding {
                     switch tag.kind {
                     case .open, .empty:
                         try scope.open(tag, impliedEnd: impliedEnd, check: check)
+                        if dialect == .html, scriptRules != nil, tag.kind == .open,
+                            tag.name.elementsEqual("script".utf8),
+                            try HTMLScriptAttributes.allowsInline(tag.range, tree: text, check: check)
+                        {
+                            inlineScriptStart = tag.range.upper
+                        }
                     case .close:
                         if let opening = try scope.close(tag, impliedEnd: impliedEnd, check: check) {
                             try record(text.lineNumber(at: opening.anchor), line)
+                            if let start = inlineScriptStart, let scriptRules,
+                                tag.name.elementsEqual("script".utf8)
+                            {
+                                inlineScriptStart = nil
+                                // 只有真实 HTML 结束标签证实脚本边界后，才解释其内部代码结构。
+                                try HTMLScriptFolding.collect(
+                                    range: ByteRange(start, tag.range.lower),
+                                    snapshot: snapshot,
+                                    rules: scriptRules,
+                                    deadline: deadline,
+                                    check: check,
+                                    record: record
+                                )
+                            }
                         }
                         else if dialect == .xml {
                             // 错配后不能跨过已经失去结构资格的标签继续隐藏原文。
