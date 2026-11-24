@@ -333,6 +333,7 @@ extension ApplicationController: NSMenuItemValidation {
         add(windows, "在新窗口克隆当前文档", "cloneToWindow")
         add(windows, "移动当前标签到另一窗口…", "moveTabToWindow")
         add(windows, "文档列表…", "documentList")
+        add(windows, "搜索已打开文档…", "documentListSearch")
         windows.delegate = self
         populateWindowDocuments(in: windows)
         attach(windows, to: bar)
@@ -383,7 +384,10 @@ extension ApplicationController: NSMenuItemValidation {
     @objc func menuAction(_ sender: NSMenuItem) {
         if let id = sender.representedObject as? String {
             // 动态列表只拥有生成时的标签集合与布局，旧菜单不能先确认候选再发现目标已经改变。
-            if (id.hasPrefix("activate:") || id.hasPrefix("documentListOrder:")), !validateMenuItem(sender) {
+            if (id.hasPrefix("activate:") || id.hasPrefix("documentListOrder:")
+                || id == "documentListSearch"),
+                !validateMenuItem(sender)
+            {
                 mainWindow?.status.stringValue = "文档列表已改变，请重新打开后选择。"
                 return
             }

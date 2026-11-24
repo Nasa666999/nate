@@ -41,6 +41,16 @@ extension ApplicationController {
         if id == "documentList" {
             return !closing && mainWindow != nil && !documents.isEmpty
         }
+        if id == "documentListSearch" {
+            guard !closing, let window = mainWindow, window.window?.attachedSheet == nil,
+                !workspaceTabIDs(in: window).isEmpty
+            else {
+                return false
+            }
+            let source = menuItem.identifier?.rawValue ?? ""
+            let prefix = "nate.documentListSearch."
+            return !source.hasPrefix(prefix) || source == prefix + window.tabOrderIdentity.uuidString
+        }
         if id == "newWindow" || id == "cloneToWindow" {
             return !closing && editorWindows.count < 32
                 && (id == "newWindow" ? documents.count < 1024 : active?.closing == false)

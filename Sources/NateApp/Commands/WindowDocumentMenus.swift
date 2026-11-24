@@ -1,6 +1,27 @@
 import AppKit
 
 extension ApplicationController: NSMenuDelegate {
+    /// 业务作用：文档搜索只允许切换发起窗口的原有标签，由统一激活入口处理原输入。
+    /// 参数说明: 无。
+    /// 返回：搜索无结果、取消或来源失效时不切换正文；有效结果经窗口和标签复验后激活。
+    func searchOpenDocuments() {
+        guard !closing, let owner = mainWindow, isWorkspaceWindowAvailable(owner) else {
+            return
+        }
+        let generation = owner.tabOrderIdentity
+        owner.searchDocumentList { [weak self, weak owner] id in
+            // 先校验原窗口、原代次和目标存续，再交给会确认原编辑候选的切换入口。
+            guard let self, let owner, !closing, mainWindow === owner, isWorkspaceWindowAvailable(owner),
+                owner.tabOrderIdentity == generation, workspaceTabIDs(in: owner).contains(id),
+                documents.contains(where: { $0.buffer.id == id && !$0.closing })
+            else {
+                owner?.status.stringValue = "文档列表已改变，请重新打开后选择。"
+                return
+            }
+            activate(id, in: owner)
+        }
+    }
+
     /// 业务作用：窗口菜单实际展开时读取最新文档顺序，后台保存不重建正在跟踪的菜单。
     /// 参数说明:
     /// - menu: 即将显示的原生菜单。

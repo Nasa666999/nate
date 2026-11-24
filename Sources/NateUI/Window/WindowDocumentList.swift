@@ -63,6 +63,13 @@ extension EditorWindow {
         let menu = documentListMenu(target: target, action: action)
         menu.insertItem(.separator(), at: 0)
         menu.insertItem(documentListOrderItem(target: target, action: action), at: 0)
+        let search = NSMenuItem(title: "搜索已打开文档…", action: action, keyEquivalent: "")
+        search.target = target
+        search.representedObject = "documentListSearch"
+        search.identifier = NSUserInterfaceItemIdentifier(
+            "nate.documentListSearch." + tabOrderIdentity.uuidString
+        )
+        menu.insertItem(search, at: 0)
         _ = menu.popUp(
             positioning: nil,
             at: NSPoint(
@@ -71,5 +78,20 @@ extension EditorWindow {
             ),
             in: anchor
         )
+    }
+
+    /// 业务作用：在当前文档所属窗口使用相同的排序及标签命名搜索，不读取任何磁盘路径。
+    /// 参数说明:
+    /// - onSelect: 接收稳定文档身份，负责在表单关闭后复验窗口和标签。
+    /// 返回：没有标签或窗口已有其它表单时保持界面，取消不会触发切换。
+    public func searchDocumentList(onSelect: @escaping (UUID) -> Void) {
+        guard let window, window.attachedSheet == nil, !tabs.current.isEmpty else {
+            return
+        }
+        let search = DocumentListSearch(
+            documents: documentListOrder.sorted(tabs.current),
+            labels: tabs.displayLabels
+        )
+        search.present(in: window, onSelect: onSelect)
     }
 }
