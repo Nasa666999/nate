@@ -20,6 +20,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     private let fontZoomAdjustment: CGFloat
     private let advance: CGFloat
     private let metrics: WrappedASCIIGeometry
+    private let wordIndex: ASCIIWordWrapIndex?
     private let rowCount: Int
     private var rows: Range<Int>
     private var native: LineLayout
@@ -38,7 +39,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         range.count
     }
     var width: CGFloat {
-        CGFloat(metrics.columns) * advance
+        CGFloat(max(metrics.columns, wordIndex?.maximumRowLength ?? 0)) * advance
     }
     var height: CGFloat {
         max(20, metrics.firstBottom + CGFloat(rowCount - 1) * metrics.pitch)
@@ -47,7 +48,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         CGFloat(rows.lowerBound) * metrics.pitch
     }
 
-    /// 业务作用：只有原始长行不会产生独立词间断点且实际字体提供固定列和行高时，才用行窗口呈现软换行。
+    /// 业务作用：实际字体、原文和全部断行范围均有证据时才以原生窗口呈现超长软换行。
     /// 参数说明:
     /// - snapshot: 当前完整固定正文。
     /// - range: 本行的真实正文范围，排除原始物理行结束字节。
@@ -57,6 +58,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - theme: 当前编辑器的完整主题。
     /// - language: 当前绑定的原语言。
     /// - fontZoomAdjustment: 当前视图实际缩放差值。
+    /// - wordIndex: 含空格的同一原文及实际宽度已得到的完整断行索引。
     /// 返回：具备完整原生断行证据的初始窗口；不支持的内容、字体或宽度交回普通段落门禁。
     init?(
         snapshot: DocumentSnapshot,
@@ -66,7 +68,8 @@ final class WrappedASCIIWindow: LongLineProjection {
         containerWidth: CGFloat,
         theme: EditorThemeDefinition?,
         language: String?,
-        fontZoomAdjustment: CGFloat
+        fontZoomAdjustment: CGFloat,
+        wordIndex: ASCIIWordWrapIndex? = nil
     ) {
         let actual = EditorThemePresentation.baseFont(
             font,
@@ -74,17 +77,43 @@ final class WrappedASCIIWindow: LongLineProjection {
             language: language,
             adjustment: fontZoomAdjustment
         )
-        // 只有无词间软断点的单一 ASCII 串可复用固定行距，原文里的标点、空白和其它方向需要完整上下文。
+        // 字间断行必须已有固定原文索引，单个连续 ASCII 单词可以直接沿原生字距定位。
         guard range.count > EditorNativeLayoutPolicy.maximumParagraphBytes,
             snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
-            snapshot.text.isAlphanumericASCII(in: range), containerWidth.isFinite, containerWidth > 0,
+            containerWidth.isFinite, containerWidth > 0,
             let advance = LongLineWindow.uniformAdvance(actual, appearance: appearance),
             containerWidth / advance <= 8192
         else {
             return nil
         }
-        let guess = max(1, Int(containerWidth / advance))
-        let sample = ByteRange(range.lower, range.lower + min(range.count, guess * 4))
+        let sample: ByteRange
+        let expected: WrappedASCIIGeometry?
+        let indexedRows: [ByteRange]?
+        if let wordIndex {
+            guard
+                let grid = Self.referenceGeometry(
+                    font: actual,
+                    width: containerWidth,
+                    appearance: appearance
+                ),
+                wordIndex.range == range, wordIndex.matches(snapshot.text, columns: grid.columns),
+                let first = wordIndex.rows(startingAt: 0, count: 1)?.first
+            else {
+                return nil
+            }
+            sample = first
+            indexedRows = [first]
+            expected = grid
+        }
+        else {
+            guard snapshot.text.isAlphanumericASCII(in: range) else {
+                return nil
+            }
+            let guess = max(1, Int(containerWidth / advance))
+            sample = ByteRange(range.lower, range.lower + min(range.count, guess * 4))
+            indexedRows = nil
+            expected = nil
+        }
         let native = Self.layout(
             snapshot: snapshot,
             range: sample,
@@ -95,7 +124,13 @@ final class WrappedASCIIWindow: LongLineProjection {
             language: language,
             fontZoomAdjustment: fontZoomAdjustment
         )
-        guard let metrics = native.uniformWrapping(advance: advance) else {
+        guard
+            let metrics = native.uniformWrapping(
+                advance: advance,
+                expected: expected,
+                indexedRows: indexedRows
+            )
+        else {
             return nil
         }
         self.snapshot = snapshot
@@ -108,14 +143,45 @@ final class WrappedASCIIWindow: LongLineProjection {
         self.fontZoomAdjustment = fontZoomAdjustment
         self.advance = advance
         self.metrics = metrics
-        rowCount = (range.count - 1) / metrics.columns + 1
+        self.wordIndex = wordIndex
+        rowCount = wordIndex?.rowCount ?? (range.count - 1) / metrics.columns + 1
         // 只有末行也属于固定列边界时可复用试样窗口，避免将试样截断处冒用为完整长行的真实行末。
-        let completeSample = sample.count.isMultiple(of: metrics.columns)
-        rows = completeSample ? 0..<(sample.count / metrics.columns) : 0..<0
+        let completeSample = indexedRows != nil || sample.count.isMultiple(of: metrics.columns)
+        rows = completeSample ? 0..<(indexedRows?.count ?? sample.count / metrics.columns) : 0..<0
         self.native = native
         if !completeSample {
             project(covering: 0...0)
         }
+    }
+
+    /// 业务作用：用同一真实等宽字体和容器取得视觉列与行距，供后台读原文计算字间断点。
+    /// 参数说明:
+    /// - font: 已根据实际主题和缩放选定的原生字体。
+    /// - width: 当前原生正文容器的真实宽度。
+    /// - appearance: 当前编辑视图的外观。
+    /// 返回：TextKit 实测的固定网格；字体或容器不能形成该网格时为空。
+    static func referenceGeometry(font: NSFont, width: CGFloat, appearance: NSAppearance)
+        -> WrappedASCIIGeometry?
+    {
+        guard width.isFinite, width > 0,
+            let advance = LongLineWindow.uniformAdvance(font, appearance: appearance),
+            width / advance <= 8192
+        else {
+            return nil
+        }
+        let size = max(1, Int(width / advance)) * 4
+        let tree = PieceTree(String(repeating: "A", count: size))
+        let native = Self.layout(
+            snapshot: DocumentSnapshot(id: UUID(), revision: 0, text: tree),
+            range: ByteRange(0, size),
+            font: font,
+            appearance: appearance,
+            width: width,
+            theme: nil,
+            language: nil,
+            fontZoomAdjustment: 0
+        )
+        return native.uniformWrapping(advance: advance)
     }
 
     /// 业务作用：用实际视口的纵坐标推导原生行窗口，远处滚动不排版先前的全部字形。
@@ -140,7 +206,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         if point.y >= height {
             return characterCount
         }
-        return rows.lowerBound * metrics.columns
+        return renderedRange.lower - range.lower
             + native.character(at: NSPoint(x: point.x, y: point.y - offsetY))
     }
 
@@ -151,14 +217,31 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// 返回：经原生确认的光标坐标；窗口无法验证时返回空矩形。
     func caret(at local: Int, downstream: Bool) -> NSRect {
         let position = min(characterCount, max(0, local))
-        let row = min(rowCount - 1, position / metrics.columns)
-        let prev = position > 0 && position.isMultiple(of: metrics.columns) ? max(0, row - 1) : row
-        project(covering: prev...row)
+        let byte = range.lower + position
+        if byte <= renderedRange.lower || byte >= renderedRange.upper || unavailableReason != nil {
+            let row: Int
+            let prev: Int
+            if let wordIndex {
+                guard let first = wordIndex.row(at: byte, downstream: false),
+                    let last = wordIndex.row(at: byte, downstream: true)
+                else {
+                    unavailableReason = "超长软换行缺少当前光标的真实原字节断点。"
+                    return .zero
+                }
+                prev = first
+                row = last
+            }
+            else {
+                row = min(rowCount - 1, position / metrics.columns)
+                prev = position > 0 && position.isMultiple(of: metrics.columns) ? max(0, row - 1) : row
+            }
+            project(covering: prev...row)
+        }
         guard unavailableReason == nil else {
             return .zero
         }
         return native.caret(
-            at: position - rows.lowerBound * metrics.columns,
+            at: byte - renderedRange.lower,
             downstream: downstream && position < characterCount
         ).offsetBy(dx: 0, dy: offsetY)
     }
@@ -229,19 +312,43 @@ final class WrappedASCIIWindow: LongLineProjection {
             unavailableReason = nil
             return
         }
-        let maximum = EditorNativeLayoutPolicy.maximumWindowCharacters / metrics.columns
+        let maximum =
+            wordIndex == nil ? EditorNativeLayoutPolicy.maximumWindowCharacters / metrics.columns : 4096
         let needed = requested.count
         guard needed <= maximum else {
             unavailableReason = "超长软换行的视口超过 65536 个字形的容量，已暂停当前呈现。"
             return
         }
         let count = min(rowCount, min(maximum, max(8, needed + 12)))
-        let first = min(rowCount - count, max(0, requested.lowerBound - (count - needed) / 2))
-        let last = first + count
-        let segment = ByteRange(
-            range.lower + first * metrics.columns,
-            range.lower + min(characterCount, last * metrics.columns)
-        )
+        var first = min(rowCount - count, max(0, requested.lowerBound - (count - needed) / 2))
+        var last = first + count
+        let segment: ByteRange
+        let indexedRows: [ByteRange]?
+        if let wordIndex {
+            var planned = wordIndex.rows(startingAt: first, count: count)
+            if let current = planned, let begin = current.first, let end = current.last,
+                end.upper - begin.lower > EditorNativeLayoutPolicy.maximumWindowCharacters
+            {
+                first = requested.lowerBound
+                last = requested.upperBound + 1
+                planned = wordIndex.rows(startingAt: first, count: needed)
+            }
+            guard let planned, let start = planned.first, let end = planned.last,
+                end.upper - start.lower <= EditorNativeLayoutPolicy.maximumWindowCharacters
+            else {
+                unavailableReason = "超长软换行的视口超过 65536 个字形的容量，已暂停当前呈现。"
+                return
+            }
+            indexedRows = planned
+            segment = ByteRange(start.lower, end.upper)
+        }
+        else {
+            indexedRows = nil
+            segment = ByteRange(
+                range.lower + first * metrics.columns,
+                range.lower + min(characterCount, last * metrics.columns)
+            )
+        }
         let candidate = Self.layout(
             snapshot: snapshot,
             range: segment,
@@ -253,7 +360,8 @@ final class WrappedASCIIWindow: LongLineProjection {
             fontZoomAdjustment: fontZoomAdjustment
         )
         // 不同片段都必须重现原来的断行端点和像素几何，失配时不会发布旧窗口之外的坐标。
-        guard candidate.uniformWrapping(advance: advance, expected: metrics) != nil else {
+        guard candidate.uniformWrapping(advance: advance, expected: metrics, indexedRows: indexedRows) != nil
+        else {
             unavailableReason = "超长软换行的原生断行位置无法确认，已暂停当前呈现。"
             return
         }

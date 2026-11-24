@@ -358,6 +358,10 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         if !wrapLines || metrics != layoutMetrics {
             projection.measured.removeAll()
         }
+        if wrapLines && layoutMetrics?.width != metrics.width {
+            // 软换行索引属于原容器宽度，窗口伸缩后不得交付旧断点或继续旧导航。
+            wideTabLayout.reset()
+        }
         if metrics != layoutMetrics {
             clipboard.cancel()
         }

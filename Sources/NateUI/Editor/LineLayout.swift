@@ -116,7 +116,8 @@ final class LineLayout {
                 containerWidth: width,
                 theme: theme,
                 language: language,
-                fontZoomAdjustment: fontZoomAdjustment
+                fontZoomAdjustment: fontZoomAdjustment,
+                wordIndex: wideTabs?.wordWrap
             )
         }
         else if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {
@@ -328,8 +329,13 @@ final class LineLayout {
     /// 参数说明:
     /// - advance: 当前字体单个 ASCII 字形已确认的横向间距。
     /// - expected: 首个原生段落固定的列数、纵向步距及行底。
+    /// - indexedRows: 已独立确认的实际断行，连续单词可采用已确认的列数。
     /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
-    func uniformWrapping(advance: CGFloat, expected: WrappedASCIIGeometry? = nil) -> WrappedASCIIGeometry? {
+    func uniformWrapping(
+        advance: CGFloat,
+        expected: WrappedASCIIGeometry? = nil,
+        indexedRows: [ByteRange]? = nil
+    ) -> WrappedASCIIGeometry? {
         guard unavailableReason == nil, orderedPositions, orderedHeights, let first = nativeLines.first else {
             return nil
         }
@@ -338,13 +344,14 @@ final class LineLayout {
         let top = expected?.firstTop ?? first.bounds.minY
         let bottom = expected?.firstBottom ?? first.bounds.maxY
         guard columns > 0, pitch.isFinite, pitch > 0, bottom > top, characterCount > 0,
-            nativeLines.count == (characterCount - 1) / columns + 1
+            nativeLines.count == (indexedRows?.count ?? (characterCount - 1) / columns + 1)
         else {
             return nil
         }
         for (index, row) in nativeLines.enumerated() {
-            let lower = index * columns
-            let count = min(columns, characterCount - lower)
+            let indexed = indexedRows?[index]
+            let lower = indexed.map { $0.lower - range.lower } ?? index * columns
+            let count = indexed?.count ?? min(columns, characterCount - lower)
             let originY = CGFloat(index) * pitch
             guard row.lower == lower, row.upper == lower + count,
                 abs(row.bounds.minY - (top + originY)) < 0.04,

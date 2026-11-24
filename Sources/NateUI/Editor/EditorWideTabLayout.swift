@@ -16,6 +16,7 @@ final class EditorWideTabLayout {
         let han: PlainHanLine?
         var hanTabs: HanTabColumns? = nil
         let status: String?
+        var wordWrap: ASCIIWordWrapIndex? = nil
 
         /// 业务作用：编辑与当前实际显示共用已经确认的长行原始字节证据。
         /// 参数说明: 无。
@@ -59,11 +60,14 @@ extension EditorView {
     /// - range: 当前真实逻辑行的完整原字节范围。
     /// 返回：已确认的索引、测量中的明确说明或原生回退状态，不在主线程顺序测量超长正文。
     func wideTabPreparation(snapshot: DocumentSnapshot, range: ByteRange) -> EditorWideTabLayout.Entry {
-        guard !wrapLines, !rtl, composition == nil,
+        guard !rtl, composition == nil,
             range.count > EditorNativeLayoutPolicy.maximumParagraphBytes,
-            snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
-            !snapshot.text.isPrintableASCII(in: range)
+            snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes
         else {
+            return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
+        }
+        let printable = snapshot.text.isPrintableASCII(in: range)
+        if wrapLines ? (!printable || snapshot.text.isAlphanumericASCII(in: range)) : printable {
             return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
         }
         let key = wideTabKey(range)
@@ -74,7 +78,32 @@ extension EditorView {
             return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
         }
         if wideTabLayout.task == nil {
-            prepareWideLine(snapshot: snapshot, key: key, width: tabSettings.width)
+            if wrapLines {
+                let actual = EditorThemePresentation.baseFont(
+                    font,
+                    theme: editorTheme?.definition,
+                    language: language?.id,
+                    adjustment: fontZoomAdjustment
+                )
+                guard
+                    let grid = WrappedASCIIWindow.referenceGeometry(
+                        font: actual,
+                        width: nativeBodyLayoutWidth,
+                        appearance: effectiveAppearance
+                    )
+                else {
+                    return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
+                }
+                prepareWideLine(
+                    snapshot: snapshot,
+                    key: key,
+                    width: tabSettings.width,
+                    wrappingColumns: grid.columns
+                )
+            }
+            else {
+                prepareWideLine(snapshot: snapshot, key: key, width: tabSettings.width)
+            }
         }
         return EditorWideTabLayout.Entry(columns: nil, han: nil, status: EditorWideTabLayout.measuring)
     }
@@ -98,11 +127,26 @@ extension EditorView {
     /// - snapshot: 当前逻辑行所属的不可变正文。
     /// - key: 测量开始时固定的视图布局来源。
     /// - width: 当前真实 Tab 宽度。
+    /// - wrappingColumns: 自动换行时已确认的实际列数，其它请求使用制表布局。
     /// 返回：同一来源内替换暂未排版窗口，迟到、取消或超量时保留原文和选择。
-    private func prepareWideLine(snapshot: DocumentSnapshot, key: EditorWideTabLayout.Key, width: Int) {
+    private func prepareWideLine(
+        snapshot: DocumentSnapshot,
+        key: EditorWideTabLayout.Key,
+        width: Int,
+        wrappingColumns: Int? = nil
+    ) {
         wideTabLayout.task = Task { [weak self] in
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
             let worker = Task.detached(priority: .userInitiated) {
+                if let wrappingColumns {
+                    let index = try ASCIIWordWrapIndex(
+                        text: snapshot.text,
+                        range: key.range,
+                        columns: wrappingColumns,
+                        deadline: deadline
+                    )
+                    return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil, wordWrap: index)
+                }
                 if let columns = try ASCIITabColumns(
                     text: snapshot.text,
                     range: key.range,
@@ -121,7 +165,7 @@ extension EditorView {
                     onCancel: { worker.cancel() }
                 )
                 try Task.checkCancellation()
-                if measured.columns == nil, measured.han == nil,
+                if wrappingColumns == nil, measured.columns == nil, measured.han == nil,
                     let self, self.wideTabKey(key.range) == key,
                     let grid = self.wideHanTabMetrics(width: width)
                 {
@@ -156,7 +200,7 @@ extension EditorView {
             self.layouts = self.layouts.filter { $0.value.unavailableReason == nil }
             self.needsDisplay = true
             guard let entry, self.wideTabKey(key.range) == key,
-                !self.wrapLines, !self.rtl, self.composition == nil
+                self.wrapLines == (wrappingColumns != nil), !self.rtl, self.composition == nil
             else {
                 return
             }
@@ -166,7 +210,7 @@ extension EditorView {
             }
             self.wideTabLayout.pendingReveal = nil
             // 后台完成只恢复原本等待的光标定位，用户后来滚动、换焦或修改选区都优先。
-            if entry.columns != nil || entry.han != nil || entry.hanTabs != nil,
+            if entry.columns != nil || entry.han != nil || entry.hanTabs != nil || entry.wordWrap != nil,
                 self.selectionGeneration == request.selection, self.focusGeneration == request.focus,
                 self.visibleRect.origin == request.viewport,
                 self.layoutLine(snapshot.text.lineNumber(at: key.range.lower)).unavailableReason == nil
