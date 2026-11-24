@@ -437,36 +437,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             }
             self.route(command)
         }
-        window.onSelect = {
-            [weak self, weak window] id in
-            guard let window else {
-                return
-            }
-            self?.activate(id, in: window)
-        }
-        window.onCloseTab = {
-            [weak self, weak window] id in
-            Task {
-                guard let self, let window, self.isWorkspaceWindowAvailable(window) else {
-                    return
-                }
-                await self.closeWorkspaceTab(id, in: window)
-            }
-        }
-        window.onTabAction = {
-            [weak self, weak window] id, action in
-            guard let self, self.mainWindow === window else {
-                return
-            }
-            self.tabAction(id, action)
-        }
-        window.onTabReorder = {
-            [weak self, weak window] move in
-            guard let self, self.mainWindow === window else {
-                return false
-            }
-            return self.reorderTabs(move)
-        }
+        connectWorkspaceTabs(window)
         window.onEdit = {
             [weak self, weak window] in
             if let window {

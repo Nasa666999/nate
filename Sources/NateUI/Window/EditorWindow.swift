@@ -8,6 +8,8 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
     public var onSelect: ((UUID) -> Void)?
     public var onCloseTab: ((UUID) -> Void)?
     public var onTabAction: ((UUID, String) -> Void)?
+    public var onTabDropTarget: ((NSPoint) -> EditorWindow?)?
+    public var onTabTransfer: ((WindowTabTransfer, EditorWindow) -> Bool)?
     public var onTabReorder: ((DocumentOrderMove) -> Bool)?
     /// 业务作用：工作区发布重排时复验实际标签栏的原顺序代次，顺序往返不能恢复旧手势资格。
     /// 参数说明: 无。
@@ -143,6 +145,7 @@ public final class EditorWindow: NSWindowController, NSWindowDelegate {
         tabs.onReorder = {
             [weak self] move in self?.onTabReorder?(move) ?? false
         }
+        tabs.windowOwner = self
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = true

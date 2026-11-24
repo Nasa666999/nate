@@ -8,6 +8,7 @@ final class TabStrip: NSScrollView {
     var onAction: ((UUID, String) -> Void)?
     var onReorder: ((DocumentOrderMove) -> Bool)?
     var canTransferTabs = false
+    weak var windowOwner: EditorWindow?
     let stack = TabCanvas()
     var layoutMode = DocumentTabLayout.horizontal
     var layoutPlan: DocumentTabLayoutPlan?
@@ -19,6 +20,8 @@ final class TabStrip: NSScrollView {
     var orderIdentity = UUID()
     var activeDrag: TabDragGesture?
     weak var dragSource: TabButton?
+    weak var crossDropTarget: TabStrip?
+    var crossDropGeneration: UUID?
     var dragLocation = NSPoint.zero
     var dragTimer: Timer?
     var dragKeyMonitor: Any?

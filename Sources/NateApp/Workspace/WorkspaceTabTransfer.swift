@@ -2,14 +2,58 @@ import AppKit
 import NatePlatform
 import NateUI
 
-struct WorkspaceTabTransfer {
-    let documentID: UUID
-    let sourceGeneration: UUID
-    let destinationGeneration: UUID
-    let before: UUID?
-}
-
 extension ApplicationController {
+    /// 业务作用：原生标签动作捕获其所属窗口，拖放和普通标签命令共用实际窗口来源。
+    /// 参数说明:
+    /// - window: 即将加入工作区的原生窗口。
+    /// 返回：只连接该窗口拥有的标签动作，异步回调不借其他窗口获得发布权。
+    func connectWorkspaceTabs(_ window: EditorWindow) {
+        window.onSelect = {
+            [weak self, weak window] id in
+            guard let window else {
+                return
+            }
+            self?.activate(id, in: window)
+        }
+        window.onCloseTab = {
+            [weak self, weak window] id in
+            Task {
+                guard let self, let window, self.isWorkspaceWindowAvailable(window) else {
+                    return
+                }
+                await self.closeWorkspaceTab(id, in: window)
+            }
+        }
+        window.onTabAction = {
+            [weak self, weak window] id, action in
+            guard let self, self.mainWindow === window else {
+                return
+            }
+            self.tabAction(id, action)
+        }
+        window.onTabReorder = {
+            [weak self, weak window] move in
+            guard let self, self.mainWindow === window else {
+                return false
+            }
+            return self.reorderTabs(move)
+        }
+        window.onTabDropTarget = {
+            [weak self, weak window] point in
+            guard let self, let window else {
+                return nil
+            }
+            return self.workspaceTabDropTarget(at: point, from: window)
+        }
+        window.onTabTransfer = {
+            [weak self, weak window] transfer, destination in
+            guard let self, let window else {
+                return false
+            }
+            return self.transferWorkspaceTab(transfer, from: window, to: destination)
+        }
+    }
+
     /// 业务作用：在两扇窗口之间移动实际标签，保留唯一正文、保存通道、固定状态和独立视图位置。
     /// 参数说明:
     /// - transfer: 原文档身份、两侧顺序来源和目标插入位置。
@@ -18,7 +62,7 @@ extension ApplicationController {
     /// 返回：两侧原顺序与组合输入仍允许移动时为真，失效时保留原标签归属。
     @discardableResult
     func transferWorkspaceTab(
-        _ transfer: WorkspaceTabTransfer,
+        _ transfer: WindowTabTransfer,
         from source: EditorWindow,
         to destination: EditorWindow
     ) -> Bool {
@@ -102,7 +146,7 @@ extension ApplicationController {
             return
         }
         let target = destinations[popup.indexOfSelectedItem]
-        let transfer = WorkspaceTabTransfer(
+        let transfer = WindowTabTransfer(
             documentID: id,
             sourceGeneration: sourceGeneration,
             destinationGeneration: target.generation,
@@ -110,6 +154,21 @@ extension ApplicationController {
         )
         if !transferWorkspaceTab(transfer, from: source, to: target.window) {
             source.status.stringValue = "窗口、标签顺序或输入状态已改变，请重新选择。"
+        }
+    }
+
+    /// 业务作用：跨窗鼠标只交给屏幕落点上最前面的真实编辑窗口。
+    /// 参数说明:
+    /// - point: 原拖动事件转换后的屏幕坐标。
+    /// - source: 保有原拖动的编辑窗口。
+    /// 返回：目标真实标签栏可见时返回其窗口；面板遮挡、栏外和失效来源均为空。
+    func workspaceTabDropTarget(at point: NSPoint, from source: EditorWindow) -> EditorWindow? {
+        guard !closing, isWorkspaceWindowAvailable(source) else {
+            return nil
+        }
+        let number = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0)
+        return editorWindows.first {
+            $0 !== source && $0.window?.windowNumber == number && $0.acceptsTabDrop(at: point)
         }
     }
 

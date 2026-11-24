@@ -34,7 +34,9 @@ extension TabStrip {
             guard let self, let active = self.activeDrag else {
                 return key
             }
-            let belongsToWindow = key.windowNumber == self.window?.windowNumber
+            let belongsToWindow =
+                key.windowNumber == self.window?.windowNumber
+                || key.windowNumber == self.crossDropTarget?.window?.windowNumber
             self.endTitleDrag(active.gesture)
             // Esc 只取消当前移动，不能同时撤去正文里的输入法候选。
             return belongsToWindow && key.keyCode == 53 ? nil : key
@@ -63,20 +65,20 @@ extension TabStrip {
         guard let gesture, activeDrag?.gesture == gesture else {
             return
         }
-        guard validTitleDrag(source), event.windowNumber == window?.windowNumber else {
+        guard validTitleDrag(source), let location = titleDragLocation(event) else {
             endTitleDrag(gesture)
             return
         }
-        dragLocation = event.locationInWindow
+        dragLocation = location
         displayTitleDrop()
     }
 
-    /// 业务作用：鼠标释放时完整复验来源和栏内位置，再发布一次纯顺序计划。
+    /// 业务作用：释放时复验真实鼠标落点与原顺序，各窗口只接受一次有效拖放。
     /// 参数说明:
     /// - source: 原始标题实例。
     /// - gesture: 按下序列的唯一手势身份。
     /// - event: 实际释放事件。
-    /// 返回：合法栏内投放提交计划，外部释放、旧顺序或旧窗口只解除反馈。
+    /// 返回：栏内重排或跨窗移动成功时发布一次计划，旧顺序和栏外释放只解除反馈。
     func finishTitleDrag(_ source: TabButton, gesture: UUID?, event: NSEvent) {
         layoutTabs()
         guard let gesture, let active = activeDrag, active.gesture == gesture else {
@@ -85,9 +87,33 @@ extension TabStrip {
         defer {
             endTitleDrag(gesture)
         }
-        // 释放发生在别的窗口或栏外时不能使用最后一次合法悬停位置代为移动。
-        guard validTitleDrag(source), event.windowNumber == window?.windowNumber,
-            bounds.contains(convert(event.locationInWindow, from: nil))
+        // 鼠标释放必须用本次真实落点，不能借最后一次合法悬停代为提交。
+        guard validTitleDrag(source), let location = titleDragLocation(event), let window
+        else {
+            return
+        }
+        let point = window.convertPoint(toScreen: location)
+        if let destination = tabDropTarget(at: point), let targetWindow = destination.windowOwner,
+            let targetNative = destination.window
+        {
+            // 布局、顺序或目标变化后，旧插入提示不能成为新窗口的移动授权。
+            guard crossDropTarget === destination, crossDropGeneration == destination.orderIdentity else {
+                return
+            }
+            destination.layoutTabs()
+            let transfer = WindowTabTransfer(
+                documentID: active.documentID,
+                sourceGeneration: active.order,
+                destinationGeneration: destination.orderIdentity,
+                before: destination.targetBefore(targetNative.convertPoint(fromScreen: point))
+            )
+            endTitleDrag(gesture)
+            _ = windowOwner?.onTabTransfer?(transfer, targetWindow)
+            return
+        }
+        guard event.windowNumber == window.windowNumber, bounds.contains(convert(location, from: nil)),
+            !canTransferTabs
+                || NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0) == window.windowNumber
         else {
             return
         }
@@ -95,7 +121,7 @@ extension TabStrip {
             let move = try DocumentOrderMove(
                 original: current.map(\.id),
                 documentID: active.documentID,
-                before: targetBefore(event.locationInWindow),
+                before: targetBefore(location),
                 sourceGeneration: orderIdentity
             )
             // 先收回手势再发布排列，界面重建不能让迟到释放重复消费同一意图。
@@ -125,6 +151,7 @@ extension TabStrip {
         dragSource?.alphaValue = 1
         dragSource = nil
         dropIndicator.isHidden = true
+        clearCrossDrop()
     }
 
     /// 业务作用：静止悬停时继续推进边缘滚动，失去窗口、来源或鼠标后及时解除手势。
@@ -157,18 +184,98 @@ extension TabStrip {
             }
     }
 
-    /// 业务作用：按照当前真实布局显示插入位置，栏外移动隐藏反馈并停止边缘推进。
+    /// 业务作用：按屏幕落点选择当前栏或另一已登记标签栏，只有当前有效目标显示插入提示。
     /// 参数说明: 无。
     /// 返回：只改变标签视口与标记，正文及活动身份保持原状。
     private func displayTitleDrop() {
-        let point = convert(dragLocation, from: nil)
-        guard bounds.contains(point) else {
+        if let window {
+            let point = window.convertPoint(toScreen: dragLocation)
+            if let destination = tabDropTarget(at: point), let targetWindow = destination.window {
+                dropIndicator.isHidden = true
+                if crossDropTarget !== destination {
+                    clearCrossDrop()
+                    crossDropTarget = destination
+                    crossDropGeneration = destination.orderIdentity
+                }
+                // 同一栏在悬停时换代，先隐藏旧提示，离开并重新进入后才能取得新目标。
+                if crossDropGeneration == destination.orderIdentity {
+                    destination.layoutTabs()
+                    destination.showTitleDrop(at: targetWindow.convertPoint(fromScreen: point))
+                }
+                else {
+                    destination.dropIndicator.isHidden = true
+                }
+                return
+            }
+        }
+        clearCrossDrop()
+        // 目标可能被其它面板或应用的窗口盖住，不能在下方标签栏继续显示可投放提示。
+        if canTransferTabs, let window,
+            NSWindow.windowNumber(
+                at: window.convertPoint(toScreen: dragLocation),
+                belowWindowWithWindowNumber: 0
+            )
+                != window.windowNumber
+        {
             dropIndicator.isHidden = true
             return
         }
-        scrollForDrag(dragLocation)
+        showTitleDrop(at: dragLocation)
+    }
+
+    /// 业务作用：把当前原生鼠标事件换算成来源栏的窗口坐标，支持 AppKit 将事件关联到不同窗口。
+    /// 参数说明:
+    /// - event: 本次实际鼠标拖动或释放事件。
+    /// 返回：本应用可识别的原生窗口坐标，无法定位外部事件时为空。
+    func titleDragLocation(_ event: NSEvent) -> NSPoint? {
+        guard let window else {
+            return nil
+        }
+        if event.windowNumber == window.windowNumber {
+            return event.locationInWindow
+        }
+        guard canTransferTabs, let eventWindow = event.window,
+            NSApp.windows.contains(where: { $0 === eventWindow })
+        else {
+            return nil
+        }
+        return window.convertPoint(fromScreen: eventWindow.convertPoint(toScreen: event.locationInWindow))
+    }
+
+    /// 业务作用：将鼠标交给应用登记的最前方真实目标，源栏和临时控件不能接收跨窗移动。
+    /// 参数说明:
+    /// - point: 鼠标当前屏幕坐标。
+    /// 返回：当前可见且没有其它拖动的实际目标栏。
+    private func tabDropTarget(at point: NSPoint) -> TabStrip? {
+        guard canTransferTabs, let target = windowOwner?.onTabDropTarget?(point)?.tabs,
+            target !== self, target.activeDrag == nil
+        else {
+            return nil
+        }
+        return target
+    }
+
+    /// 业务作用：离开、取消或完成拖动时清理另一窗口的临时插入提示。
+    /// 参数说明: 无。
+    /// 返回：撤销原悬停证据和对应提示。
+    private func clearCrossDrop() {
+        crossDropTarget?.dropIndicator.isHidden = true
+        crossDropTarget = nil
+        crossDropGeneration = nil
+    }
+
+    /// 业务作用：按目标栏的实际布局及滚动位置绘制插入提示。
+    /// 参数说明:
+    /// - windowPoint: 当前目标窗口的原生坐标。
+    /// 返回：合法落点显示插入线，栏外隐藏提示并停止滚动。
+    private func showTitleDrop(at windowPoint: NSPoint) {
+        guard bounds.contains(convert(windowPoint, from: nil)) else {
+            dropIndicator.isHidden = true
+            return
+        }
+        scrollForDrag(windowPoint)
         stack.layoutSubtreeIfNeeded()
-        let before = targetBefore(dragLocation)
+        let before = targetBefore(windowPoint)
         let index = before.flatMap {
             id in
             current.firstIndex {

@@ -30,7 +30,7 @@ final class TabButton: NSButton {
 
     /// 业务作用：跨过阈值后开始原生拖动，独立事件分发使保存与其它主线程任务继续调度。
     /// 参数说明:
-    /// - event: 同一窗口中的真实拖动事件。
+    /// - event: 实际原生拖动事件。
     /// 返回：一个按下序列最多启动一次会话；旧窗口或已移除按钮不产生动作。
     override func mouseDragged(with event: NSEvent) {
         if dragStarted {
@@ -39,12 +39,11 @@ final class TabButton: NSButton {
         }
         guard let pressed = pressedEvent, let native = window,
             native.isVisible, pressed.windowNumber == native.windowNumber,
-            event.windowNumber == native.windowNumber
+            let point = owner?.titleDragLocation(event)
         else {
             return
         }
         let start = pressed.locationInWindow
-        let point = event.locationInWindow
         if hypot(point.x - start.x, point.y - start.y) >= 4 {
             dragStarted = true
             if onBeginDrag?(self, pressed) == true {
