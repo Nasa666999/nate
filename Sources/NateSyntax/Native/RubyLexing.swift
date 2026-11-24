@@ -4,6 +4,7 @@ import NateCore
 struct RubyStyleRun: Equatable, Sendable {
     let range: ByteRange
     let style: RubyHighlightStyle
+    let insideInterpolation: Bool
 }
 
 struct RubyLexicalCache: Equatable, Sendable {
@@ -135,25 +136,40 @@ enum RubyLexing {
         }
         let body = tree.lineRange(line, includeEnding: false)
         let bytes = tree.bytes(in: physical)
-        let row = try cache.lexer.row(Array(bytes.prefix(body.count))) {
+        let row = try cache.lexer.row(Array(bytes.prefix(body.count)), highlightInterpolations: true) {
             try budget.consume()
         }
         var words = RubyHighlightWords()
-        let styles = try words.styles(for: row, bytes: bytes, keywords: rules.keywords, budget: &budget)
+        let (styles, opaque) = try words.styles(
+            for: row,
+            bytes: bytes,
+            keywords: rules.keywords,
+            budget: &budget
+        )
         var runs: [RubyStyleRun] = []
         var start = 0
         while start < styles.count {
             try budget.consume()
             let style = styles[start]
+            let insideInterpolation = !opaque.isEmpty && opaque[start]
             var end = start + 1
-            while end < styles.count && (styles[end] == style || bytes[end] & 0xC0 == 0x80) {
+            while end < styles.count,
+                bytes[end] & 0xC0 == 0x80
+                    || (styles[end] == style && (opaque.isEmpty || opaque[end] == insideInterpolation))
+            {
                 try budget.consume()
                 end += 1
             }
             guard runs.count < 65_536 else {
                 throw NateError.message("Ruby 高亮物理行的连续样式超过 65536 段。")
             }
-            runs.append(RubyStyleRun(range: ByteRange(offset + start, offset + end), style: style))
+            runs.append(
+                RubyStyleRun(
+                    range: ByteRange(offset + start, offset + end),
+                    style: style,
+                    insideInterpolation: insideInterpolation
+                )
+            )
             start = end
         }
         cache.physical = physical
@@ -205,7 +221,7 @@ enum RubyLexing {
                     foreground: style.foreground,
                     background: style.background,
                     fontStyle: style.fontStyle,
-                    lexicalStyle: "ruby:" + number,
+                    lexicalStyle: (run.insideInterpolation ? "ruby:interpolation:" : "ruby:") + number,
                     nativeStyle: run.style.rawValue
                 )
             )

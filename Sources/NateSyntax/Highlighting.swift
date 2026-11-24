@@ -72,6 +72,7 @@ public struct SyntaxToken: Sendable {
     /// 返回：当前范围不应贡献代码折叠或结构缩进标点时为真。
     public var isStructureOpaque: Bool {
         kind == .string || kind == .comment || lexicalStyle == "c:preprocessor"
+            || lexicalStyle.hasPrefix("ruby:interpolation:")
             || lexicalStyle == "objc:9"
             || lexicalStyle == "r:10" || lexicalStyle == "r:11" || lexicalStyle == "lua:9"
             || lexicalStyle == "script:9"

@@ -6,6 +6,7 @@ struct RubyHighlightWords {
     private var expectsValue = true
     private var qualified = false
     private var continuesMethodName = false
+    private var previous: RubyIndentationLexer.Token?
 
     /// 业务作用：利用真实代码词元在原生主题中区分数字、可命名作用域、变量、符号及后缀关键词。
     /// 参数说明:
@@ -19,69 +20,152 @@ struct RubyHighlightWords {
         bytes: [UInt8],
         keywords: Set<String>,
         budget: inout ANSILexingBudget
-    ) throws -> [RubyHighlightStyle] {
+    ) throws -> (styles: [RubyHighlightStyle], opaque: [Bool]) {
         let bodyEnd =
             bytes.last == 10
             ? bytes.count - (bytes.count > 1 && bytes[bytes.count - 2] == 13 ? 2 : 1)
             : bytes.count - (bytes.last == 13 ? 1 : 0)
         var styles = Array(repeating: row.opaqueStyle ?? .whitespace, count: bytes.count)
         if let close = row.heredocEnd {
-            apply(.heredocDelimiter, to: close..<bodyEnd, in: &styles)
+            Self.apply(.heredocDelimiter, to: close..<bodyEnd, in: &styles)
         }
-        apply(row.endingStyle ?? .whitespace, to: bodyEnd..<bytes.count, in: &styles)
-        if row.entirelyOpaque {
-            return styles
+        Self.apply(row.endingStyle ?? .whitespace, to: bodyEnd..<bytes.count, in: &styles)
+        if !row.entirelyOpaque {
+            for token in row.tokens {
+                try budget.consume()
+                paint(token, bytes: bytes, bodyEnd: bodyEnd, keywords: keywords, styles: &styles)
+            }
+            if let start = row.commentStart {
+                Self.apply(.lineComment, to: start..<bodyEnd, in: &styles)
+            }
         }
-        var previous: RubyIndentationLexer.Token?
-        for token in row.tokens {
+        guard let interpolation = row.interpolation, !interpolation.events.isEmpty else {
+            return (styles, [])
+        }
+        let opaque = try Self.paintInterpolation(
+            interpolation,
+            bytes: bytes,
+            bodyEnd: bodyEnd,
+            keywords: keywords,
+            styles: &styles,
+            budget: &budget
+        )
+        return (styles, opaque)
+    }
+
+    /// 业务作用：独立解释每层插值表达式，同时把真实字面内部的范围标为外部结构不可用。
+    /// 参数说明:
+    /// - interpolation: 当前物理行按原字节顺序保存的插值事件及入口深度。
+    /// - bytes: 当前物理行的完整原字节。
+    /// - bodyEnd: 不含物理结束符的正文端点。
+    /// - keywords: 当前 Ruby 资源的原生词表。
+    /// - styles: 当前行已确认的样式，记录中的范围可覆盖外层字面类别。
+    /// - budget: 词法准备、样式及投影的共同继续资格。
+    /// 返回：须与外层代码结构隔离的原字节标记。
+    private static func paintInterpolation(
+        _ interpolation: RubyInterpolationHighlights,
+        bytes: [UInt8],
+        bodyEnd: Int,
+        keywords: Set<String>,
+        styles: inout [RubyHighlightStyle],
+        budget: inout ANSILexingBudget
+    ) throws -> [Bool] {
+        var opaque = Array(repeating: false, count: bytes.count)
+        var expressions = Array(repeating: RubyHighlightWords(), count: interpolation.initialDepth)
+        for event in interpolation.events {
             try budget.consume()
-            let start = token.span.lower
-            let end = token.span.upper
-            let raw = bytes[start..<end]
-            let style: RubyHighlightStyle
-            if let literal = token.highlightStyle {
-                style = literal
-                if literal == .heredocDelimiter {
-                    apply(.operation, to: start..<(start + 2), in: &styles)
-                    apply(style, to: (start + 2)..<end, in: &styles)
-                    expectsValue = false
-                    qualified = false
-                    previous = token
-                    continue
+            let range: ByteRange
+            switch event {
+            case .enter(let boundary):
+                expressions.append(RubyHighlightWords())
+                Self.apply(.operation, to: boundary.lower..<boundary.upper, in: &styles)
+                range = boundary
+            case .leave(let boundary):
+                guard expressions.popLast() != nil else {
+                    throw NateError.message("Ruby 插值结束符缺少对应的原文开端。")
                 }
-                declaration = nil
+                Self.apply(.operation, to: boundary.lower..<boundary.upper, in: &styles)
+                range = boundary
+            case .token(let token):
+                guard !expressions.isEmpty else {
+                    throw NateError.message("Ruby 插值词元缺少表达式上下文。")
+                }
+                expressions[expressions.count - 1].paint(
+                    token,
+                    bytes: bytes,
+                    bodyEnd: bodyEnd,
+                    keywords: keywords,
+                    styles: &styles
+                )
+                range = token.span
+            case .styled(let span, let style):
+                Self.apply(style, to: span.lower..<span.upper, in: &styles)
+                range = span
+            }
+            for index in range.lower..<range.upper {
+                opaque[index] = true
+            }
+        }
+        return opaque
+    }
+
+    /// 业务作用：主代码与插值使用相同的原生词元分类，并各自维护前一个真实词元。
+    /// 参数说明:
+    /// - token: 当前表达式已经确认的原字节词元。
+    /// - bytes: 同一物理行的完整原字节。
+    /// - bodyEnd: 真实物理结束符前的端点。
+    /// - keywords: 当前已确认的词表。
+    /// - styles: 含相邻原字节背景的当前行样式。
+    /// 返回：写入词元的真实样式并更新后继词的独立类别。
+    private mutating func paint(
+        _ token: RubyIndentationLexer.Token,
+        bytes: [UInt8],
+        bodyEnd: Int,
+        keywords: Set<String>,
+        styles: inout [RubyHighlightStyle]
+    ) {
+        let start = token.span.lower
+        let end = token.span.upper
+        let raw = bytes[start..<end]
+        let style: RubyHighlightStyle
+        if let literal = token.highlightStyle {
+            style = literal
+            if literal == .heredocDelimiter {
+                Self.apply(.operation, to: start..<(start + 2), in: &styles)
+                Self.apply(style, to: (start + 2)..<end, in: &styles)
                 expectsValue = false
                 qualified = false
+                previous = token
+                return
+            }
+            declaration = nil
+            expectsValue = false
+            qualified = false
+        }
+        else {
+            switch token.kind {
+            case .symbol(let byte):
+                style = operation(byte, at: start, source: bytes, previous: previous, styles: &styles)
+            case .assignment:
+                style = operation(61, at: start, source: bytes, previous: previous, styles: &styles)
+            case .word, .operand:
+                style = word(raw, from: bytes, keywords: keywords)
+            }
+        }
+        if style == .identifier, raw.last == 58, raw.count > 1 {
+            if end == bodyEnd || RubyIndentationLexer.blank(bytes[end]) {
+                Self.apply(.symbol, to: start..<end, in: &styles)
             }
             else {
-                switch token.kind {
-                case .symbol(let byte):
-                    style = operation(byte, at: start, source: bytes, previous: previous, styles: &styles)
-                case .assignment:
-                    style = operation(61, at: start, source: bytes, previous: previous, styles: &styles)
-                case .word, .operand:
-                    style = word(raw, from: bytes, keywords: keywords)
-                }
+                Self.apply(style, to: start..<(end - 1), in: &styles)
+                styles[end - 1] = .operation
             }
-            if style == .identifier, raw.last == 58, raw.count > 1 {
-                if end == bodyEnd || RubyIndentationLexer.blank(bytes[end]) {
-                    apply(.symbol, to: start..<end, in: &styles)
-                }
-                else {
-                    apply(style, to: start..<(end - 1), in: &styles)
-                    styles[end - 1] = .operation
-                }
-                expectsValue = true
-            }
-            else {
-                apply(style, to: start..<end, in: &styles)
-            }
-            previous = token
+            expectsValue = true
         }
-        if let start = row.commentStart {
-            apply(.lineComment, to: start..<bodyEnd, in: &styles)
+        else {
+            Self.apply(style, to: start..<end, in: &styles)
         }
-        return styles
+        previous = token
     }
 
     /// 业务作用：优先确认真实声明名和接收者，成员关键字、标签和符号保留各自身份。
@@ -232,7 +316,7 @@ struct RubyHighlightWords {
     /// - range: 当前物理行内的完整范围。
     /// - values: 同一物理行的原始顺序样式。
     /// 返回：指定范围采用同一类别。
-    private func apply(
+    private static func apply(
         _ style: RubyHighlightStyle,
         to range: Range<Int>,
         in values: inout [RubyHighlightStyle]

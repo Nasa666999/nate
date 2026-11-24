@@ -50,6 +50,7 @@ struct RubyIndentationLexer: Equatable, Sendable {
         var opaqueStyle: RubyHighlightStyle? = nil
         var endingStyle: RubyHighlightStyle? = nil
         var heredocEnd: Int? = nil
+        var interpolation: RubyInterpolationHighlights? = nil
     }
 
     private var literal = RubyLiteralState()
@@ -61,17 +62,29 @@ struct RubyIndentationLexer: Equatable, Sendable {
     /// 业务作用：逐行保持 Ruby 真实字面、文档注释和数据边界，只向结构缩进交付可消费的代码词元。
     /// 参数说明:
     /// - bytes: 同一固定正文中当前物理行的完整原字节，排除结束符。
+    /// - highlightInterpolations: 当前调用需要独立的插值呈现时为真。
     /// - check: 全部目标、词法及最终提交共用的截止和继续资格。
     /// 返回：按真实相对偏移升序的词元以及仍处于隔离状态的边界；超量或取消拒绝整批。
-    mutating func row(_ bytes: [UInt8], check: () throws -> Void) throws -> Row {
+    mutating func row(
+        _ bytes: [UInt8],
+        highlightInterpolations: Bool = false,
+        check: () throws -> Void
+    ) throws -> Row {
         try check()
         if let document = heredocs.first {
-            let close = document.closingOffset(in: bytes)
-            if close != nil {
+            if let close = document.closingOffset(in: bytes) {
                 heredocs.removeFirst()
+                var row = Self.opaqueRow(document.style, ending: heredocs.first?.style)
+                row.heredocEnd = close
+                return row
             }
-            var row = Self.opaqueRow(document.style, ending: close == nil ? document.style : nil)
-            row.heredocEnd = close
+            let (interpolation, ending) = try heredocs[0].scanBody(
+                bytes,
+                highlight: highlightInterpolations,
+                check: check
+            )
+            var row = Self.opaqueRow(document.style, ending: ending)
+            row.interpolation = interpolation
             return row
         }
         if dataSection {
@@ -93,13 +106,15 @@ struct RubyIndentationLexer: Equatable, Sendable {
             return Self.opaqueRow(.data, ending: .data)
         }
         let beginsInLiteral = literal.isOpen
+        var highlights =
+            highlightInterpolations
+            ? RubyInterpolationHighlights(initialDepth: literal.interpolationDepth) : nil
         var tokens: [Token] = []
         var index = 0
         var commentStart: Int?
-        var expectsOperand = !beginsInLiteral
-        var qualified = false
+        var code = RubyCodePosition(expectsOperand: !beginsInLiteral)
         if beginsInLiteral {
-            try literal.advance(in: bytes, from: &index, check: check)
+            try literal.advance(in: bytes, from: &index, highlights: &highlights, check: check)
             if index > 0 {
                 tokens.append(Token(kind: .operand, span: ByteRange(0, index), highlightStyle: literalStyle))
             }
@@ -123,16 +138,9 @@ struct RubyIndentationLexer: Equatable, Sendable {
                 throw NateError.message("Ruby 结构缩进单行超过 65536 个词元。")
             }
             let start = index
-            let following = index + 1 < bytes.count ? bytes[index + 1] : 0
-            let possibleArgument =
-                index > 0 && Self.blank(bytes[index - 1]) && !Self.blank(following)
-                && following != 0 && following != 61
-            let acceptsLiteral = expectsOperand || possibleArgument
-            if byte == 58, let after = try RubyHighlightWords.symbolEnd(in: bytes, at: index, check: check) {
-                index = after
-                tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .symbol))
-                expectsOperand = false
-                qualified = false
+            let acceptsLiteral = code.acceptsLiteral(in: bytes, at: index)
+            if let token = try code.takeStandaloneLiteral(in: bytes, from: &index, check: check) {
+                tokens.append(token)
                 continue
             }
             if acceptsLiteral,
@@ -146,88 +154,21 @@ struct RubyIndentationLexer: Equatable, Sendable {
                 tokens.append(
                     Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .heredocDelimiter)
                 )
-                expectsOperand = false
-                qualified = false
+                code.consumeValue()
                 continue
             }
             if let (delimiter, after) = RubyLiteralState.opener(in: bytes, at: index, pattern: acceptsLiteral)
             {
                 literal.begin(delimiter)
                 index = after
-                let style = RubyHighlightStyle.literal(bytes[start..<after])
-                try literal.advance(in: bytes, from: &index, check: check)
+                let style = delimiter.style
+                try literal.advance(in: bytes, from: &index, highlights: &highlights, check: check)
                 literalStyle = literal.isOpen ? style : nil
                 tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: style))
-                expectsOperand = false
-                qualified = false
+                code.consumeValue()
                 continue
             }
-            if byte == 63, acceptsLiteral,
-                let end = try RubyCharacterLiteral.end(in: bytes, after: start, check: check)
-            {
-                index = end
-                tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .number))
-                expectsOperand = false
-                qualified = false
-                continue
-            }
-            if Self.namePart(byte) {
-                index += 1
-                while index < bytes.count, Self.namePart(bytes[index]) {
-                    if index & 255 == 0 {
-                        try check()
-                    }
-                    index += 1
-                }
-                let suffix = index < bytes.count ? bytes[index] : 0
-                let after = index + 1 < bytes.count ? bytes[index + 1] : 0
-                let label = suffix == 58 && after != 58
-                let predicate = suffix == 63 || suffix == 33 && after != 61
-                if label || predicate {
-                    index += 1
-                }
-                let word =
-                    qualified || label || predicate || index - start > 8
-                    ? nil : Word(rawValue: String(decoding: bytes[start..<index], as: UTF8.self))
-                tokens.append(
-                    Token(kind: word.map(Token.Kind.word) ?? .operand, span: ByteRange(start, index))
-                )
-                expectsOperand = label || Self.prefixesExpression(word)
-                qualified = false
-                continue
-            }
-            if byte == 36 || byte == 64 {
-                index += 1
-                if index < bytes.count,
-                    bytes[index] == 64
-                        || byte == 36 && !Self.namePart(bytes[index])
-                            && !Self.blank(bytes[index])
-                {
-                    index = min(bytes.count, index + Self.scalarLength(bytes[index]))
-                }
-                while index < bytes.count, Self.namePart(bytes[index]) {
-                    if index & 255 == 0 {
-                        try check()
-                    }
-                    index += 1
-                }
-                tokens.append(Token(kind: .operand, span: ByteRange(start, index)))
-                expectsOperand = false
-                qualified = false
-                continue
-            }
-            let assignment =
-                byte == 61 && ![61, 62, 126].contains(following)
-                && (index == 0 || ![33, 60, 61, 62].contains(bytes[index - 1]))
-            index += 1
-            tokens.append(
-                Token(kind: assignment ? .assignment : .symbol(byte), span: ByteRange(start, index))
-            )
-            expectsOperand =
-                assignment
-                || [33, 37, 38, 40, 42, 43, 44, 45, 47, 58, 59, 60, 61, 62, 91, 94, 123, 124, 126]
-                    .contains(byte)
-            qualified = byte == 46 || byte == 58
+            tokens.append(try code.take(in: bytes, from: &index, check: check))
         }
         return Row(
             tokens: tokens,
@@ -235,7 +176,8 @@ struct RubyIndentationLexer: Equatable, Sendable {
             holdsLiteral: literal.isOpen,
             commentStart: commentStart,
             entirelyOpaque: false,
-            endingStyle: literalStyle ?? heredocs.first?.style
+            endingStyle: literal.liveStyle ?? heredocs.first?.style,
+            interpolation: highlights
         )
     }
 
@@ -308,7 +250,7 @@ struct RubyIndentationLexer: Equatable, Sendable {
     /// 参数说明:
     /// - word: 已确认的真实 Ruby 关键字。
     /// 返回：后面允许开始表达式时为真。
-    private static func prefixesExpression(_ word: Word?) -> Bool {
+    static func prefixesExpression(_ word: Word?) -> Bool {
         switch word {
         case .conditional, .unless, .elsif, .when, .pattern, .choice, .looping, .until, .iteration, .then,
             .fallback, .rescue, .and, .or, .not, .returning, .yielding:
