@@ -16,12 +16,22 @@ extension ApplicationController {
         guard mainWindow?.editor.finishComposition() != false else {
             return false
         }
-        guard let (active, _, _) = quickFindContext() else {
+        guard let (active, _, editor) = quickFindContext() else {
             return false
         }
         do {
-            let tabs = mainWindow?.editor.tabSettings ?? TabSettings()
-            try active.buffer.perform(command, tabWidth: tabs.width, indentWithTabs: !tabs.useSpaces)
+            let tabs = editor.tabSettings
+            if command == .indent || command == .outdent {
+                let plan = try PreparedLineIndentation(
+                    snapshot: active.buffer.snapshot,
+                    increasing: command == .indent,
+                    settings: tabs
+                )
+                try active.buffer.commit(plan.transaction)
+            }
+            else {
+                try active.buffer.perform(command, tabWidth: tabs.width, indentWithTabs: !tabs.useSpaces)
+            }
             if macroRecording && !macroPlaying {
                 appendRecordedMacroAction(.command(command.rawValue))
             }

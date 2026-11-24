@@ -44,8 +44,7 @@ public struct PreparedBackTab: Sendable {
             let first = text.lineNumber(at: selection.range.lower)
             let last = text.lineNumber(at: selection.range.upper)
             if first < last {
-                let lastTouched = text.lineStart(last) == selection.range.upper ? last - 1 : last
-                affected.insert(integersIn: first...lastTouched)
+                affected.insert(integersIn: LineIndentationEdits.rows(for: selection.range, in: text))
             }
             else {
                 let prefix = try Self.prefix(
@@ -63,7 +62,7 @@ public struct PreparedBackTab: Sendable {
                     targets[entry.id] = try columns.retreatToTabStop(from: selection)
                 }
             }
-            guard affected.count <= 100_000 else {
+            guard affected.count <= LineIndentationEdits.maximumLines else {
                 throw NateError.message("退 Tab 只能同时处理十万行，原选择与正文保持原状。")
             }
         }
@@ -77,20 +76,9 @@ public struct PreparedBackTab: Sendable {
                 consumed: &prefixBytes,
                 budget: budget
             )
-            guard !range.isEmpty else {
-                continue
+            if let edit = LineIndentationEdits.removal(in: range, text: text, width: settings.width) {
+                edits.append(edit)
             }
-            var end = range.lower
-            // 首个停靠位前的 Tab 会恰好到达该列，可从左侧移除整级并保留剩余原空白。
-            // 跨行 Tab 同样在左侧插入一级，紧接着退缩进可恢复全部原有混合字节。
-            while end < range.upper, end - range.lower < settings.width {
-                let isTab = text.byte(at: end) == 9
-                end += 1
-                if isTab {
-                    break
-                }
-            }
-            edits.append(TextEdit(ByteRange(range.lower, end), ""))
         }
         let map = try PositionMap(edits: edits)
         let after = try state.entries.map { entry in

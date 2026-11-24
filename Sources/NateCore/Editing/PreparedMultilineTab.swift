@@ -32,15 +32,13 @@ enum PreparedMultilineTab {
             let first = text.lineNumber(at: range.lower)
             let last = text.lineNumber(at: range.upper)
             if first < last {
-                // 选区在下一行行首结束时，下一行只是端点，没有任何正文被选择。
-                let lastTouched = text.lineStart(last) == range.upper ? last - 1 : last
-                affected.insert(integersIn: first...lastTouched)
+                affected.insert(integersIn: LineIndentationEdits.rows(for: range, in: text))
                 blockIDs.insert(entry.id)
             }
             else {
                 singleLines.append((entry, first))
             }
-            guard affected.count <= 100_000 else {
+            guard affected.count <= LineIndentationEdits.maximumLines else {
                 throw NateError.message("跨行 Tab 最多处理十万行，原选择与正文保持原状。")
             }
         }
@@ -77,11 +75,11 @@ enum PreparedMultilineTab {
         else {
             direct = nil
         }
-        let unit = settings.useSpaces ? String(repeating: " ", count: settings.width) : "\t"
+        let unit = LineIndentationEdits.unit(settings)
         let inserted = affected.count * unit.utf8.count
         let intermediate = direct?.resultingText.byteCount ?? text.byteCount
         guard intermediate <= 1_073_741_824 - inserted,
-            (direct?.edits.count ?? 0) <= 100_000 - affected.count
+            (direct?.edits.count ?? 0) <= LineIndentationEdits.maximumLines - affected.count
         else {
             throw NateError.message("跨行 Tab 的完整编辑超过正文或目标容量。")
         }
