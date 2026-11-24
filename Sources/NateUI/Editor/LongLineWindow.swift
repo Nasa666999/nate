@@ -119,7 +119,8 @@ final class LongLineWindow: LongLineProjection {
                     plain: hanLine,
                     tabbed: hanTabLine,
                     base: actualFont,
-                    ascii: advance
+                    ascii: advance,
+                    appearance: appearance
                 )
             else {
                 return nil

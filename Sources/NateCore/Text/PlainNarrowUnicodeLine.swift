@@ -71,7 +71,7 @@ public struct PlainNarrowUnicodeLine: Sendable {
     /// 参数说明:
     /// - scalar: 已由真实 UTF-8 原字节取得的单个 Unicode 标量。
     /// 返回：属于固定候选范围时为真，实际字体度量仍需单独确认。
-    private static func contains(_ scalar: UInt16) -> Bool {
+    static func contains(_ scalar: UInt16) -> Bool {
         if (0x00C0...0x017F).contains(scalar) {
             return scalar != 0x00D7 && scalar != 0x00F7
         }

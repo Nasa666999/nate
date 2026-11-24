@@ -4,7 +4,7 @@ import NateCore
 @MainActor
 struct NativeHanProjection {
     private enum Source {
-        case plain(PlainHanLine)
+        case plain(PlainHanLine, NativeHanLineFont)
         case tabbed(HanTabColumns)
     }
 
@@ -14,36 +14,70 @@ struct NativeHanProjection {
     }
 
     private let source: Source
-    let font: NativeHanLineFont
+    let font: NativeHanLineFont?
     private let ascii: CGFloat
     private static var verified: [Proof: Bool] = [:]
 
-    /// 业务作用：一个已校验基础字体配合同一套全角字体，制表索引只能沿相同的真实步距使用。
+    /// 业务作用：原文字体和制表步距与背景索引一致时，才向可见窗口交付完整几何。
     /// 参数说明:
     /// - plain: 已验证的无 Tab 原始正文。
     /// - tabbed: 已在实际原生字体及 Tab 设置上验证的混合正文。
     /// - base: 当前实际使用的基础字体。
     /// - ascii: 当前原生字体的已确认 ASCII 步距。
+    /// - appearance: 当前真实原生外观，字体及制表证据沿同一视图取得。
     /// 返回：可用的独立原生窗口来源；字体或字体栏位变化时拒绝旧索引。
-    init?(plain: PlainHanLine?, tabbed: HanTabColumns?, base: NSFont, ascii: CGFloat) {
-        guard let font = NativeHanLineFont.resolve(from: base) else {
-            return nil
-        }
+    init?(
+        plain: PlainHanLine?,
+        tabbed: HanTabColumns?,
+        base: NSFont,
+        ascii: CGFloat,
+        appearance: NSAppearance
+    ) {
         if let tabbed {
-            guard plain == nil, tabbed.metrics.asciiAdvance == ascii,
-                tabbed.metrics.hanAdvance == font.advance
+            guard plain == nil, tabbed.metrics.asciiAdvance == ascii else {
+                return nil
+            }
+            // 混排索引的原文字形只有在本视图可复现已确认步距时才可用于光标和矩形编辑。
+            if tabbed.hasFullWidthCharacters {
+                guard let fullWidth = NativeHanLineFont.resolve(from: base),
+                    tabbed.metrics.hanAdvance == fullWidth.advance
+                else {
+                    return nil
+                }
+                font = fullWidth
+            }
             else {
+                guard
+                    NativeMonospaceGeometry.provesTabStops(
+                        base,
+                        width: tabbed.metrics.tabWidth,
+                        advance: ascii,
+                        appearance: appearance
+                    )
+                else {
+                    return nil
+                }
+                font = nil
+            }
+            if !tabbed.narrowScalars.isEmpty,
+                !NativeNarrowUnicodeFont.proves(
+                    tabbed.narrowScalars,
+                    font: base,
+                    advance: ascii,
+                    appearance: appearance
+                )
+            {
                 return nil
             }
             source = .tabbed(tabbed)
         }
-        else if let plain {
-            source = .plain(plain)
+        else if let plain, let fullWidth = NativeHanLineFont.resolve(from: base) {
+            source = .plain(plain, fullWidth)
+            font = fullWidth
         }
         else {
             return nil
         }
-        self.font = font
         self.ascii = ascii
     }
 
@@ -52,7 +86,7 @@ struct NativeHanProjection {
     /// 返回：完整逻辑行的真实 UTF-16 单元数，包含制表符。
     var characterCount: Int {
         switch source {
-        case .plain(let line): line.characterCount
+        case .plain(let line, _): line.characterCount
         case .tabbed(let line): line.characterCount
         }
     }
@@ -62,7 +96,7 @@ struct NativeHanProjection {
     /// 返回：当前完整逻辑行已证实的横向距离。
     var width: CGFloat {
         switch source {
-        case .plain(let line):
+        case .plain(let line, let font):
             line.distance(through: line.characterCount, ascii: ascii, han: font.advance) ?? 0
         case .tabbed(let line): line.width
         }
@@ -84,7 +118,7 @@ struct NativeHanProjection {
     /// 返回：存在时为正文绝对原字节端点。
     func byte(at character: Int) -> Int? {
         switch source {
-        case .plain(let line): line.byte(at: character)
+        case .plain(let line, _): line.byte(at: character)
         case .tabbed(let line): line.byte(at: character)
         }
     }
@@ -95,7 +129,7 @@ struct NativeHanProjection {
     /// 返回：同一完整行坐标中的横向距离及局部首行缩进，位置无效时为空。
     func geometry(at character: Int) -> (distance: CGFloat, phase: CGFloat)? {
         switch source {
-        case .plain(let line):
+        case .plain(let line, let font):
             return line.distance(through: character, ascii: ascii, han: font.advance).map {
                 ($0, 0)
             }
@@ -112,7 +146,7 @@ struct NativeHanProjection {
     /// 返回：使用真实可见前缀取得的相邻字符端点。
     func character(atOrBefore x: CGFloat) -> Int? {
         switch source {
-        case .plain(let line): line.character(atOrBefore: x, ascii: ascii, han: font.advance)
+        case .plain(let line, let font): line.character(atOrBefore: x, ascii: ascii, han: font.advance)
         case .tabbed(let line): line.character(atOrBefore: x)
         }
     }

@@ -186,7 +186,8 @@ extension EditorView {
                         try HanTabColumns(
                             text: snapshot.text,
                             range: key.range,
-                            metrics: grid,
+                            metrics: grid.metrics,
+                            permitsFullWidthCharacters: grid.permitsFullWidth,
                             deadline: deadline
                         )
                     }
@@ -237,7 +238,7 @@ extension EditorView {
     /// 参数说明:
     /// - width: 当前语言已经确认的制表列数。
     /// 返回：具备实测步距与原生局部段落证明时提供度量，否则原段落保留明确暂停状态。
-    private func wideHanTabMetrics(width: Int) -> HanTabColumns.Metrics? {
+    private func wideHanTabMetrics(width: Int) -> (metrics: HanTabColumns.Metrics, permitsFullWidth: Bool)? {
         let actual = EditorThemePresentation.baseFont(
             font,
             theme: editorTheme?.definition,
@@ -248,12 +249,25 @@ extension EditorView {
         else {
             return nil
         }
-        return NativeHanProjection.tabGrid(
+        if let full = NativeHanProjection.tabGrid(
             base: actual,
             ascii: ascii,
             width: width,
             appearance: effectiveAppearance
-        )
+        ) {
+            return (full, true)
+        }
+        guard
+            NativeMonospaceGeometry.provesTabStops(
+                actual,
+                width: width,
+                advance: ascii,
+                appearance: effectiveAppearance
+            ), let narrow = HanTabColumns.Metrics(asciiAdvance: ascii, hanAdvance: ascii, tabWidth: width)
+        else {
+            return nil
+        }
+        return (narrow, false)
     }
 
 }

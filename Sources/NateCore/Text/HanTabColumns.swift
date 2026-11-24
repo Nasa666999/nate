@@ -66,12 +66,17 @@ public struct HanTabColumns: Sendable {
 
         /// 业务作用：Tab 分别使用实际原生像素间距和抽象逻辑列，保持所有正文位置与原字节相互关联。
         /// 参数说明:
-        /// - scalar: 已验证范围内的实际单字节 ASCII、Tab 或三字节全角字符首字节。
+        /// - scalar: 已验证范围内的实际单字节 ASCII、Tab、双字节窄字母或三字节全角字符首字节。
         /// - metrics: 当前明确配置及实测字体宽度。
         /// 返回：推进一个完整字符和两个各自正确的制表坐标。
         mutating func advance(_ scalar: UInt8, using metrics: Metrics) {
             if scalar != 9, scalar < 128 {
                 addASCII(1)
+                return
+            }
+            if (194...223).contains(scalar) {
+                addASCII(1)
+                byte += 1
                 return
             }
             character += 1
@@ -107,6 +112,8 @@ public struct HanTabColumns: Sendable {
     public let characterCount: Int
     public let logicalColumnCount: Int
     public let width: Double
+    public let hasFullWidthCharacters: Bool
+    public let narrowScalars: [UInt16]
     private let sourceIdentity: UUID
     private let text: PieceTree
     private let checkpoints: [Cursor]
@@ -116,18 +123,42 @@ public struct HanTabColumns: Sendable {
         case scalar
     }
 
-    /// 业务作用：在源可证、字体实测时为混合真实 Tab 的汉字长行准备稀疏字节、像素与逻辑制表坐标。
+    /// 业务作用：在源可证、字体实测时为混合真实 Tab 的长行准备稀疏字节、像素与逻辑制表坐标。
     /// 参数说明:
     /// - source: 当前完整不可变正文。
     /// - range: 已确认的完整逻辑行范围，排除结束符。
     /// - metrics: 此视图实际测得的字体及当前语言 Tab 设置。
     /// - deadline: 所有前置尝试与本次测量共用的截止。
-    /// 返回：同时包含受支持全角字符和真实 Tab 的完整索引；未知文字、取消或超限不交付部分索引。
+    /// 返回：包含受支持多字节文字和真实 Tab 的完整索引；未知文字、取消或超限不交付部分索引。
     public init?(
         text source: PieceTree,
         range: ByteRange,
         metrics: Metrics,
         deadline: ContinuousClock.Instant = .now.advanced(by: .seconds(5))
+    ) throws {
+        try self.init(
+            text: source,
+            range: range,
+            metrics: metrics,
+            permitsFullWidthCharacters: true,
+            deadline: deadline
+        )
+    }
+
+    /// 业务作用：视图只有确认全角字体后才允许原文中的全角字形参与制表估算。
+    /// 参数说明:
+    /// - source: 当前完整不可变正文。
+    /// - range: 已确认的完整逻辑行范围，排除结束符。
+    /// - metrics: 此视图实际测得的字体及当前语言 Tab 设置。
+    /// - permitsFullWidthCharacters: 当前字体已确认可用的全角步距时为真。
+    /// - deadline: 所有前置尝试与本次测量共用的截止。
+    /// 返回：原文、逻辑列、实际宽度及原字符集的完整证据，任一条件缺失时返回空或终止。
+    public init?(
+        text source: PieceTree,
+        range: ByteRange,
+        metrics: Metrics,
+        permitsFullWidthCharacters: Bool,
+        deadline: ContinuousClock.Instant
     ) throws {
         guard range.lower >= 0, range.lower < range.upper, range.count <= ASCIITabColumns.maximumBytes,
             source.isBoundary(range.lower), source.isBoundary(range.upper)
@@ -142,6 +173,7 @@ public struct HanTabColumns: Sendable {
         var checkpoints = [cursor]
         var foundHan = false
         var foundTab = false
+        var narrow: Set<UInt16> = []
         checkpoints.reserveCapacity(1 + slice.utf16Count / Self.interval)
         do {
             try slice.forEachChunk(maximumBytes: 65_536) { chunk in
@@ -167,9 +199,19 @@ public struct HanTabColumns: Sendable {
                         size = 1
                         foundTab = foundTab || byte == 9
                     }
+                    else if (194...223).contains(byte), index + 1 < bytes.count {
+                        let scalar = UInt16(byte & 31) << 6 | UInt16(bytes[index + 1] & 63)
+                        guard PlainNarrowUnicodeLine.contains(scalar) else {
+                            throw UnsupportedText.scalar
+                        }
+                        size = 2
+                        narrow.insert(scalar)
+                    }
                     else {
                         // 文本树已确认 UTF-8 的标量分块；只有与汉字字体共用实测步距的三字节字符可进入窗口。
-                        guard (227...233).contains(byte) || byte == 239, index + 2 < bytes.count else {
+                        guard permitsFullWidthCharacters, (227...233).contains(byte) || byte == 239,
+                            index + 2 < bytes.count
+                        else {
                             throw UnsupportedText.scalar
                         }
                         let scalar =
@@ -193,7 +235,7 @@ public struct HanTabColumns: Sendable {
             return nil
         }
         try Self.requireTime(until: deadline)
-        guard foundHan, foundTab else {
+        guard foundHan || !narrow.isEmpty, foundTab else {
             return nil
         }
         self.range = range
@@ -201,6 +243,8 @@ public struct HanTabColumns: Sendable {
         characterCount = cursor.character
         logicalColumnCount = cursor.logical
         width = cursor.distance(using: metrics)
+        hasFullWidthCharacters = foundHan
+        narrowScalars = narrow.sorted()
         sourceIdentity = source.root.identity
         text = slice
         self.checkpoints = checkpoints
@@ -276,12 +320,10 @@ public struct HanTabColumns: Sendable {
             return nil
         }
         var cursor = checkpoints[index / Self.interval]
-        let bytes = text.bytes(in: ByteRange(cursor.byte, end))
-        var position = 0
-        while position < bytes.count {
-            let byte = bytes[position]
-            cursor.advance(byte, using: metrics)
-            position += byte < 128 ? 1 : 3
+        let start = cursor.byte
+        let bytes = text.bytes(in: ByteRange(start, end))
+        while cursor.byte < end {
+            cursor.advance(bytes[cursor.byte - start], using: metrics)
         }
         return cursor
     }
@@ -303,18 +345,16 @@ public struct HanTabColumns: Sendable {
             }
         }
         var cursor = checkpoints[lower]
+        let start = cursor.byte
         let end = upper < checkpoints.count ? checkpoints[upper].byte : range.count
-        let bytes = text.bytes(in: ByteRange(cursor.byte, end))
-        var index = 0
-        while index < bytes.count {
-            let byte = bytes[index]
+        let bytes = text.bytes(in: ByteRange(start, end))
+        while cursor.byte < end {
             var next = cursor
-            next.advance(byte, using: metrics)
+            next.advance(bytes[cursor.byte - start], using: metrics)
             guard value(next) <= target else {
                 break
             }
             cursor = next
-            index += byte < 128 ? 1 : 3
         }
         return cursor
     }
