@@ -20,6 +20,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
                 dragAppending = false
                 dropIntent = nil
                 layouts.removeAll()
+                wideTabLayout.reset()
                 hiddenLines.removeAll()
                 syntaxTask?.cancel()
                 syntaxGeneration = UUID()
@@ -98,6 +99,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var observedRevision: UInt64 = 0
     var projection = VisualLineMap()
     var layoutMetrics: EditorLayoutMetrics?
+    let wideTabLayout = EditorWideTabLayout()
     public var language: LanguageDefinition? {
         didSet {
             updateLanguageResource()
@@ -212,6 +214,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         didSet {
             if oldValue != wrapLines {
                 clipboard.cancel()
+                wideTabLayout.reset()
+                layouts.removeAll()
             }
         }
     }
@@ -219,6 +223,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         didSet {
             if oldValue != rtl {
                 clipboard.cancel()
+                wideTabLayout.reset()
+                layouts.removeAll()
             }
         }
     }
@@ -314,6 +320,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             // 临时匹配仅属于原正文，不按普通锚点移动后冒充重新搜索的结果。
             textHighlights.removeAll()
             projection.measured.removeAll()
+            wideTabLayout.reset()
         }
         observedRevision = document.revision
         if let composition, composition.revision != document.revision {
@@ -381,6 +388,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         let range = tree.lineRange(line, includeEnding: false)
         let tokens = syntaxTokens(for: line)
         let snapshot = DocumentSnapshot(id: document.id, revision: document.revision, text: tree)
+        let wideTabs = tokens.isEmpty ? wideTabPreparation(snapshot: snapshot, range: range) : nil
         let layout = LineLayout(
             snapshot: snapshot,
             range: range,
@@ -395,7 +403,8 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             tabWidth: tabSettings.width,
             showSequences: showSymbols,
             theme: editorTheme?.definition,
-            language: language?.id
+            language: language?.id,
+            wideTabs: wideTabs
         )
         // 原生段落的字符与字形都占用缓存，不能仅按行数允许大量长段落同时保留。
         if layouts.count >= EditorNativeLayoutPolicy.maximumCachedLines
@@ -428,6 +437,16 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
         unfoldSelection(selection)
         let line = document.text.lineNumber(at: selection.head)
         let layout = layoutLine(line)
+        if layout.unavailableReason == EditorWideTabLayout.measuring, selection == primarySelection {
+            // 待测量的行没有足够几何证据，先记住所请求的真实光标，避免滚到伪造的位置。
+            wideTabLayout.pendingReveal = EditorWideTabLayout.Reveal(
+                key: wideTabKey(layout.range),
+                selection: selectionGeneration,
+                focus: focusGeneration,
+                viewport: visibleRect.origin
+            )
+            return
+        }
         let units = document.text.utf16Offset(byte: selection.head) ?? layout.originUTF16
         var rect = layout.caret(at: units - layout.originUTF16)
         rect.origin.x += gutterWidth + selectionCaretOffset(for: selection)

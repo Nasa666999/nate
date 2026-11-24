@@ -46,6 +46,7 @@ final class LineLayout {
     /// - showSequences: 是否显示 ANSI 控制范围的原始占位与参数文字。
     /// - theme: 当前来源视图的完整固定主题。
     /// - language: 来源语言身份，用于隔离逐语言样式。
+    /// - wideTabs: 同一逻辑行当前请求的可用制表证据与准备状态。
     /// 返回：只读 TextKit 2 布局缓存，控制字符只在呈现副本中使用等长占位，原文与坐标保持一致。
     init(
         snapshot: DocumentSnapshot,
@@ -62,7 +63,8 @@ final class LineLayout {
         tabWidth: Int = 4,
         showSequences: Bool = false,
         theme: EditorThemeDefinition? = nil,
-        language: String? = nil
+        language: String? = nil,
+        wideTabs: EditorWideTabLayout.Entry? = nil
     ) {
         self.range = range
         self.appearance = appearance
@@ -100,7 +102,8 @@ final class LineLayout {
                 appearance: appearance,
                 theme: theme,
                 language: language,
-                fontZoomAdjustment: fontZoomAdjustment
+                fontZoomAdjustment: fontZoomAdjustment,
+                tabs: wideTabs?.columns
             )
         }
         else {
@@ -116,7 +119,9 @@ final class LineLayout {
         }
         // 原生引擎会排完整个段落，缺少安全窗口证据时必须在复制原文之前关闭超预算排版。
         guard range.count <= EditorNativeLayoutPolicy.maximumParagraphBytes else {
-            unavailableReason = "此逻辑行超过 1 MiB 原生段落预算，当前字形呈现已暂停；完整正文、历史和保存内容保持原状。"
+            unavailableReason =
+                wideTabs?.status
+                ?? "此逻辑行超过 1 MiB 原生段落预算，当前字形呈现已暂停；完整正文、历史和保存内容保持原状。"
             content = EditorContentManager(
                 snapshot: snapshot,
                 projection: ByteRange(range.lower, range.lower),

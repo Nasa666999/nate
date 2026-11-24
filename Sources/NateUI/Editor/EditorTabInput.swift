@@ -9,6 +9,7 @@ extension EditorView {
         // 列宽改变会令等待中的目标指向其它字节，先撤销控制身份，再建立新的显示证据。
         tabSettingsGeneration = UUID()
         clipboard.cancel()
+        wideTabLayout.reset()
         updateRectangleStyleIdentity()
         projection.measured.removeAll()
         refresh()
@@ -35,7 +36,8 @@ extension EditorView {
                 transaction = try PreparedTabInsertion(
                     snapshot: document.snapshot,
                     settings: tabSettings,
-                    overwrite: overwrite
+                    overwrite: overwrite,
+                    preparedColumns: wideTabLayout.entries.values.compactMap(\.columns)
                 ).transaction
             }
             try commitPreparedEditorInput(transaction)
@@ -59,7 +61,11 @@ extension EditorView {
             return false
         }
         do {
-            let plan = try PreparedBackTab(snapshot: document.snapshot, settings: tabSettings)
+            let plan = try PreparedBackTab(
+                snapshot: document.snapshot,
+                settings: tabSettings,
+                preparedColumns: wideTabLayout.entries.values.compactMap(\.columns)
+            )
             try commitPreparedEditorInput(plan.transaction)
             return true
         }

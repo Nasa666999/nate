@@ -7,11 +7,13 @@ public struct PreparedBackTab: Sendable {
     /// 参数说明:
     /// - snapshot: 带稳定选择身份的实际正文。
     /// - settings: 当前语言的 Tab 停靠宽度与输入设置。
+    /// - preparedColumns: 给独立普通光标复用的同源长行列证据。
     /// - permit: 本轮所有范围和事务仍有准备资格的检查。
     /// 返回：正文与选择同一次准备；权限、容量或字素失效时整批失败。
     public init(
         snapshot: DocumentSnapshot,
         settings: TabSettings,
+        preparedColumns: [ASCIITabColumns] = [],
         permit: @escaping @Sendable () -> Bool = {
             true
         }
@@ -31,6 +33,7 @@ public struct PreparedBackTab: Sendable {
             text: text,
             tabWidth: settings.width,
             deadline: deadline,
+            preparedColumns: preparedColumns,
             permit: allowed
         )
         var prefixBytes = 0
