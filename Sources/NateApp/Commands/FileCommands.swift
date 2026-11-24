@@ -27,7 +27,6 @@ extension ApplicationController {
         /// 业务作用：读取和解码中的每个挂起点共用原窗口的发布门禁。
         /// 参数说明: 无。
         /// 返回：原窗口和调用权仍有效，且应用没有进入退出时为真。
-        @MainActor
         func mayPublish() -> Bool {
             permit() && !closing && !Task.isCancelled && isWorkspaceWindowAvailable(window)
         }
@@ -139,7 +138,7 @@ extension ApplicationController {
                 window?.showResults("读取未完成：" + url.path + "\n" + error.localizedDescription)
             }
             else if error is FileDecodingFailure, explicitEncoding == nil {
-                await offerDecode(url, reason: error.localizedDescription, in: window, permit: mayPublish)
+                await offerDecode(url, reason: error.localizedDescription, in: window, permit: permit)
             }
             else {
                 SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)

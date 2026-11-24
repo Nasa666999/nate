@@ -219,6 +219,12 @@ extension ApplicationController {
         in window: EditorWindow?,
         permit: @MainActor () -> Bool
     ) async {
+        /// 业务作用：模态操作与字节读取再次确认原解码来源，不能依赖初次文件读取的权限。
+        /// 参数说明: 无。
+        /// 返回：调用、窗口和应用状态均保持有效时为真。
+        func mayPublish() -> Bool {
+            permit() && !closing && !Task.isCancelled && isWorkspaceWindowAvailable(window)
+        }
         let alert = NSAlert()
         alert.messageText = "选择 \(url.lastPathComponent) 的编码"
         alert.informativeText = reason + "\n原字节保持不变。编码属于用户选择，不会被标记为已确认的自动识别。"
@@ -231,7 +237,7 @@ extension ApplicationController {
         alert.addButton(withTitle: "取消")
         let choice = alert.runModal()
         // 模态期间可能关闭了原窗口或撤销打开意图，不能把响应交给另一窗口。
-        guard permit() else {
+        guard mayPublish() else {
             return
         }
         if choice == .alertFirstButtonReturn {
@@ -277,7 +283,7 @@ extension ApplicationController {
                         + lines.joined(separator: "\n")
                 }
                 // 字节样本只属于原请求；关闭期间或撤销后不建立新文档。
-                guard permit() else {
+                guard mayPublish() else {
                     return
                 }
                 let document = WorkspaceDocument(name: url.lastPathComponent + " · 字节视图", text: display)
@@ -286,7 +292,7 @@ extension ApplicationController {
                 activate(document.buffer.id, in: window)
             }
             catch {
-                if permit() {
+                if mayPublish() {
                     SystemIntegration.alert("无法读取字节", error.localizedDescription)
                 }
             }
