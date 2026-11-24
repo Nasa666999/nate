@@ -4,11 +4,14 @@ import NateCore
 struct FortranIndentationLine {
     private static let modernStructureWords: Set<String> = [
         "block", "blockdata", "change", "changeteam", "endblock", "endblockdata", "endteam",
-        "rank", "selectrank", "team",
+        "rank", "selectcase", "selectrank", "selecttype", "team",
     ]
     enum Block: String {
         case program, module, submodule, subroutine, function, interface
         case block, blockdata, associate, critical, select, forall, type, team
+        case selectCase = "selectcase"
+        case selectRank = "selectrank"
+        case selectType = "selecttype"
         case masking = "where"
         case conditional = "if"
         case loop = "do"
@@ -18,6 +21,13 @@ struct FortranIndentationLine {
         /// 返回：规范允许现有单元使用裸 END 时为真。
         var usesBareEnd: Bool {
             [.program, .module, .submodule, .subroutine, .function, .blockdata].contains(self)
+        }
+
+        /// 业务作用：三种 SELECT 块分别拥有分支，但共同使用 END SELECT 关闭。
+        /// 参数说明: 无。
+        /// 返回：实际开端属于 CASE、RANK 或 TYPE 选择结构时为真。
+        var usesSelectionEnd: Bool {
+            [.selectCase, .selectRank, .selectType].contains(self)
         }
     }
 
@@ -271,14 +281,25 @@ struct FortranIndentationLine {
             }
             return .neutral
         case "select", "selectcase", "selecttype", "selectrank":
-            let selector = first.value == "select" ? rest.dropFirst() : rest
-            guard first.value != "select" || ["case", "type", "rank"].contains(next ?? ""),
+            let spaced = first.value == "select"
+            let flavor = spaced ? "select" + (next ?? "") : first.value
+            let selector = spaced ? rest.dropFirst() : rest
+            guard let block = Block(rawValue: flavor), block.usesSelectionEnd,
                 let end = try parenthesisEnd(in: selector, check: check), end + 1 == selector.endIndex
             else {
                 return .neutral
             }
-            return .opening(.select, name: name)
+            return .opening(block, name: name)
         case "case", "class", "rank", "type":
+            let block: Block
+            switch first.value {
+            case "case":
+                block = .selectCase
+            case "rank":
+                block = .selectRank
+            default:
+                block = .selectType
+            }
             if first.value == "type" {
                 if name == nil, let declared = try FortranDerivedType.name(in: rest, check: check) {
                     return .opening(.type, name: declared)
@@ -290,18 +311,19 @@ struct FortranIndentationLine {
             if first.value == "class", next != "is" && next != "default" {
                 return .neutral
             }
-            let selector = next == "is" ? rest.dropFirst() : rest
+            let selector = block == .selectType && next == "is" ? rest.dropFirst() : rest
             if let end = try parenthesisEnd(in: selector, check: check),
-                selector.count - (end - selector.startIndex) <= 2
+                end + 1 == selector.endIndex
+                    || end + 2 == selector.endIndex && selector.last?.identifier == true
             {
                 return .branch(
-                    .select,
+                    block,
                     name: selector.indices.contains(end + 1) ? selector[end + 1].value : nil,
                     levels: 2
                 )
             }
-            if next == "default", rest.count <= 2 {
-                return .branch(.select, name: rest.count == 2 ? rest.last?.value : nil, levels: 2)
+            if next == "default", rest.count == 1 || rest.count == 2 && rest.last?.identifier == true {
+                return .branch(block, name: rest.count == 2 ? rest.last?.value : nil, levels: 2)
             }
             return .neutral
         case "do":

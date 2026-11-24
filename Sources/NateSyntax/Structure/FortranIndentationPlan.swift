@@ -16,7 +16,10 @@ enum FortranIndentationPlan {
         /// - closing: 是否需要验证闭合端的命名约束。
         /// 返回：类别和要求的原声明名称均匹配时为真。
         func matches(_ requested: Block?, name: String?, closing: Bool = true) -> Bool {
-            guard requested == block || requested == nil && block.usesBareEnd else {
+            guard
+                requested == block || requested == .select && block.usesSelectionEnd
+                    || requested == nil && block.usesBareEnd
+            else {
                 return false
             }
             if let name {
