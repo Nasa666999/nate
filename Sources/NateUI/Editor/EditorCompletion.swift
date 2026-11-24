@@ -26,6 +26,7 @@ extension EditorView {
             range.count <= CompletionInputCommand.maximumPrefixBytes,
             primarySelection?.head == range.upper, document.text.isBoundary(range.lower),
             document.text.isBoundary(range.upper), result.candidates.count <= 200,
+            !result.context.prefixExceedsLimit || result.candidates.isEmpty,
             document.text.bytes(in: range).elementsEqual(result.context.prefix.utf8)
         else {
             return

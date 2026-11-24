@@ -14,7 +14,7 @@ extension ApplicationController {
         mainWindow?.editor.dismissCompletion()
     }
 
-    /// 业务作用：文档单词、语言补全和参数提示基于固定快照后台计算，手动入口不受自动阈值限制。
+    /// 业务作用：文档单词和语言补全使用固定正文及词规则，独立的参数提示和手动入口不受自动阈值限制。
     /// 参数说明:
     /// - mode: 全部、文档单词、语言表或参数提示。
     /// - automatic: 是否由已提交输入触发。
@@ -37,6 +37,7 @@ extension ApplicationController {
         let generation = completionGeneration
         let snapshot = document.buffer.snapshot
         let selections = editor.viewSelections
+        let wordBoundaries = editor.wordBoundaries
         let languageID = document.language
         let current: @MainActor () -> Bool = { [weak self, weak document] in
             guard let self, let document, !self.closing, !document.closing, !Task.isCancelled,
@@ -73,7 +74,8 @@ extension ApplicationController {
                     let context = try CompletionEngine.context(
                         in: snapshot,
                         selections: selections,
-                        additional: definition?.additionalWordCharacters ?? ""
+                        additional: definition?.additionalWordCharacters ?? "",
+                        wordBoundaries: wordBoundaries
                     )
                     let showWords = mode != "signature" && (!automatic || context.prefix.count >= threshold)
                     let result = try CompletionEngine.suggest(
@@ -82,7 +84,8 @@ extension ApplicationController {
                         definition: definition,
                         keywords: keywords,
                         documentWords: showWords && mode != "completeLanguage" && documentWords,
-                        languageWords: showWords && mode != "completeWords" && languageWords
+                        languageWords: showWords && mode != "completeWords" && languageWords,
+                        wordBoundaries: wordBoundaries
                     )
                     let hint = try definition.flatMap {
                         try CompletionEngine.signature(
@@ -105,7 +108,10 @@ extension ApplicationController {
                 guard current() else {
                     return
                 }
-                if !automatic && result.candidates.isEmpty && hint == nil {
+                if !automatic && mode != "signature" && result.context.prefixExceedsLimit {
+                    self.mainWindow?.status.stringValue = "补全前缀超过 4096 字节。"
+                }
+                else if !automatic && result.candidates.isEmpty && hint == nil {
                     self.mainWindow?.status.stringValue = "没有匹配的补全或函数参数规则。"
                 }
                 editor.presentCompletions(
