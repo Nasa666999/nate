@@ -20,8 +20,8 @@ extension ApplicationController {
     /// - automatic: 是否由已提交输入触发。
     /// 返回：复验身份、修订、语言与焦点后呈现候选，失败不改变正文。
     func requestCompletion(_ mode: String = "complete", automatic: Bool = false) {
-        guard let document = active, let editor = mainWindow?.editor, !closing,
-            !document.buffer.isReadOnly, !document.buffer.isEditingSuspended, !editor.hasComposition
+        guard let document = active, let editor = mainWindow?.editor, !closing, !document.closing,
+            editor.document === document.buffer, let source = editor.completionSource()
         else {
             return
         }
@@ -38,6 +38,15 @@ extension ApplicationController {
         let snapshot = document.buffer.snapshot
         let selections = editor.viewSelections
         let languageID = document.language
+        let current: @MainActor () -> Bool = { [weak self, weak document] in
+            guard let self, let document, !self.closing, !document.closing, !Task.isCancelled,
+                self.completionGeneration == generation, self.active === document,
+                document.language == languageID, source.isCurrent()
+            else {
+                return false
+            }
+            return true
+        }
         let definition = completionCatalog?.definition(for: languageID)
         let keywords = registry?.language(languageID)?.keywords ?? []
         let threshold = max(
@@ -92,21 +101,24 @@ extension ApplicationController {
                         worker.cancel()
                     }
                 )
-                guard generation == self.completionGeneration, self.active === document,
-                    document.buffer.revision == snapshot.revision, document.language == languageID,
-                    self.mainWindow?.editor === editor, editor.window?.firstResponder === editor,
-                    editor.viewSelections == selections, !editor.hasComposition
-                else {
+                // 后台只负责候选内容，发布和最终确认均须持有此次原正文与请求的真实资格。
+                guard current() else {
                     return
                 }
                 if !automatic && result.candidates.isEmpty && hint == nil {
                     self.mainWindow?.status.stringValue = "没有匹配的补全或函数参数规则。"
                 }
-                editor.presentCompletions(result, signature: hint, tab: tab, enter: enter)
+                editor.presentCompletions(
+                    result,
+                    signature: hint,
+                    tab: tab,
+                    enter: enter,
+                    stillCurrent: current
+                )
             }
             catch is CancellationError {}
             catch {
-                if !automatic && generation == self.completionGeneration {
+                if !automatic && current() {
                     self.mainWindow?.status.stringValue = error.localizedDescription
                 }
             }

@@ -305,6 +305,8 @@ extension ApplicationController {
                 search(id == "findNext" ? "next" : "previous", options: options, directory: "", filters: "")
             }
         case "compositionBegan":
+            // 系统候选接管键盘时先撤销补全，结束或取消组合不能复活旧候选。
+            cancelCompletion()
             cancelTextTool()
             cancelRunCommandPreparation()
             suspendSearchForInput()

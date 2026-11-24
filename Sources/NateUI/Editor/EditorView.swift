@@ -113,6 +113,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
     var rectangleStyleIdentity = ""
     var rectangleProjectionGeneration: UUID?
     var rectangleProjectionCache: [UUID: RectangleEditProjection] = [:]
+    var completionPresentation = UUID()
     let brackets = BracketViewState()
     let folds = FoldViewState()
     public var bracketLimits = BracketAnalysisLimits() {

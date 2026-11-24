@@ -7,18 +7,29 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：候选绑定当前修订，确认仍是普通可撤销文本事务。
     func requestPathCompletion() {
-        guard let document = active, let editor = mainWindow?.editor,
-            !document.buffer.isReadOnly, !editor.hasComposition, editor.viewSelections.count == 1,
-            let selection = editor.primarySelection, selection.range.isEmpty,
-            selection.virtualColumn == 0
+        guard let document = active, let editor = mainWindow?.editor, !closing, !document.closing,
+            editor.document === document.buffer, !document.bindingChange,
+            let source = editor.completionSource(), let selection = editor.primarySelection
         else {
             return
         }
         cancelCompletion()
         let generation = completionGeneration
         let snapshot = document.buffer.snapshot
+        let url = document.url
+        let binding = document.targetGeneration
         let base =
-            document.url?.deletingLastPathComponent() ?? FileManager.default.homeDirectoryForCurrentUser
+            url?.deletingLastPathComponent() ?? FileManager.default.homeDirectoryForCurrentUser
+        let current: @MainActor () -> Bool = { [weak self, weak document] in
+            // 路径从原磁盘位置解析，另存或改绑即使没有改动正文也不能沿旧基准提交候选。
+            guard let self, let document, !self.closing, !document.closing, !Task.isCancelled,
+                self.completionGeneration == generation, self.active === document, source.isCurrent(),
+                document.targetGeneration == binding, document.url == url, !document.bindingChange
+            else {
+                return false
+            }
+            return true
+        }
         let caret = selection.head
         let executor = fileIO
         mainWindow?.status.stringValue = "正在补全路径 · 相对基准：" + base.path
@@ -108,20 +119,23 @@ extension ApplicationController {
                         limited: values.count > 200
                     )
                 }
-                guard generation == self.completionGeneration, self.active === document,
-                    document.buffer.revision == snapshot.revision, self.mainWindow?.editor === editor,
-                    editor.viewSelections == [selection]
-                else {
+                guard current() else {
                     return
                 }
                 if result.candidates.isEmpty {
                     self.mainWindow?.status.stringValue = "当前路径前缀没有候选 · 相对基准：" + base.path
                 }
-                editor.presentCompletions(result, signature: nil, tab: true, enter: true)
+                editor.presentCompletions(
+                    result,
+                    signature: nil,
+                    tab: true,
+                    enter: true,
+                    stillCurrent: current
+                )
             }
             catch is CancellationError {}
             catch {
-                if generation == self.completionGeneration {
+                if current() {
                     self.mainWindow?.status.stringValue = "路径补全失败：" + error.localizedDescription
                 }
             }

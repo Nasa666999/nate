@@ -9,41 +9,56 @@ extension EditorView {
     /// - signature: 当前函数调用说明。
     /// - tab: Tab 是否确认候选。
     /// - enter: Enter 是否确认候选。
+    /// - stillCurrent: 调用方独立的请求和路径绑定是否仍具备实际提交资格。
     /// 返回：面板显示；失效候选不会修改正文。
     public func presentCompletions(
         _ result: CompletionResult,
         signature: SignatureHint?,
         tab: Bool,
-        enter: Bool
+        enter: Bool,
+        stillCurrent: (@MainActor () -> Bool)? = nil
     ) {
-        guard result.documentID == document.id, result.revision == document.revision,
-            !hasComposition, window?.firstResponder === self
+        let range = result.context.range
+        // 同一文档标识和修订不能替代原始前缀证据，任一不符都不能显示可写入的候选。
+        guard let source = completionSource(), stillCurrent?() != false,
+            result.documentID == document.id, result.revision == document.revision,
+            range.lower >= 0, range.upper >= range.lower, range.count <= 65_536,
+            primarySelection?.head == range.upper, document.text.isBoundary(range.lower),
+            document.text.isBoundary(range.upper), result.candidates.count <= 200,
+            document.text.bytes(in: range).elementsEqual(result.context.prefix.utf8)
         else {
             return
         }
+        let presentation = UUID()
+        completionPresentation = presentation
         let panel = completionPanel ?? CompletionPanel()
         completionPanel = panel
         panel.confirmsTab = tab
         panel.confirmsEnter = enter
         panel.onChoose = {
             [weak self] text in
-            guard let self, self.document.id == result.documentID,
-                self.document.revision == result.revision, self.viewSelections.count == 1,
-                self.primarySelection?.head == result.context.range.upper,
-                self.primarySelection?.range.isEmpty == true, !self.hasComposition
+            // 请求替换、焦点交接、重新选择或权限变化都能使仍在屏幕上的旧候选失去正文写入资格。
+            guard let self, self.completionPresentation == presentation, source.isCurrent(),
+                stillCurrent?() != false, let entry = self.viewSelectionState?.primary,
+                result.candidates.contains(where: { $0.text.utf8.elementsEqual(text.utf8) })
             else {
                 return
             }
+            self.completionPresentation = UUID()
             do {
-                let head = result.context.range.lower + text.utf8.count
-                try self.document.commit(
-                    [TextEdit(result.context.range, text)],
-                    expectedRevision: result.revision,
-                    selectionsAfter: [TextSelection(anchor: head, head: head)],
+                let prepared = try PreparedSelectionInsertion(
+                    snapshot: self.document.snapshot,
+                    targets: [SelectionInsertionTarget(id: entry.id, range: range, text: text)],
                     name: "补全"
                 )
+                let changed = try self.document.commit(prepared.transaction)
                 self.refresh(reveal: true)
-                self.onChange?()
+                if changed {
+                    self.onChange?()
+                }
+                else {
+                    self.onSelection?()
+                }
             }
             catch {
                 self.onStatus?(error.localizedDescription)
@@ -56,6 +71,7 @@ extension EditorView {
     /// 参数说明: 无。
     /// 返回：补全面板隐藏，正文与光标保持原状。
     public func dismissCompletion() {
+        completionPresentation = UUID()
         completionPanel?.hide()
     }
 }
