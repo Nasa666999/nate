@@ -55,7 +55,17 @@ extension EditorView {
                 self.onStatus?(error.localizedDescription)
             }
         }
-        panel.present(in: self, values: result.candidates, hint: signature, limited: result.limited)
+        let limitMessage: String? =
+            if result.context.prefixExceedsLimit {
+                "当前前缀超过补全预算，可缩短后再试。"
+            }
+            else if result.limited {
+                "候选受当前扫描或结果上限限制。"
+            }
+            else {
+                nil
+            }
+        panel.present(in: self, values: result.candidates, hint: signature, limitMessage: limitMessage)
     }
 
     /// 业务作用：原生候选与语义宏使用同一个完整前缀替换事务，实际发布后才通知录制。

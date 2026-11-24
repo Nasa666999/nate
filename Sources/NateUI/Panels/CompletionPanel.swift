@@ -17,6 +17,7 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
     var candidates: [CompletionCandidate] = []
     var signature: SignatureHint?
     var overload = 0
+    private var limitMessage: String?
     var onChoose: ((String) -> Void)?
     var confirmsTab = true
     var confirmsEnter = true
@@ -82,9 +83,14 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
     /// - editor: 保持输入焦点的原视图。
     /// - values: 经过身份与修订复验的候选。
     /// - hint: 当前调用的重载与活动参数。
-    /// - limited: 是否触及扫描或结果预算。
+    /// - limitMessage: 当次候选或前缀遇到限制时的实际说明。
     /// 返回：非模态面板可见，没有候选或参数说明时隐藏。
-    func present(in editor: EditorView, values: [CompletionCandidate], hint: SignatureHint?, limited: Bool) {
+    func present(
+        in editor: EditorView,
+        values: [CompletionCandidate],
+        hint: SignatureHint?,
+        limitMessage: String?
+    ) {
         guard !values.isEmpty || hint != nil, let panel = window, let parent = editor.window else {
             hide()
             return
@@ -94,6 +100,7 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
         }
         candidates = values
         signature = hint
+        self.limitMessage = limitMessage
         table.reloadData()
         if !values.isEmpty {
             table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
@@ -102,9 +109,6 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
         previous.isHidden = (hint?.overloads.count ?? 0) < 2
         next.isHidden = previous.isHidden
         updateDetail()
-        if limited {
-            detail.stringValue += "\n候选或文档扫描已达预算；继续输入可缩小候选。"
-        }
         let height = CGFloat(values.isEmpty ? 105 : min(9, values.count) * 23 + 105)
         let rect = editor.firstRect(forCharacterRange: editor.selectedRange(), actualRange: nil)
         let visible = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? rect
@@ -130,6 +134,7 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
         }
         candidates = []
         signature = nil
+        limitMessage = nil
         onChoose = nil
     }
 
@@ -198,7 +203,7 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
 
     /// 业务作用：显示全部重载中的当前签名并标明活动参数。
     /// 参数说明: 无。
-    /// 返回：说明区域同步当前选中项。
+    /// 返回：说明区域同步当前选中项及本轮实际扫描限制。
     func updateDetail() {
         if let signature, !signature.overloads.isEmpty {
             overload = min(overload, signature.overloads.count - 1)
@@ -213,6 +218,9 @@ final class CompletionPanel: NSWindowController, NSTableViewDataSource, NSTableV
         }
         else {
             detail.stringValue = ""
+        }
+        if let limitMessage {
+            detail.stringValue += "\n" + limitMessage
         }
     }
 

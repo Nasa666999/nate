@@ -42,17 +42,18 @@ extension ApplicationController {
             do {
                 let result = try await executor.runCancellable {
                     token in
-                    var start = max(
-                        snapshot.text.lineStart(snapshot.text.lineNumber(at: caret)),
-                        caret - 65_536
-                    )
-                    while !snapshot.text.isBoundary(start) {
-                        start += 1
+                    let start = snapshot.text.lineStart(snapshot.text.lineNumber(at: caret))
+                    // 路径引号可能在此前任何位置开启，截断行首会使另一段文本取得目录读取资格。
+                    guard caret - start <= CompletionInputCommand.maximumPrefixBytes else {
+                        throw NateError.message("路径补全的当前行前缀超过 64 KiB。")
                     }
                     let preceding = snapshot.text.text(in: ByteRange(start, caret))
                     var quote: Character?
                     var segment = ""
-                    for character in preceding {
+                    for (index, character) in preceding.enumerated() {
+                        if index % 4096 == 0 {
+                            try token.check()
+                        }
                         if character == "\"" || character == "'" {
                             if quote == character {
                                 quote = nil
@@ -74,6 +75,9 @@ extension ApplicationController {
                         }
                     }
                     let typed = segment
+                    guard !typed.utf8.contains(0) else {
+                        throw NateError.message("路径前缀含有 NUL，无法解析本地目录。")
+                    }
                     let parentText =
                         typed.hasSuffix("/") ? typed : ((typed as NSString).deletingLastPathComponent)
                     let namePrefix = typed.hasSuffix("/") ? "" : (typed as NSString).lastPathComponent
@@ -82,33 +86,15 @@ extension ApplicationController {
                         expanded.hasPrefix("/")
                         ? URL(fileURLWithPath: expanded, isDirectory: true)
                         : base.appendingPathComponent(expanded, isDirectory: true)
-                    let files = try FileManager.default.contentsOfDirectory(
-                        at: directory,
-                        includingPropertiesForKeys: [.isDirectoryKey]
+                    let writtenParent =
+                        parentText.isEmpty || parentText.hasSuffix("/") ? parentText : parentText + "/"
+                    let result = try PathCompletionDirectory.read(
+                        directory: directory,
+                        namePrefix: namePrefix,
+                        writtenParent: writtenParent,
+                        entryLimit: PathCompletionDirectory.maximumEntries,
+                        check: token.check
                     )
-                    var values: [CompletionCandidate] = []
-                    for file in files.sorted(by: {
-                        $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
-                            == .orderedAscending
-                    }) {
-                        try token.check()
-                        guard file.lastPathComponent.lowercased().hasPrefix(namePrefix.lowercased()) else {
-                            continue
-                        }
-                        let folder = try file.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
-                        let prefix =
-                            parentText.isEmpty
-                            ? "" : parentText.hasSuffix("/") ? parentText : parentText + "/"
-                        values.append(
-                            CompletionCandidate(
-                                text: prefix + file.lastPathComponent + (folder ? "/" : ""),
-                                detail: (folder ? "目录 · " : "文件 · ") + directory.path
-                            )
-                        )
-                        if values.count == 201 {
-                            break
-                        }
-                    }
                     return CompletionResult(
                         documentID: snapshot.id,
                         revision: snapshot.revision,
@@ -116,15 +102,18 @@ extension ApplicationController {
                             range: ByteRange(caret - typed.utf8.count, caret),
                             prefix: typed
                         ),
-                        candidates: Array(values.prefix(200)),
-                        limited: values.count > 200
+                        candidates: result.candidates,
+                        limited: result.limited
                     )
                 }
                 guard current() else {
                     return
                 }
                 if result.candidates.isEmpty {
-                    self.mainWindow?.status.stringValue = "当前路径前缀没有候选 · 相对基准：" + base.path
+                    self.mainWindow?.status.stringValue =
+                        result.limited
+                        ? "路径补全达到目录扫描上限，已扫描范围没有匹配。"
+                        : "当前路径前缀没有候选 · 相对基准：" + base.path
                 }
                 editor.presentCompletions(
                     result,
