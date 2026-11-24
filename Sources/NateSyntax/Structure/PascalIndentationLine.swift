@@ -6,11 +6,10 @@ struct PascalIndentationLine {
     private struct Span {
         let range: Range<Int>
         let event: Event
-        let hasOnlySpaceBefore: Bool
     }
 
     private let base: Int
-    private let byteCount: Int
+    private let raw: [UInt8]
     private let prefix: String
     private let spans: [Span]
     private let opaque: [Range<Int>]
@@ -35,7 +34,7 @@ struct PascalIndentationLine {
     ) throws {
         self.base = base
         self.endsOpaque = endsOpaque
-        byteCount = raw.count
+        self.raw = raw
         var prefixEnd = 0
         while prefixEnd < raw.count, Self.isSpace(raw[prefixEnd]) {
             if prefixEnd & 255 == 0 {
@@ -46,7 +45,6 @@ struct PascalIndentationLine {
         prefix = String(decoding: raw[..<prefixEnd], as: UTF8.self)
         var spans: [Span] = []
         var opaque: [Range<Int>] = []
-        var onlySpace = true
         for token in tokens {
             try check()
             let lower = token.range.lower - base
@@ -70,9 +68,7 @@ struct PascalIndentationLine {
                         guard spans.count < 65_536 else {
                             throw NateError.message("Pascal 行缩进超过 65536 个结构事件。")
                         }
-                        spans.append(
-                            Span(range: index..<name, event: .directive, hasOnlySpaceBefore: onlySpace)
-                        )
+                        spans.append(Span(range: index..<name, event: .directive))
                     }
                     // 原生指令不嵌套，同一类别里的字面开端只能在实际关闭之后建立下一条指令。
                     while index < upper {
@@ -90,11 +86,9 @@ struct PascalIndentationLine {
                         index += 1
                     }
                 }
-                onlySpace = false
                 continue
             }
             if token.kind == .comment {
-                onlySpace = false
                 continue
             }
             var index = lower
@@ -152,8 +146,7 @@ struct PascalIndentationLine {
                     end = style == "pascal:0" ? stop : upper
                     event = .other
                 }
-                spans.append(Span(range: index..<end, event: event, hasOnlySpaceBefore: onlySpace))
-                onlySpace = true
+                spans.append(Span(range: index..<end, event: event))
                 index = end
             }
         }
@@ -179,9 +172,10 @@ struct PascalIndentationLine {
         var opening: String?
         var closed: String?
         var closedStatement = false
+        let spaceRuns = targets.isEmpty ? [] : try horizontalSpaceRuns(check: check)
         for target in targets.sorted(by: { $0.lower < $1.lower }) {
             try check()
-            let offset = min(byteCount, target.lower - base)
+            let offset = min(raw.count, target.lower - base)
             while index < spans.count, spans[index].range.upperBound <= offset {
                 try check()
                 opening = try update(
@@ -196,26 +190,31 @@ struct PascalIndentationLine {
                 try check()
                 opaqueIndex += 1
             }
-            let next = index < spans.count ? spans[index] : nil
+            let cutsEvent = index < spans.count && spans[index].range.lowerBound < offset
             let blocked =
                 opaqueIndex < opaque.count && opaque[opaqueIndex].lowerBound < offset
                 && (offset < opaque[opaqueIndex].upperBound
-                    || endsOpaque && offset == byteCount && opaque[opaqueIndex].upperBound == offset)
-            if blocked || next.map({ $0.range.lowerBound < offset }) == true {
+                    || endsOpaque && offset == raw.count && opaque[opaqueIndex].upperBound == offset)
+            if blocked || cutsEvent {
                 output[target] = .inherit
+                continue
             }
-            else if let opening {
-                if let next, next.hasOnlySpaceBefore, structure.alignment(before: next.event) != nil {
+            // 被选择移除的原关键词不能授权生成闭合行，只有替换终点之后完整且相邻的结构可以对齐。
+            let suffix = target.upper - base
+            let alignment = following(at: suffix, after: index, with: spaceRuns).flatMap {
+                structure.alignment(before: $0.event)
+            }
+            if let opening {
+                let before = spans[index - 1].range.upperBound
+                if alignment != nil, Self.hasOnlySpace(before..<offset, in: spaceRuns) {
                     output[target] = opening == prefix ? .expandPair : .expandAlignedPair(prefix: opening)
                 }
                 else {
                     output[target] = opening == prefix ? .increase : .align(prefix: opening, levels: 1)
                 }
             }
-            else if index == 0, let next, next.range.lowerBound == prefix.utf8.count,
-                let origin = structure.alignment(before: next.event)
-            {
-                output[target] = .align(prefix: origin, levels: 0)
+            else if index == 0, offset <= prefix.utf8.count, let alignment {
+                output[target] = .align(prefix: alignment, levels: 0)
             }
             else if let closed {
                 output[target] = .align(prefix: closed, levels: 0)
@@ -229,6 +228,86 @@ struct PascalIndentationLine {
             _ = try structure.consume(spans[index].event, prefix: prefix)
             index += 1
         }
+    }
+
+    /// 业务作用：从选区真实结束处查找仍会存在的首个完整事件，切入关键字或越过当前物理行都不借用后面的闭合。
+    /// 参数说明:
+    /// - offset: 原替换范围结束的物理行原字节坐标。
+    /// - first: 当前插入点尚未消费的第一项事件。
+    /// - spaceRuns: 同一物理行的原始空格及 Tab 范围。
+    /// 返回：与保留后缀起点只隔水平空白的完整首项；任何证据不足时为空。
+    private func following(at offset: Int, after first: Int, with spaceRuns: [Range<Int>]) -> Span? {
+        guard offset < raw.count else {
+            return nil
+        }
+        var lower = first
+        var upper = spans.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if spans[middle].range.upperBound <= offset {
+                lower = middle + 1
+            }
+            else {
+                upper = middle
+            }
+        }
+        guard lower < spans.count, spans[lower].range.lowerBound >= offset,
+            Self.hasOnlySpace(offset..<spans[lower].range.lowerBound, in: spaceRuns)
+        else {
+            return nil
+        }
+        return spans[lower]
+    }
+
+    /// 业务作用：同行所有目标共享实际横向空白证据，多个光标无需各自重读长空白或误将注释当成间隔。
+    /// 参数说明:
+    /// - check: 本次完整输入的继续资格。
+    /// 返回：按原字节升序且互不重叠的空格与 Tab 区间，取消时停止准备。
+    private func horizontalSpaceRuns(check: () throws -> Void) throws -> [Range<Int>] {
+        var ranges: [Range<Int>] = []
+        var start: Int?
+        for index in raw.indices {
+            if index & 255 == 0 {
+                try check()
+            }
+            if Self.isSpace(raw[index]) {
+                if start == nil {
+                    start = index
+                }
+            }
+            else if let begin = start {
+                ranges.append(begin..<index)
+                start = nil
+            }
+        }
+        if let start {
+            ranges.append(start..<raw.count)
+        }
+        return ranges
+    }
+
+    /// 业务作用：只有区间内每个原字节均属于同一已确认空白段时，插入点和未修改的后继才视为相邻。
+    /// 参数说明:
+    /// - range: 替换点旁边保留的原字节间隔。
+    /// - spaceRuns: 当前物理行的完整空白区间证据。
+    /// 返回：空区间或完整水平空白为真，其余原文字节都保留边界。
+    private static func hasOnlySpace(_ range: Range<Int>, in spaceRuns: [Range<Int>]) -> Bool {
+        guard !range.isEmpty else {
+            return true
+        }
+        var lower = 0
+        var upper = spaceRuns.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if spaceRuns[middle].upperBound <= range.lowerBound {
+                lower = middle + 1
+            }
+            else {
+                upper = middle
+            }
+        }
+        return lower < spaceRuns.count && spaceRuns[lower].lowerBound <= range.lowerBound
+            && range.upperBound <= spaceRuns[lower].upperBound
     }
 
     /// 业务作用：仅独立的闭合语句可以决定后续缩进，同行其余代码不得沿用已结束作用域。
