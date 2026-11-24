@@ -51,6 +51,11 @@ public struct StructuralIndentationPlan: Sendable {
         let identifier = language?.id ?? "normal"
         let lisp = identifier == "lisp" || identifier == "scheme"
         let fortran = identifier == "fortran" || identifier == "fortran77"
+        let prepareLogicalLines = [
+            "bash": BashIndentationPlan.actions,
+            "ruby": RubyIndentationPlan.actions,
+            "makefile": MakefileIndentationPlan.actions,
+        ][identifier]
         let curly: Set<String> = [
             "c", "cpp", "java", "cs", "objc", "php", "javascript", "javascript.js", "jsp", "css",
             "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r",
@@ -58,9 +63,9 @@ public struct StructuralIndentationPlan: Sendable {
         usesLanguageRules =
             udl == nil
             && (identifier == "python" || identifier == "lua" || identifier == "mssql" || identifier == "sql"
-                || identifier == "cmake" || identifier == "autoit" || identifier == "bash"
+                || identifier == "cmake" || identifier == "autoit" || prepareLogicalLines != nil
                 || identifier == "yaml" || identifier == "toml" || identifier == "html" || identifier == "xml"
-                || identifier == "pascal" || identifier == "ruby" || fortran || lisp
+                || identifier == "pascal" || fortran || lisp
                 || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
@@ -103,9 +108,8 @@ public struct StructuralIndentationPlan: Sendable {
             )
             return
         }
-        if identifier == "bash" || identifier == "ruby" {
-            let prepare = identifier == "bash" ? BashIndentationPlan.actions : RubyIndentationPlan.actions
-            actions = try prepare(snapshot, ranges, deadline, permit)
+        if let prepareLogicalLines {
+            actions = try prepareLogicalLines(snapshot, ranges, deadline, permit)
             return
         }
         if identifier == "yaml" {
