@@ -3,7 +3,8 @@ import NateCore
 
 struct FortranIndentationLine {
     private static let modernStructureWords: Set<String> = [
-        "block", "blockdata", "endblock", "endblockdata", "rank", "selectrank",
+        "block", "blockdata", "change", "changeteam", "endblock", "endblockdata", "endteam",
+        "rank", "selectrank", "team",
     ]
     enum Block: String {
         case program, module, submodule, subroutine, function, interface
@@ -217,12 +218,18 @@ struct FortranIndentationLine {
                 }
                 return .closing(.blockdata, name: unit.first?.value)
             }
+            if next == "team", rest.first?.keyword == true {
+                return try FortranSynchronization.closesTeam(rest.dropFirst(), check: check)
+            }
             if let block = next.flatMap(Block.init(rawValue:)), rest.first?.keyword == true,
                 rest.count <= 2, rest.count == 1 || rest.last?.identifier == true
             {
                 return .closing(block, name: rest.count == 2 ? rest.last?.value : nil)
             }
             return .neutral
+        }
+        if first.value == "endteam" {
+            return try FortranSynchronization.closesTeam(rest, check: check)
         }
         if first.value.hasPrefix("end"),
             let block = Block(rawValue: String(first.value.dropFirst(3))),
@@ -324,6 +331,16 @@ struct FortranIndentationLine {
                 return .neutral
             }
             return .opening(.associate, name: name)
+        case "critical":
+            return try FortranSynchronization.opensCritical(rest, check: check)
+                ? .opening(.critical, name: name) : .neutral
+        case "change", "changeteam":
+            guard first.value == "changeteam" || next == "team" && rest.first?.keyword == true else {
+                return .neutral
+            }
+            let arguments = first.value == "change" ? rest.dropFirst() : rest
+            return try FortranSynchronization.opensTeam(arguments, check: check)
+                ? .opening(.team, name: name) : .neutral
         case "program", "module", "subroutine", "function", "interface", "submodule":
             if first.value == "module", ["procedure", "function", "subroutine"].contains(next ?? "") {
                 return .neutral
