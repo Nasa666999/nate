@@ -70,6 +70,7 @@ extension FileStorage {
     /// - maximumBytes: 文件字节预算。
     /// - maximumCaptureBytes: 最多保留的原字节前缀，摘要仍涵盖完整文件。
     /// - resolvingLinks: 用户原文件可解析符号链接；私有恢复记录直接拒绝链接。
+    /// - directory: 已经锚定的父目录描述符；指定后只在该目录读取及复验单个原目录项。
     /// - consume: 同步分块接收者，默认忽略；用于有限内存复制，不得保留块内指针。
     /// - permit: 请求仍有效的权限。
     /// 返回：精确基线和可选正文；任一身份或时间观察变化时失败。
@@ -79,6 +80,7 @@ extension FileStorage {
         maximumBytes: Int,
         maximumCaptureBytes: Int = Int.max,
         resolvingLinks: Bool = true,
+        directory: Int32? = nil,
         consume: (UnsafeRawBufferPointer) throws -> Void = {
             _ in
         },
@@ -92,8 +94,17 @@ extension FileStorage {
         }
         try validateFileURL(url)
         let resolved =
-            resolvingLinks ? url.resolvingSymlinksInPath().standardizedFileURL : url.standardizedFileURL
-        let descriptor = Darwin.open(resolved.path, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW)
+            resolvingLinks && directory == nil
+            ? url.resolvingSymlinksInPath().standardizedFileURL : url.standardizedFileURL
+        let mode = O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW
+        let descriptor: Int32
+        if let directory {
+            // 已确认的父目录描述符固定相对访问边界，读取中切换同名目录也无法改向本次读操作。
+            descriptor = openat(directory, resolved.lastPathComponent, mode)
+        }
+        else {
+            descriptor = Darwin.open(resolved.path, mode)
+        }
         guard descriptor >= 0 else {
             throw posix("无法读取原文件")
         }
@@ -158,7 +169,13 @@ extension FileStorage {
         var path = stat()
         // 描述符内容、路径身份及纳秒观察必须仍一致，不能把多个外部修订拼成一个保存基线。
         let descriptorResult = fstat(descriptor, &after)
-        let pathResult = resolvingLinks ? stat(resolved.path, &path) : lstat(resolved.path, &path)
+        let pathResult: Int32
+        if let directory {
+            pathResult = fstatat(directory, resolved.lastPathComponent, &path, AT_SYMLINK_NOFOLLOW)
+        }
+        else {
+            pathResult = resolvingLinks ? stat(resolved.path, &path) : lstat(resolved.path, &path)
+        }
         guard descriptorResult == 0, pathResult == 0,
             sameObservation(metadata, after), sameObservation(after, path)
         else {

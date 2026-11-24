@@ -11,6 +11,9 @@ extension ApplicationController {
         guard let id = menuItem.representedObject as? String else {
             return true
         }
+        if let command = FunctionListAssociationCommand(rawValue: id) {
+            return canManageFunctionListAssociations(command)
+        }
         if let command = LanguageXMLOverrideCommand.named(id) {
             return canManageLanguageXML(command)
         }

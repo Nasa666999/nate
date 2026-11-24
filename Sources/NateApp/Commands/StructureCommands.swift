@@ -51,22 +51,22 @@ extension ApplicationController {
         }
         let language = document.language
         let catalogGeneration = functionListCatalog?.generation
+        let mapGeneration = functionListAssociations.entry.generation
         let override = functionListOverrides.entries[language]
         let overrideGeneration = override?.generation
         let key = [
             String(describing: ObjectIdentifier(window)), document.buffer.id.uuidString,
             String(document.buffer.revision), language, catalogGeneration?.uuidString ?? "",
-            overrideGeneration?.uuidString ?? "",
+            mapGeneration.uuidString, overrideGeneration?.uuidString ?? "",
         ].joined(separator: ":")
         guard force || key != structureRequestKey else {
             return
         }
         cancelStructure()
         structureRequestKey = key
-        guard
-            let definition = override?.definition?.definition
-                ?? functionListCatalog?.definition(for: language)
-        else {
+        let mapped = mappedFunctionList(for: language)
+        let prepared = override?.definition ?? mapped?.prepared
+        guard let definition = prepared?.definition ?? mapped?.definition else {
             window.structurePanel.showState("当前语言没有适用的函数列表规则。")
             return
         }
@@ -84,7 +84,7 @@ extension ApplicationController {
                 }
                 let worker = Task.detached(priority: .userInitiated) {
                     let rules =
-                        try override?.definition
+                        try prepared
                         ?? PreparedFunctionList(definition, allowsBundledLookbehind: true)
                     return try rules.outline(in: snapshot)
                 }
@@ -101,6 +101,7 @@ extension ApplicationController {
                     self.mainWindow === window, window.editor.document === document.buffer,
                     !document.closing, document.buffer.revision == snapshot.revision,
                     document.language == language, self.functionListCatalog?.generation == catalogGeneration,
+                    self.functionListAssociations.entry.generation == mapGeneration,
                     self.functionListOverrides.entries[language]?.generation == overrideGeneration,
                     window.isStructureVisible
                 else {
@@ -121,6 +122,8 @@ extension ApplicationController {
                     // 输入法确认可能提交新修订，定位前必须再次核验而不能把旧范围夹紧后使用。
                     guard self.active === document, document.buffer.revision == result.revision,
                         document.language == language, generation == self.structureGeneration,
+                        self.functionListCatalog?.generation == catalogGeneration,
+                        self.functionListAssociations.entry.generation == mapGeneration,
                         self.functionListOverrides.entries[language]?.generation == overrideGeneration,
                         !document.closing
                     else {
@@ -146,18 +149,20 @@ extension ApplicationController {
 
     /// 业务作用：新规则生效后立即撤销所有相关窗口的导航权限，活动窗口重新提取，后台窗口在使用时重建。
     /// 参数说明:
-    /// - language: 用户刚刚更新的实际语言标识。
-    /// 返回：相关面板不再持有旧字节范围，其它语言当前任务保持正常。
-    func invalidateFunctionLists(for language: String) {
+    /// - language: 用户刚更新的实际语言标识；全局关联变更时为空。
+    /// 返回：受影响面板不再持有旧字节范围，按语言修改时保留其它语言的任务。
+    func invalidateFunctionLists(for language: String?) {
         for window in editorWindows where window.isStructureVisible {
-            guard documents.first(where: { $0.buffer === window.editor.document })?.language == language
+            guard
+                language == nil
+                    || documents.first(where: { $0.buffer === window.editor.document })?.language == language
             else {
                 continue
             }
             window.structurePanel.onNavigate = nil
             window.structurePanel.showState("函数列表规则已更新。")
         }
-        if active?.language == language {
+        if language == nil || active?.language == language {
             cancelStructure()
             requestStructure(force: true)
         }

@@ -34,7 +34,7 @@ struct LanguageXMLOverrideCommand {
         case .edit: return "编辑\(resource) XML…"
         case .export: return "导出当前\(resource) XML…"
         case .reload: return "重新载入用户\(resource)"
-        case .restore: return "恢复随包\(resource)…"
+        case .restore: return kind == .completion ? "恢复随包补全…" : "恢复当前关联的函数列表…"
         }
     }
 
@@ -87,7 +87,7 @@ extension ApplicationController {
                 command.action,
                 overrides: functionListOverrides,
                 id: id,
-                original: functionListCatalog?.definition(for: id)?.originalXML
+                original: mappedFunctionList(for: id)?.definition.originalXML
             )
         }
     }
@@ -126,7 +126,7 @@ extension ApplicationController {
                 return []
             }
         case .functionList:
-            let original = functionListCatalog?.definition(for: language.id)
+            let original = mappedFunctionList(for: language.id)?.definition
             let template = """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <NotepadPlus><functionList><parser id="custom">
@@ -257,37 +257,25 @@ extension ApplicationController {
                 }
             }
         case .export:
-            guard let xml,
-                let url = SystemIntegration.chooseSave(
-                    name: overrides.kind == .completion ? "completion.xml" : "function-list.xml"
-                )
-            else {
+            guard let xml else {
                 return
             }
-            Task {
-                do {
-                    try await fileIO.run {
-                        let expected =
-                            FileManager.default.fileExists(atPath: url.path)
-                            ? try self.fileAccess.baseline(url) : nil
-                        _ = try self.fileOperations.save(
-                            using: self.fileAccess,
-                            xml,
-                            to: url,
-                            expected: expected,
-                            replacing: true
-                        )
-                    }
-                }
-                catch {
-                    SystemIntegration.alert(resource + " XML 未导出", error.localizedDescription)
-                }
-            }
+            exportRuleXML(
+                xml,
+                name: overrides.kind == .completion ? "completion.xml" : "function-list.xml",
+                errorTitle: resource + " XML 未导出"
+            )
         case .reload, .restore:
             if action == .restore {
                 let prompt = NSAlert()
-                prompt.messageText = "恢复 \(language.name) 的随包\(resource)？"
-                prompt.informativeText = "当前用户定义将由随包规则替换。"
+                if overrides.kind == .completion {
+                    prompt.messageText = "恢复 \(language.name) 的随包补全？"
+                    prompt.informativeText = "当前用户定义将由随包规则替换。"
+                }
+                else {
+                    prompt.messageText = "恢复 \(language.name) 当前关联的函数列表？"
+                    prompt.informativeText = "将删除当前语言单独保存的规则，并按当前函数列表关联选择定义。"
+                }
                 prompt.addButton(withTitle: "恢复")
                 prompt.addButton(withTitle: "取消")
                 guard prompt.runModal() == .alertFirstButtonReturn else {
@@ -310,4 +298,36 @@ extension ApplicationController {
             }
         }
     }
+
+    /// 业务作用：所有结构与补全导出都写出已选的原始 XML，覆盖目标仍使用实际磁盘证据。
+    /// 参数说明:
+    /// - xml: 菜单发出时冻结的完整原 XML。
+    /// - name: 保存面板的默认文件名。
+    /// - errorTitle: 该资源写入失败时的实际标题。
+    /// 返回：取消不写入，协作写入、目标变化或失败交由同一文件发布入口处理。
+    func exportRuleXML(_ xml: Data, name: String, errorTitle: String) {
+        guard let url = SystemIntegration.chooseSave(name: name) else {
+            return
+        }
+        Task {
+            do {
+                try await fileIO.run {
+                    let expected =
+                        FileManager.default.fileExists(atPath: url.path)
+                        ? try self.fileAccess.baseline(url) : nil
+                    _ = try self.fileOperations.save(
+                        using: self.fileAccess,
+                        xml,
+                        to: url,
+                        expected: expected,
+                        replacing: true
+                    )
+                }
+            }
+            catch {
+                SystemIntegration.alert(errorTitle, error.localizedDescription)
+            }
+        }
+    }
+
 }

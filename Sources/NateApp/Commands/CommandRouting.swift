@@ -77,6 +77,10 @@ extension ApplicationController {
             quickFind(action)
             return
         }
+        if let command = FunctionListAssociationCommand(rawValue: id) {
+            manageFunctionListAssociations(command)
+            return
+        }
         if let command = LanguageXMLOverrideCommand.named(id) {
             manageLanguageXML(command)
             return

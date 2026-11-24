@@ -134,7 +134,7 @@ public struct DirectoryContents: Sendable {
         }
     ) throws -> DirectoryStamp {
         try check(permit)
-        let descriptor = try openDirectory(root: root, directory: directory)
+        let descriptor = try openDirectory(root: root, directory: directory, permit: permit)
         defer {
             close(descriptor)
         }
@@ -204,7 +204,7 @@ public struct DirectoryContents: Sendable {
     /// 参数说明:
     /// - descriptor: 已打开的目录描述符。
     /// 返回：当前目录状态；描述符失效或对象类型不同则失败。
-    private static func stamp(_ descriptor: Int32) throws -> DirectoryStamp {
+    static func stamp(_ descriptor: Int32) throws -> DirectoryStamp {
         var value = stat()
         guard fstat(descriptor, &value) == 0, value.st_mode & S_IFMT == S_IFDIR else {
             throw failure("无法观察目录")

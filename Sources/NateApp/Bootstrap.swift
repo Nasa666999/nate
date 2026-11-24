@@ -30,6 +30,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         return try CompletionDefinition(importing: xml)
     }
     var functionListCatalog: FunctionListCatalog?
+    let functionListAssociations = FunctionListAssociationRuntime()
     let functionListOverrides = LanguageXMLOverrides<PreparedFunctionList>(kind: .functionList, label: "函数列表")
     {
         xml,
@@ -319,6 +320,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             await loadUserLanguages()
             await loadCompletionOverrides()
             await loadLanguageXMLOverrides(functionListOverrides)
+            await loadFunctionListAssociations()
             for (record, tree, reference) in restored.documents {
                 let document = WorkspaceDocument(
                     name: record.name,

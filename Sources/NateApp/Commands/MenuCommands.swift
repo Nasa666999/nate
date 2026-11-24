@@ -289,6 +289,11 @@ extension ApplicationController: NSMenuItemValidation {
             }
             attach(resources, to: language)
         }
+        let associations = NSMenu(title: "函数列表关联")
+        for command in FunctionListAssociationCommand.allCases {
+            add(associations, command.title, command.rawValue)
+        }
+        attach(associations, to: language)
         language.addItem(.separator())
         add(language, "自动识别", "detectLanguage")
         for definition in registry?.languages ?? [] where definition.id != "searchResult" {
