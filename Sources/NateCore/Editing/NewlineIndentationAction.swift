@@ -5,6 +5,8 @@ public enum NewlineIndentationAction: Sendable, Equatable {
     case increase
     case decrease
     case expandPair
+    /// 开端跨行时，内层和闭合行都采用真实开端的原始空白。
+    case expandAlignedPair(prefix: String)
     /// 对齐保留明确来源的纯空白前缀，增减层级采用当前 Tab 配置，并服从整批读取与输出容量。
     case align(prefix: String, levels: Int)
 }
@@ -30,6 +32,7 @@ enum NewlineIndentationText {
         budget: SelectionPreparationBudget
     ) throws -> (text: String, caret: Int) {
         let adjusted: String
+        var pairedPrefix: String?
         switch action {
         case .inherit:
             adjusted = prefix
@@ -40,6 +43,17 @@ enum NewlineIndentationText {
                 settings: settings,
                 budget: budget
             )
+            if action == .expandPair {
+                pairedPrefix = prefix
+            }
+        case .expandAlignedPair(let origin):
+            adjusted = try NewlineIndentationPrefix.shift(
+                origin,
+                levels: 1,
+                settings: settings,
+                budget: budget
+            )
+            pairedPrefix = origin
         case .decrease:
             adjusted = try NewlineIndentationPrefix.shift(
                 prefix,
@@ -56,14 +70,14 @@ enum NewlineIndentationText {
             )
         }
         let first = ending.utf8.count + adjusted.utf8.count + extra
-        let trailing = action == .expandPair ? ending.utf8.count + prefix.utf8.count : 0
+        let trailing = pairedPrefix.map { ending.utf8.count + $0.utf8.count } ?? 0
         // 真实前缀、边缘空白及第二个换行完整计入容量，不能发布只包含部分光标或半个成对结构的输入。
         guard extra >= 0, first <= maximumBytes, trailing <= maximumBytes - first else {
             throw NateError.message("完整结构换行超过正文或输出容量。")
         }
         var text = ending + adjusted + String(repeating: " ", count: extra)
-        if action == .expandPair {
-            text += ending + prefix
+        if let pairedPrefix {
+            text += ending + pairedPrefix
         }
         try budget.check()
         return (text, first)

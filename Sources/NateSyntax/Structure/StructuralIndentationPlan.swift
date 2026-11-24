@@ -57,7 +57,7 @@ public struct StructuralIndentationPlan: Sendable {
             udl == nil
             && (identifier == "python" || identifier == "lua" || identifier == "mssql" || identifier == "sql"
                 || identifier == "cmake" || identifier == "autoit" || identifier == "bash"
-                || identifier == "yaml" || identifier == "toml"
+                || identifier == "yaml" || identifier == "toml" || identifier == "html" || identifier == "xml"
                 || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
@@ -112,6 +112,16 @@ public struct StructuralIndentationPlan: Sendable {
             actions = try TOMLIndentationPlan.actions(
                 snapshot: snapshot,
                 language: language,
+                ranges: ranges,
+                deadline: deadline,
+                permit: permit
+            )
+            return
+        }
+        if identifier == "html" || identifier == "xml" {
+            actions = try MarkupIndentationPlan.actions(
+                snapshot: snapshot,
+                dialect: identifier == "html" ? .html : .xml,
                 ranges: ranges,
                 deadline: deadline,
                 permit: permit
