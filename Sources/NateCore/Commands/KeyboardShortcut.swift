@@ -55,6 +55,9 @@ public enum CompatibilityShortcut {
         let key = key.lowercased()
         let previous = modifiers & 8 != 0
         let option = modifiers & 2 != 0
+        if modifiers == 4, key == "\r" || key == "\u{3}" {
+            return "completeWords"
+        }
         if key == "\u{F706}" {
             return option
                 ? (previous ? "volatileFindPrevious" : "volatileFindNext")

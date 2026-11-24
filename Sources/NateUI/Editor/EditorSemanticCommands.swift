@@ -90,7 +90,7 @@ extension EditorView {
         case "deleteForward:": return .deleteForward
         case "insertTab:": return .insertTab
         case "insertBacktab:": return .backTab
-        case "insertNewline:": return .insertNewline
+        case "insertNewline:", "insertNewlineIgnoringFieldEditor:", "insertLineBreak:": return .insertNewline
         case "moveLeft:", "moveBackward:": return .moveLeft
         case "moveRight:", "moveForward:": return .moveRight
         case "moveUp:": return .moveUp

@@ -69,6 +69,10 @@ extension ApplicationController {
         else {
             return false
         }
+        // 手动补全只读取当前真正聚焦的正文，不拦截查找字段或可编辑设置控件中的 Control-Enter。
+        if owner == "completeWords", responder !== mainWindow?.editor || window !== mainWindow?.window {
+            return false
+        }
         if owner == "nextTab" || owner == "previousTab", let item = entry.items.first, item.target === self {
             guard window === mainWindow?.window, window.attachedSheet == nil else {
                 finishWorkspaceTabCycle()

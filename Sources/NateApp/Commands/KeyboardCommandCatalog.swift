@@ -82,7 +82,7 @@ extension ApplicationController {
             }
         }
         var occupied = Set(entries.flatMap(\.defaults))
-        for key in ["h", "f", "s", "n", "o", "w", "g", "b", "i", "\t", "\u{F706}"] {
+        for key in ["h", "f", "s", "n", "o", "w", "g", "b", "i", "\t", "\r", "\u{3}", "\u{F706}"] {
             for modifiers in UInt8(0)...15 {
                 guard let command = CompatibilityShortcut.command(key: key, modifiers: modifiers),
                     let index = positions[command]
