@@ -162,12 +162,10 @@ struct RubyIndentationLexer: Equatable, Sendable {
                 qualified = false
                 continue
             }
-            if byte == 63, expectsOperand, following != 0, !Self.blank(following) {
-                index += 1
-                if bytes[index] == 92, index + 1 < bytes.count {
-                    index += 1
-                }
-                index = min(bytes.count, index + Self.scalarLength(bytes[index]))
+            if byte == 63, acceptsLiteral,
+                let end = try RubyCharacterLiteral.end(in: bytes, after: start, check: check)
+            {
+                index = end
                 tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .number))
                 expectsOperand = false
                 qualified = false
@@ -296,7 +294,7 @@ struct RubyIndentationLexer: Equatable, Sendable {
     /// 参数说明:
     /// - byte: 由正文树确认的标量首字节。
     /// 返回：当个合法原标量的 UTF-8 宽度。
-    private static func scalarLength(_ byte: UInt8) -> Int {
+    static func scalarLength(_ byte: UInt8) -> Int {
         switch byte {
         case 0...127: 1
         case 194...223: 2
