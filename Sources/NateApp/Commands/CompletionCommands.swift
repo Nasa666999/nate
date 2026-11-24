@@ -61,9 +61,7 @@ extension ApplicationController {
             defaults.object(forKey: "completion.threshold") == nil
                 ? 2 : min(20, defaults.integer(forKey: "completion.threshold"))
         )
-        let tab = defaults.object(forKey: "completion.tab") == nil || defaults.bool(forKey: "completion.tab")
-        let enter =
-            defaults.object(forKey: "completion.enter") == nil || defaults.bool(forKey: "completion.enter")
+        let confirmation = CompletionConfirmationOptions(defaults: defaults)
         let documentWords =
             !automatic || defaults.object(forKey: "completion.words") == nil
             || defaults.bool(forKey: "completion.words")
@@ -140,8 +138,8 @@ extension ApplicationController {
                 editor.presentCompletions(
                     result,
                     signature: hint,
-                    tab: tab,
-                    enter: enter,
+                    tab: confirmation.tab,
+                    enter: confirmation.enter,
                     stillCurrent: current
                 )
             }

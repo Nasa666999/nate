@@ -5,7 +5,7 @@ import NateSyntax
 extension ApplicationController {
     /// 业务作用：仅用户手动请求时枚举路径，未命名文档明确以用户主目录为相对基准。
     /// 参数说明: 无。
-    /// 返回：候选绑定当前修订，确认仍是普通可撤销文本事务。
+    /// 返回：候选绑定当前文档和按键偏好，确认时执行可撤销的前缀替换。
     func requestPathCompletion() {
         guard let document = active, let editor = mainWindow?.editor, !closing, !document.closing,
             editor.document === document.buffer, !document.bindingChange,
@@ -16,6 +16,7 @@ extension ApplicationController {
         cancelCompletion()
         let generation = completionGeneration
         let snapshot = document.buffer.snapshot
+        let confirmation = CompletionConfirmationOptions(defaults: configurationDefaults())
         let url = document.url
         let binding = document.targetGeneration
         let base =
@@ -128,8 +129,8 @@ extension ApplicationController {
                 editor.presentCompletions(
                     result,
                     signature: nil,
-                    tab: true,
-                    enter: true,
+                    tab: confirmation.tab,
+                    enter: confirmation.enter,
                     stillCurrent: current
                 )
             }

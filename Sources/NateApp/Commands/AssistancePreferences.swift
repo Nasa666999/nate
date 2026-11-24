@@ -21,6 +21,21 @@ struct AutomaticCompletionOptions: Sendable {
     }
 }
 
+struct CompletionConfirmationOptions: Sendable {
+    let tab: Bool
+    let enter: Bool
+
+    /// 业务作用：普通及路径候选使用同一份确认按键偏好，未设置时保留两个原生确认键。
+    /// 参数说明:
+    /// - defaults: 当前应用的偏好域。
+    /// 返回：本次候选发布或表单使用的两个独立确认状态。
+    init(defaults: UserDefaults) {
+        tab = defaults.object(forKey: "completion.tab") == nil || defaults.bool(forKey: "completion.tab")
+        enter =
+            defaults.object(forKey: "completion.enter") == nil || defaults.bool(forKey: "completion.enter")
+    }
+}
+
 extension ApplicationController {
     /// 业务作用：候选、参数提示及确认按键独立配置，同一偏好来源通过复验后才应用整份设置。
     /// 参数说明: 无。
@@ -38,6 +53,7 @@ extension ApplicationController {
         let source = keys.map { defaults.object(forKey: $0) as? NSObject }
         let generation = userConfiguration.generation
         let automatic = AutomaticCompletionOptions(defaults: defaults)
+        let confirmation = CompletionConfirmationOptions(defaults: defaults)
         let enabled = NSButton(checkboxWithTitle: "输入后自动显示补全候选", target: nil, action: nil)
         enabled.state = automatic.words ? .on : .off
         let signature = NSButton(checkboxWithTitle: "输入后自动显示函数参数提示", target: nil, action: nil)
@@ -51,13 +67,9 @@ extension ApplicationController {
             defaults.object(forKey: "completion.language") == nil
                 || defaults.bool(forKey: "completion.language") ? .on : .off
         let tab = NSButton(checkboxWithTitle: "Tab 确认候选", target: nil, action: nil)
-        tab.state =
-            defaults.object(forKey: "completion.tab") == nil || defaults.bool(forKey: "completion.tab")
-            ? .on : .off
+        tab.state = confirmation.tab ? .on : .off
         let enter = NSButton(checkboxWithTitle: "Enter 确认候选", target: nil, action: nil)
-        enter.state =
-            defaults.object(forKey: "completion.enter") == nil || defaults.bool(forKey: "completion.enter")
-            ? .on : .off
+        enter.state = confirmation.enter ? .on : .off
         let threshold = NSTextField(
             string: String(
                 defaults.object(forKey: "completion.threshold") == nil
