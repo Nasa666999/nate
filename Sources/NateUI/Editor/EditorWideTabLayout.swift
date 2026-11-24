@@ -71,7 +71,7 @@ extension EditorView {
             return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
         }
         let printable = snapshot.text.isPrintableASCII(in: range)
-        if wrapLines ? (!printable || snapshot.text.isAlphanumericASCII(in: range)) : printable {
+        if wrapLines ? snapshot.text.isAlphanumericASCII(in: range) : printable {
             return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
         }
         let key = wideTabKey(range)
@@ -143,13 +143,25 @@ extension EditorView {
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
             let worker = Task.detached(priority: .userInitiated) {
                 if let wrappingColumns {
+                    let narrow = try PlainNarrowUnicodeLine(
+                        text: snapshot.text,
+                        range: key.range,
+                        deadline: deadline
+                    )
                     let index = try ASCIIWordWrapIndex(
                         text: snapshot.text,
                         range: key.range,
                         columns: wrappingColumns,
+                        narrow: narrow,
                         deadline: deadline
                     )
-                    return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil, wordWrap: index)
+                    return EditorWideTabLayout.Entry(
+                        columns: nil,
+                        han: nil,
+                        status: nil,
+                        wordWrap: index,
+                        narrow: index == nil ? nil : narrow
+                    )
                 }
                 if let columns = try ASCIITabColumns(
                     text: snapshot.text,

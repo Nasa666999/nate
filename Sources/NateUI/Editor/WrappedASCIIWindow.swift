@@ -12,6 +12,7 @@ struct WrappedASCIIGeometry {
 final class WrappedASCIIWindow: LongLineProjection {
     private let snapshot: DocumentSnapshot
     private let range: ByteRange
+    private let lineOriginUTF16: Int
     private let font: NSFont
     private let appearance: NSAppearance
     private let containerWidth: CGFloat
@@ -36,7 +37,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         native.range
     }
     var characterCount: Int {
-        range.count
+        wordIndex?.characterCount ?? range.count
     }
     var width: CGFloat {
         CGFloat(max(metrics.columns, wordIndex?.maximumRowLength ?? 0)) * advance
@@ -82,7 +83,7 @@ final class WrappedASCIIWindow: LongLineProjection {
             snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
             containerWidth.isFinite, containerWidth > 0,
             let advance = NativeMonospaceGeometry.uniformAdvance(actual, appearance: appearance),
-            containerWidth / advance <= 8192
+            containerWidth / advance <= 8192, let lineOrigin = snapshot.text.utf16Offset(byte: range.lower)
         else {
             return nil
         }
@@ -90,6 +91,16 @@ final class WrappedASCIIWindow: LongLineProjection {
         let expected: WrappedASCIIGeometry?
         let indexedRows: [ByteRange]?
         if let wordIndex {
+            if !wordIndex.narrowScalars.isEmpty,
+                !NativeNarrowUnicodeFont.proves(
+                    wordIndex.narrowScalars,
+                    font: actual,
+                    advance: advance,
+                    appearance: appearance
+                )
+            {
+                return nil
+            }
             guard
                 let grid = Self.referenceGeometry(
                     font: actual,
@@ -135,6 +146,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         }
         self.snapshot = snapshot
         self.range = range
+        lineOriginUTF16 = lineOrigin
         self.font = font
         self.appearance = appearance
         self.containerWidth = containerWidth
@@ -206,7 +218,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         if point.y >= height {
             return characterCount
         }
-        return renderedRange.lower - range.lower
+        return native.originUTF16 - lineOriginUTF16
             + native.character(at: NSPoint(x: point.x, y: point.y - offsetY))
     }
 
@@ -217,7 +229,9 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// 返回：经原生确认的光标坐标；窗口无法验证时返回空矩形。
     func caret(at local: Int, downstream: Bool) -> NSRect {
         let position = min(characterCount, max(0, local))
-        let byte = range.lower + position
+        guard let byte = byte(at: position) else {
+            return .zero
+        }
         if byte <= renderedRange.lower || byte >= renderedRange.upper || unavailableReason != nil {
             let row: Int
             let prev: Int
@@ -241,7 +255,7 @@ final class WrappedASCIIWindow: LongLineProjection {
             return .zero
         }
         return native.caret(
-            at: byte - renderedRange.lower,
+            at: position - (native.originUTF16 - lineOriginUTF16),
             downstream: downstream && position < characterCount
         ).offsetBy(dx: 0, dy: offsetY)
     }
@@ -253,7 +267,10 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// 返回：对应视觉行，与本窗口已经排版的原字节位置一致。
     func visualRow(containing offset: Int, downstream: Bool) -> Int? {
         if let wordIndex {
-            return wordIndex.row(at: range.lower + offset, downstream: downstream)
+            guard let byte = byte(at: offset) else {
+                return nil
+            }
+            return wordIndex.row(at: byte, downstream: downstream)
         }
         let position = downstream ? offset : max(0, offset - 1)
         return min(rowCount - 1, position / metrics.columns)
@@ -270,7 +287,7 @@ final class WrappedASCIIWindow: LongLineProjection {
             return nil
         }
         return LineVisualCaret(
-            offset: renderedRange.lower - range.lower + local.offset,
+            offset: native.originUTF16 - lineOriginUTF16 + local.offset,
             atLeadingEdge: local.atLeadingEdge
         )
     }
@@ -330,6 +347,20 @@ final class WrappedASCIIWindow: LongLineProjection {
         }
         let number = floor((y - metrics.firstBottom) / metrics.pitch) + 1
         return Int(min(CGFloat(rowCount - 1), max(0, number)))
+    }
+
+    /// 业务作用：用原正文换算长视觉行的实际插入字节，不把一个窄字母拆成两个光标位置。
+    /// 参数说明:
+    /// - character: 当前逻辑行内的 UTF-16 相对位置。
+    /// 返回：同一完整逻辑行的绝对原字节端点，无效位置为空。
+    private func byte(at character: Int) -> Int? {
+        guard (0...characterCount).contains(character) else {
+            return nil
+        }
+        if wordIndex?.narrowScalars.isEmpty == false {
+            return snapshot.text.byteOffset(utf16: lineOriginUTF16 + character)
+        }
+        return range.lower + character
     }
 
     /// 业务作用：从真实视觉行开始重新交付原生段落，复验字形后才撤换旧片段。

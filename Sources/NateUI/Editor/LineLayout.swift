@@ -353,8 +353,21 @@ final class LineLayout {
         }
         for (index, row) in nativeLines.enumerated() {
             let indexed = indexedRows?[index]
-            let lower = indexed.map { $0.lower - range.lower } ?? index * columns
-            let count = indexed?.count ?? min(columns, characterCount - lower)
+            let lower: Int
+            let count: Int
+            if let indexed {
+                guard let start = content.snapshot.text.utf16Offset(byte: indexed.lower),
+                    let end = content.snapshot.text.utf16Offset(byte: indexed.upper)
+                else {
+                    return nil
+                }
+                lower = start - originUTF16
+                count = end - start
+            }
+            else {
+                lower = index * columns
+                count = min(columns, characterCount - lower)
+            }
             let originY = CGFloat(index) * pitch
             guard row.lower == lower, row.upper == lower + count,
                 abs(row.bounds.minY - (top + originY)) < 0.04,

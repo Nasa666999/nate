@@ -5,6 +5,8 @@ public struct ASCIIWordWrapIndex: Sendable {
     public let columns: Int
     public let rowCount: Int
     public let maximumRowLength: Int
+    public let characterCount: Int
+    public let narrowScalars: [UInt16]
 
     private struct Anchor: Sendable {
         let row: Int
@@ -29,12 +31,39 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - deadline: 完整行的共同准备截止。
     /// 返回：完整的稀疏视觉行索引；非 ASCII 字母、数字或空格返回空，超限或取消拒绝全部证据。
     public init?(text: PieceTree, range: ByteRange, columns: Int, deadline: ContinuousClock.Instant) throws {
+        try self.init(text: text, range: range, columns: columns, narrow: nil, deadline: deadline)
+    }
+
+    /// 业务作用：支持已确认独立窄字母的软换行，原字节、字符与视觉行的计数相互独立。
+    /// 参数说明:
+    /// - text: 当前提交的不可变正文。
+    /// - range: 排除原始物理结束符后的完整逻辑行。
+    /// - columns: 当前真实视口和实际字体确认的视觉列。
+    /// - narrow: 此原文已通过的多字节窄字母证据；纯 ASCII 请求为空。
+    /// - deadline: 完整原文及窗口准备共用的截止。
+    /// 返回：全部原字节断点及稀疏锚点，字符、原文或容量无法确认时不发布。
+    public init?(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        narrow: PlainNarrowUnicodeLine?,
+        deadline: ContinuousClock.Instant
+    ) throws {
         guard range.lower >= 0, range.upper > range.lower, range.upper <= text.byteCount,
-            range.count <= 1_073_741_824, (1...8192).contains(columns), text.isPrintableASCII(in: range)
+            range.count <= 1_073_741_824, (1...8192).contains(columns)
         else {
             return nil
         }
-        var cursor = Cursor(text: text, range: range)
+        if let narrow {
+            guard narrow.range == range, narrow.matches(text) else {
+                return nil
+            }
+        }
+        else if !text.isPrintableASCII(in: range) {
+            return nil
+        }
+        let supportsNarrow = narrow != nil
+        var cursor = Cursor(text: text, range: range, supportsNarrow: supportsNarrow)
         var anchors = [Anchor(row: 0, byte: range.lower)]
         var row = 0
         var start = range.lower
@@ -51,9 +80,9 @@ public struct ASCIIWordWrapIndex: Sendable {
                 if start - anchors[anchors.count - 1].byte >= Self.anchorDistance {
                     anchors.append(Anchor(row: row, byte: start))
                 }
-                let end = try cursor.nextRow(after: start, columns: columns)
-                widest = max(widest, end - start)
-                start = end
+                let next = try cursor.nextRow(after: start, columns: columns)
+                widest = max(widest, next.cells)
+                start = next.end
                 row += 1
             } while start < range.upper
         }
@@ -73,6 +102,8 @@ public struct ASCIIWordWrapIndex: Sendable {
         self.anchors = anchors
         rowCount = row
         maximumRowLength = widest
+        characterCount = narrow?.characterCount ?? range.count
+        narrowScalars = narrow?.scalars ?? []
     }
 
     /// 业务作用：不同修订、排版宽度或正文根不能使用另一份视觉行范围。
@@ -90,19 +121,19 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - downstream: 是否采用断点之后的视觉行，文件行尾始终属于最后一个视觉行。
     /// 返回：实际视觉行号；原字节越界或证据不足时为空。
     public func row(at byte: Int, downstream: Bool) -> Int? {
-        guard range.lower <= byte, byte <= range.upper else {
+        guard range.lower <= byte, byte <= range.upper, narrowScalars.isEmpty || text.isBoundary(byte) else {
             return nil
         }
         let target = max(range.lower, min(range.upper - 1, downstream ? byte : byte - 1))
         let anchor = anchor(at: target, by: \.byte)
         var row = anchor.row
         var start = anchor.byte
-        var cursor = Cursor(text: text, range: range)
-        while let end = try? cursor.nextRow(after: start, columns: columns) {
-            if target < end {
+        var cursor = Cursor(text: text, range: range, supportsNarrow: !narrowScalars.isEmpty)
+        while let next = try? cursor.nextRow(after: start, columns: columns) {
+            if target < next.end {
                 return row
             }
-            start = end
+            start = next.end
             row += 1
         }
         return nil
@@ -118,18 +149,18 @@ public struct ASCIIWordWrapIndex: Sendable {
             return nil
         }
         let anchor = anchor(at: row, by: \.row)
-        var cursor = Cursor(text: text, range: range)
+        var cursor = Cursor(text: text, range: range, supportsNarrow: !narrowScalars.isEmpty)
         var start = anchor.byte
         var output: [ByteRange] = []
         output.reserveCapacity(count)
         for current in anchor.row..<(row + count) {
-            guard let end = try? cursor.nextRow(after: start, columns: columns) else {
+            guard let next = try? cursor.nextRow(after: start, columns: columns) else {
                 return nil
             }
             if current >= row {
-                output.append(ByteRange(start, end))
+                output.append(ByteRange(start, next.end))
             }
-            start = end
+            start = next.end
         }
         return output
     }
@@ -159,6 +190,7 @@ extension ASCIIWordWrapIndex {
     private struct Cursor {
         let text: PieceTree
         let range: ByteRange
+        let supportsNarrow: Bool
         private var pageStart = 0
         private var page: [UInt8] = []
 
@@ -166,10 +198,12 @@ extension ASCIIWordWrapIndex {
         /// 参数说明:
         /// - text: 当前固定正文。
         /// - range: 原逻辑行的合法原字节范围。
+        /// - supportsNarrow: 当前范围已通过多字节独立窄字母确认时为真。
         /// 返回：独立的有界读缓存。
-        init(text: PieceTree, range: ByteRange) {
+        init(text: PieceTree, range: ByteRange, supportsNarrow: Bool) {
             self.text = text
             self.range = range
+            self.supportsNarrow = supportsNarrow
         }
 
         /// 业务作用：按实际等宽软换行规则分隔独立单词和尾随空格，过长单词按原字节边界分段。
@@ -177,49 +211,59 @@ extension ASCIIWordWrapIndex {
         /// - start: 前一实际视觉行已确认的结束端点。
         /// - columns: 当前字体和容器的固定列数。
         /// 返回：下一处原始视觉行端点，缺少字符资格或单行预算时终止。
-        mutating func nextRow(after start: Int, columns: Int) throws -> Int {
+        mutating func nextRow(after start: Int, columns: Int) throws -> (end: Int, cells: Int) {
             guard start < range.upper else {
                 throw Refusal.row
             }
-            let limit = min(range.upper, start + columns)
-            var lastSpace: Int?
-            for position in start..<limit {
-                if try byte(at: position) == 32 {
-                    lastSpace = position + 1
+            var position = start
+            var cells = 0
+            var lastSpace: (end: Int, cells: Int)?
+            while position < range.upper, cells < columns {
+                let scalar = byte(at: position)
+                cells += 1
+                if scalar == 32 {
+                    position += 1
+                    lastSpace = (position, cells)
+                }
+                else if PieceNode.isASCIIAlphanumeric(scalar) {
+                    position += 1
+                }
+                else if supportsNarrow, (194...223).contains(scalar) {
+                    // 两字节独立窄字母已由同一原文的标量证据确认，不能在 UTF-8 内切开视觉行。
+                    position += 2
+                }
+                else {
+                    throw Refusal.character
                 }
             }
-            guard limit < range.upper else {
-                return limit
+            guard position < range.upper else {
+                return (position, cells)
             }
-            guard try byte(at: limit) == 32 else {
-                return lastSpace ?? limit
+            guard byte(at: position) == 32 else {
+                return lastSpace ?? (position, cells)
             }
             // 原生段落将断点后的连续空格视为前一视觉行的尾部，不能把这些原字节移到下一行。
-            var end = limit + 1
-            while end < range.upper, try byte(at: end) == 32 {
-                guard end - start < ASCIIWordWrapIndex.maximumRowBytes else {
+            repeat {
+                guard position - start < ASCIIWordWrapIndex.maximumRowBytes else {
                     throw Refusal.row
                 }
-                end += 1
-            }
-            return end
+                position += 1
+                cells += 1
+            } while position < range.upper && byte(at: position) == 32
+            return (position, cells)
         }
 
-        /// 业务作用：只允许对已验证的 ASCII 字母、数字和独立空格计算词间断点。
+        /// 业务作用：读取同源的原字节，独立窄字母可能跨越局部读取缓存。
         /// 参数说明:
         /// - offset: 当前逻辑行内的真实原字节偏移。
-        /// 返回：合法原字节；标点、Tab 或其它类别必须由通用布局处理。
-        private mutating func byte(at offset: Int) throws -> UInt8 {
+        /// 返回：同一固定正文在指定有效位置的原字节。
+        private mutating func byte(at offset: Int) -> UInt8 {
             if offset < pageStart || offset - pageStart >= page.count {
                 pageStart = offset - (offset - range.lower) % 8192
                 let end = min(range.upper, pageStart + 8192)
                 page = text.bytes(in: ByteRange(pageStart, end))
             }
-            let byte = page[offset - pageStart]
-            guard byte == 32 || PieceNode.isASCIIAlphanumeric(byte) else {
-                throw Refusal.character
-            }
-            return byte
+            return page[offset - pageStart]
         }
     }
 }
