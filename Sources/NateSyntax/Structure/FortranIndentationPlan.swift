@@ -35,27 +35,33 @@ enum FortranIndentationPlan {
 
         /// 业务作用：合并已由原生词法确认的物理续行，保留同一原语句的开放或关闭资格。
         /// 参数说明:
-        /// - row: 当前已经解析的完整物理行。
-        /// - bytes: 实际物理行的原字节数，包含结束符。
+        /// - content: 当前物理行属于同一条逻辑语句的原词元。
+        /// - bytes: 当前片段的原字节数，含所属物理结束符或语句分隔符。
+        /// - leading: 当前片段之前真实存在的自由格式续行标记。
+        /// - pending: 当前片段之后真实存在的自由格式续行标记。
         /// 返回：安全的完整原词元顺序；跨行拆开的名称标为未确认，超限拒绝整批。
-        mutating func append(_ row: FortranIndentationLine, bytes: Int) throws {
-            let start = row.beginsContinuation ? 1 : 0
-            let end = max(start, row.atoms.count - (row.endsContinuation ? 1 : 0))
-            let content = row.atoms[start..<end]
+        mutating func append(
+            _ content: ArraySlice<FortranIndentationLine.Atom>,
+            bytes: Int,
+            leading: FortranIndentationLine.Atom?,
+            pending: FortranIndentationLine.Atom?
+        ) throws {
             guard bytes <= 1_048_576 - sourceBytes, content.count <= 65_536 - atoms.count else {
                 throw NateError.message("Fortran 续接语句超过 1 MiB 或 65536 个词元。")
             }
             sourceBytes += bytes
-            unresolved = unresolved || row.beginsContinuation && row.endsContinuation && row.atoms.count == 1
+            if let leading, let pending, leading.range == pending.range {
+                unresolved = true
+            }
             // 无间隔写在两个物理续行符旁的名称可能是同一个词，部分结果不能冒充语义关键字。
-            if let trailing, let previous = atoms.last, let first = content.first, row.beginsContinuation,
-                previous.range.upper == trailing.range.lower, first.range.lower == row.atoms[0].range.upper,
+            if let trailing, let previous = atoms.last, let first = content.first, let leading,
+                previous.range.upper == trailing.range.lower, first.range.lower == leading.range.upper,
                 Self.wordPart(previous), Self.wordPart(first)
             {
                 unresolved = true
             }
-            if !content.isEmpty || row.endsContinuation {
-                trailing = row.endsContinuation ? row.atoms.last : nil
+            if !content.isEmpty || pending != nil {
+                trailing = pending
             }
             atoms.append(contentsOf: content)
         }
@@ -197,10 +203,9 @@ enum FortranIndentationPlan {
                     continue
                 }
             }
-            let ambiguousSeparator =
-                row.crossesStatements
-                && (fixedFormat || continuation != nil || row.endsContinuation)
-            if ambiguousSeparator || row.directive || (row.beginsContinuation && continuation == nil) {
+            if (fixedFormat && row.crossesStatements) || row.directive
+                || (row.beginsContinuation && continuation == nil)
+            {
                 // 预处理或来源不确定的续接可能改变原语句关系，不能沿用旧块作为缩进来源。
                 scopes.removeAll()
                 continuation = nil
@@ -210,63 +215,69 @@ enum FortranIndentationPlan {
                 }
                 continue
             }
-            let origin = continuation?.prefix ?? row.prefix
-            let earlier = continuation?.atoms.count ?? 0
-            let wasContinued = continuation != nil
-            var logical = continuation ?? Continuation(prefix: row.prefix)
-            continuation = nil
-            if wasContinued || row.endsContinuation {
-                try logical.append(row, bytes: physical.count)
-                if row.endsContinuation || row.atoms.isEmpty {
-                    continuation = logical
-                    // 未完成声明只继承当前物理行。独立注释和空白保持等待中的完整语句来源。
-                    for target in targets {
-                        try check()
-                        result[target] = .inherit
-                    }
-                    continue
-                }
-                if logical.unresolved {
-                    // 不完整的词不能从上下文推断其类型，防止它改变后续关闭的原前缀权威。
-                    scopes.removeAll()
-                    for target in targets {
-                        try check()
-                        result[target] = .inherit
-                    }
-                    continue
-                }
-            }
-            else {
-                logical.atoms = row.atoms
-            }
             let ordered = targets.sorted { $0.lower < $1.lower }
             var targetIndex = 0
-            var start = 0
+            var start = row.beginsContinuation ? 1 : 0
+            let end = max(start, row.atoms.count - (row.endsContinuation ? 1 : 0))
+            var startByte = physical.lower
             var boundaries: [Int] = []
             if row.crossesStatements {
-                for index in logical.atoms.indices where logical.atoms[index].value == ";" {
+                for index in start..<end {
                     try check()
-                    boundaries.append(index)
+                    if row.atoms[index].value == ";" {
+                        boundaries.append(index)
+                    }
                 }
             }
-            boundaries.append(logical.atoms.count)
+            boundaries.append(end)
             var prior: (event: FortranIndentationLine.Event, origin: ByteRange, scope: Frame?)?
             for boundary in boundaries {
                 try check()
-                let supplied = boundary < logical.atoms.count
-                let limit = supplied ? logical.atoms[boundary].range.lower : content.upper
-                let statementOrigin = start == 0 ? origin : row.prefix
-                while targetIndex < ordered.count, min(ordered[targetIndex].lower, content.upper) <= limit {
+                let separator = boundary < end ? row.atoms[boundary] : nil
+                let limit = separator?.range.lower ?? content.upper
+                let nextByte = separator?.range.upper ?? physical.upper
+                let incoming = continuation != nil
+                let earlier = continuation?.atoms.count ?? 0
+                let statementOrigin = continuation?.prefix ?? row.prefix
+                let local = row.atoms[start..<boundary]
+                let leading = startByte == physical.lower && row.beginsContinuation ? row.atoms.first : nil
+                let pending = separator == nil && row.endsContinuation ? row.atoms.last : nil
+                let waitsForMore = pending != nil || incoming && row.atoms.isEmpty
+                if incoming || pending != nil {
+                    if continuation == nil {
+                        continuation = Continuation(prefix: statementOrigin)
+                    }
+                    try continuation?.append(
+                        local,
+                        bytes: nextByte - startByte,
+                        leading: leading,
+                        pending: pending
+                    )
+                }
+                // 只有分隔符之前的完整语句可以改变后继结构；拆开的词使本语句的原前缀证据失效。
+                let uncertain = continuation?.unresolved == true
+                if uncertain {
+                    scopes.removeAll()
+                }
+                let complete =
+                    continuation.map {
+                        $0.atoms[...]
+                    } ?? local
+                while targetIndex < ordered.count,
+                    min(ordered[targetIndex].lower, content.upper) <= limit
+                {
                     try check()
                     let target = ordered[targetIndex]
                     targetIndex += 1
-                    guard let before = row.prefixAtoms(at: min(target.lower, content.upper)) else {
+                    let position = min(target.lower, content.upper)
+                    guard !waitsForMore, !uncertain, leading.map({ $0.range.upper <= position }) != false,
+                        let before = row.prefixAtoms(at: position)
+                    else {
                         result[target] = .inherit
                         continue
                     }
-                    let leading = row.beginsContinuation ? 1 : 0
-                    let count = earlier + max(0, before.count - leading)
-                    let statement = logical.atoms[start..<max(start, min(count, boundary))]
+                    let count = earlier + max(0, min(before.count, boundary) - start)
+                    let statement = complete.prefix(count)
                     let event = try FortranIndentationLine.classify(statement, check: check)
                     if let found = try indentation(after: event, origin: statementOrigin, scope: scopes.last)
                     {
@@ -288,7 +299,7 @@ enum FortranIndentationPlan {
                             continue
                         }
                     }
-                    if start == boundary, let prior {
+                    if complete.isEmpty, let prior {
                         result[target] =
                             try indentation(after: prior.event, origin: prior.origin, scope: prior.scope)
                             ?? .inherit
@@ -297,9 +308,19 @@ enum FortranIndentationPlan {
                         result[target] = .inherit
                     }
                 }
-                let complete = logical.atoms[start..<boundary]
+                if waitsForMore {
+                    // 注释和空白保留待续语句；最后一段未结束时，前面的独立语句已按真实顺序处理。
+                    break
+                }
+                continuation = nil
+                start = boundary + 1
+                startByte = nextByte
+                if uncertain {
+                    prior = nil
+                    continue
+                }
                 let event = try FortranIndentationLine.classify(complete, check: check)
-                if supplied, !complete.isEmpty {
+                if separator != nil, !complete.isEmpty {
                     prior = (event, statementOrigin, scopes.last)
                 }
                 // 本语句全部目标先取得先前的块证据，再把当前完整语句的开闭关系推进给后继语句。
@@ -320,7 +341,6 @@ enum FortranIndentationPlan {
                 case .branch, .neutral:
                     break
                 }
-                start = boundary + 1
             }
         }
         try check()
