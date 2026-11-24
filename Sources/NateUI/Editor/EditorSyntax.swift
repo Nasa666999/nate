@@ -62,7 +62,7 @@ extension EditorView {
                 ![
                     "python", "registry", "latex", "rust", "yaml", "powershell", "objc", "r", "lua", "mssql",
                     "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm", "fortran",
-                    "fortran77", "ada", "asn1", "autoit",
+                    "fortran77", "ada", "asn1", "autoit", "bash",
                 ]
                 .contains(
                     language.id

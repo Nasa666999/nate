@@ -9,6 +9,21 @@ extension SyntaxScanner {
     /// - state: 本次调用流程独立持有的完整连续状态。
     /// 返回：适用词法器的完整结果，拒绝时返回空数组及诊断；其它语言返回空值交由通用入口处理。
     func nativeHighlight(_ text: String, base: Int, state: inout SyntaxState) -> [SyntaxToken]? {
+        // Bash 的引用和 here-document 属于固定规则及原正文，语言切换须重新建立来源资格。
+        guard state.bash.identity == nil || language.id == "bash" else {
+            state.diagnostic = "词法语言已改变，不能继续 Bash 的原状态。"
+            return []
+        }
+        if language.id == "bash" {
+            return BashLexing.highlight(
+                text,
+                base: base,
+                snapshot: snapshot,
+                rules: bashRules,
+                deadline: deadline,
+                state: &state
+            )
+        }
         // AutoIt 的块注释、include 与续行字面只属于同一完整规则，语言切换必须重建原文资格。
         guard state.autoit.resource == nil || language.id == "autoit" else {
             state.diagnostic = "词法语言已改变，不能继续 AutoIt 的原状态。"

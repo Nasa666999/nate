@@ -322,7 +322,7 @@ struct BashIndentationLexer {
     /// 参数说明:
     /// - source: 原重定向之后一个完整词的字节。
     /// 返回：允许精确比对的分隔符；超量或特殊引用语义返回空，后继行保持字面。
-    private static func delimiter(_ source: ArraySlice<UInt8>) -> [UInt8]? {
+    static func delimiter(_ source: ArraySlice<UInt8>) -> [UInt8]? {
         guard source.count <= 4096 else {
             return nil
         }

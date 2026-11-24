@@ -6500,6 +6500,78 @@
     "lineComment": "#",
     "blockStart": "",
     "blockEnd": "",
+    "lexicalStyles": {
+      "0": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "1": {
+        "foreground": "#000000",
+        "background": "#FFA448",
+        "fontStyle": 0
+      },
+      "2": {
+        "foreground": "#008000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "3": {
+        "foreground": "#FF0000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "4": {
+        "foreground": "#0000FF",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "5": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "6": {
+        "foreground": "#808080",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "7": {
+        "foreground": "#804000",
+        "background": "#FFFFFF",
+        "fontStyle": 1
+      },
+      "8": {
+        "foreground": "#000000",
+        "background": "#FFFFFF",
+        "fontStyle": 0
+      },
+      "9": {
+        "foreground": "#FF8040",
+        "background": "#FFFFD9",
+        "fontStyle": 1
+      },
+      "10": {
+        "foreground": "#008080",
+        "background": "#00FFFF",
+        "fontStyle": 0
+      },
+      "11": {
+        "foreground": "#804040",
+        "background": "#E1FFF3",
+        "fontStyle": 1
+      },
+      "12": {
+        "foreground": "#000000",
+        "background": "#FFA448",
+        "fontStyle": 1
+      },
+      "13": {
+        "foreground": "#FF0000",
+        "background": "#FFFF80",
+        "fontStyle": 0
+      }
+    },
     "keywords": [
       "7z",
       "adduser",
