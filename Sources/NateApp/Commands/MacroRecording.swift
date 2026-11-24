@@ -116,7 +116,7 @@ extension ApplicationController {
     /// 返回：只登记可见命令，不执行、暂停或重放任何正文动作。
     func noteUnrecordedMacroCommand(_ id: String) {
         guard macroRecording, !macroPlaying, !id.hasPrefix("edit:"), !id.hasPrefix("sort:"),
-            BookmarkAction(rawValue: id)?.macroTitle == nil
+            BookmarkAction(rawValue: id)?.macroTitle == nil, NateCore.BracketNavigation(rawValue: id) == nil
         else {
             return
         }

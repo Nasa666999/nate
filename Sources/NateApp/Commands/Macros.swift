@@ -43,6 +43,32 @@ extension ApplicationController {
         appendRecordedMacroAction(.command(action.rawValue))
     }
 
+    /// 业务作用：真实括号菜单沿当前正文视图执行，实际导航或选择发布后才录制语义。
+    /// 参数说明:
+    /// - action: 当前菜单选择的括号导航范围。
+    /// 返回：直接或异步更新原视图；取消、失权或旧录制不追加动作。
+    func navigateEditorBrackets(_ action: NateCore.BracketNavigation) {
+        guard let editor = mainWindow?.editor else {
+            return
+        }
+        guard macroRecording, !macroPlaying else {
+            editor.navigateBracket(action)
+            return
+        }
+        let generation = macroRecordingGeneration
+        editor.navigateBracket(
+            action,
+            onSuccess: { [weak self, weak editor] in
+                guard let self, let editor, self.macroRecording, !self.macroPlaying,
+                    self.macroRecordingGeneration == generation, self.quickFindContext()?.2 === editor
+                else {
+                    return
+                }
+                self.appendRecordedMacroAction(.command(action.rawValue))
+            }
+        )
+    }
+
     /// 业务作用：方向、选择和删除按成功的语义记录，不把光标绝对位置或删除结果当作输入文字。
     /// 参数说明:
     /// - command: 实际正文视图完整执行成功的编辑意图。
@@ -189,6 +215,11 @@ extension ApplicationController {
                     }
                     else if let bookmark = BookmarkAction(rawValue: name), bookmark.macroTitle != nil {
                         guard await playBookmarkAction(bookmark) else {
+                            return
+                        }
+                    }
+                    else if let navigation = NateCore.BracketNavigation(rawValue: name) {
+                        guard await editor.performBracketNavigation(navigation) else {
                             return
                         }
                     }

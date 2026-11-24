@@ -120,6 +120,10 @@ extension ApplicationController {
             mainWindow?.editor.performFold(action)
             return
         }
+        if let navigation = NateCore.BracketNavigation(rawValue: id) {
+            navigateEditorBrackets(navigation)
+            return
+        }
         switch id {
         case "documentList":
             mainWindow?.showDocumentList(target: self, action: #selector(menuAction(_:)))
@@ -128,9 +132,6 @@ extension ApplicationController {
         case "cancelQuickFind":
             cancelQuickFind()
             mainWindow?.status.stringValue = "快捷查找已取消。"
-        case "matchingBracket": mainWindow?.editor.navigateBracket(.jump)
-        case "selectBracketPair": mainWindow?.editor.navigateBracket(.selectPair)
-        case "selectInsideBracket": mainWindow?.editor.navigateBracket(.selectInside)
         case "newWindow": openWorkspaceWindow()
         case "cloneToWindow": openActiveDocumentWindow()
         case "moveTabToWindow":

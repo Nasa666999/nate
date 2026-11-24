@@ -26,6 +26,9 @@ public enum MacroActionPresentation {
             if let title = BookmarkAction(rawValue: name)?.macroTitle {
                 return title
             }
+            if let navigation = BracketNavigation(rawValue: name) {
+                return navigation.title
+            }
             return "文本命令：" + (commandNames[name] ?? name)
         case .lineSort(let options):
             let direction =
@@ -71,6 +74,9 @@ public enum MacroActionPresentation {
         case .command(let name):
             if let title = BookmarkAction(rawValue: name)?.macroTitle {
                 return title + "\n使用播放时的当前文档、书签集合及主光标。"
+            }
+            if let navigation = BracketNavigation(rawValue: name) {
+                return navigation.title + "\n使用播放时的正文、语言和主光标。"
             }
             return "文本命令：" + (commandNames[name] ?? name) + "\n标识：" + name
         case .lineSort(let options):

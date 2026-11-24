@@ -1,12 +1,9 @@
 import AppKit
 import NateCore
 import NateSyntax
+import os
 
-public enum BracketNavigation: Sendable {
-    case jump
-    case selectPair
-    case selectInside
-}
+public typealias BracketNavigation = NateCore.BracketNavigation
 
 struct BracketContext: Equatable {
     let documentID: UUID
@@ -15,11 +12,16 @@ struct BracketContext: Equatable {
 }
 
 struct BracketNavigationRequest {
+    let id: UUID
     let context: BracketContext
     let selections: [TextSelection]
+    let selectionGeneration: UUID
+    let focusGeneration: UUID
     let action: BracketNavigation
     let wasKeyWindow: Bool
     let wasApplicationActive: Bool
+    let cancellation: OSAllocatedUnfairLock<Bool>?
+    let onSuccess: (@MainActor () -> Void)?
 }
 
 @MainActor
@@ -289,33 +291,108 @@ extension EditorView {
     /// - action: 跳转、包含两端的选择或仅内部文本选择。
     /// 返回：完整索引有效时更新主选区；等待、无匹配或上下文变化时保留现有正文和选区。
     public func navigateBracket(_ action: BracketNavigation) {
+        _ = requestBracketNavigation(action, onSuccess: nil)
+    }
+
+    /// 业务作用：提供同一导航菜单的实际完成通知，让录制能区分等待和已发布动作。
+    /// 参数说明:
+    /// - action: 当前明确选择的导航范围。
+    /// - onSuccess: 原视图的完整选区实际发布后调用一次。
+    /// 返回：保持普通导航行为；失败或取消时没有成功回调。
+    public func navigateBracket(_ action: BracketNavigation, onSuccess: @escaping @MainActor () -> Void) {
+        _ = requestBracketNavigation(action, onSuccess: onSuccess)
+    }
+
+    /// 业务作用：宏按同一括号请求的实际结果继续，尚未完成的结构计算不能冒充导航成功。
+    /// 参数说明:
+    /// - action: 当前宏明确要求的括号动作。
+    /// 返回：原选择实际更新且当前任务有效时为真，失权、取消或没有匹配时为假。
+    public func performBracketNavigation(_ action: BracketNavigation) async -> Bool {
+        let id = UUID()
+        let cancellation = OSAllocatedUnfairLock(initialState: false)
+        let revoke: @MainActor @Sendable () -> Void = { [weak self] in
+            // 只撤销本次宏持有的意图，新菜单或新光标的请求仍保留自己的分析资格。
+            guard let self, self.brackets.pending?.id == id else {
+                return
+            }
+            self.brackets.pending = nil
+            self.brackets.task?.cancel()
+        }
+        return await withTaskCancellationHandler(
+            operation: {
+                var applied = false
+                guard !Task.isCancelled,
+                    requestBracketNavigation(
+                        action,
+                        id: id,
+                        cancellation: cancellation,
+                        onSuccess: { applied = true }
+                    )
+                else {
+                    return false
+                }
+                while !applied, brackets.pending?.id == id, let task = brackets.task, !Task.isCancelled {
+                    await task.value
+                }
+                return applied && !Task.isCancelled
+            },
+            onCancel: {
+                // 先立即收回发布资格，后台结果不能赶在主线程的清理任务之前更新选区。
+                cancellation.withLock {
+                    $0 = true
+                }
+                Task { @MainActor in
+                    revoke()
+                }
+            }
+        )
+    }
+
+    /// 业务作用：同步菜单和异步宏共享同一导航凭据及完成发布入口。
+    /// 参数说明:
+    /// - action: 用户或宏明确指定的导航语义。
+    /// - id: 待执行请求的独立身份，异步宏用它撤销自己的请求。
+    /// - cancellation: 宏取消时同步撤销发布权限的共享状态。
+    /// - onSuccess: 原请求实际写入选择后的动作。
+    /// 返回：已接受请求时为真；没有导航资格时为假。
+    private func requestBracketNavigation(
+        _ action: BracketNavigation,
+        id: UUID = UUID(),
+        cancellation: OSAllocatedUnfairLock<Bool>? = nil,
+        onSuccess: (@MainActor () -> Void)?
+    ) -> Bool {
         // 关闭、退出或监视准备已经冻结最终视图时，不再新增可能迟到的导航选择。
         guard !document.isEditingSuspended else {
-            return
+            return false
         }
         // 候选尚未安全进入正文时，后续动作会丢失输入或沿旧坐标操作，确认失败必须原地停止。
         guard finishComposition() else {
-            return
+            return false
         }
         synchronizeBracketContext()
         folds.pending = nil
         guard bracketNavigationAvailable(action) else {
             onStatus?("当前位置没有可用于该动作的完整括号。")
-            return
+            return false
         }
         guard let context = brackets.context, !viewSelections.isEmpty else {
-            return
+            return false
         }
         let request = BracketNavigationRequest(
+            id: id,
             context: context,
             selections: viewSelections,
+            selectionGeneration: selectionGeneration,
+            focusGeneration: focusGeneration,
             action: action,
             wasKeyWindow: window?.isKeyWindow == true,
-            wasApplicationActive: NSApp?.isActive == true
+            wasApplicationActive: NSApp?.isActive == true,
+            cancellation: cancellation,
+            onSuccess: onSuccess
         )
         if let index = brackets.index {
             applyBracketNavigation(request, index: index)
-            return
+            return true
         }
         brackets.pending = request
         if brackets.task == nil {
@@ -323,6 +400,7 @@ extension EditorView {
         }
         prepareBracketAnalysis()
         onStatus?("正在识别当前括号，正文与选区保持可用。")
+        return true
     }
 
     /// 业务作用：只有用户发起动作时的同一光标仍有效，异步配对才可发布导航选择。
@@ -337,7 +415,9 @@ extension EditorView {
             (NSApp?.isActive == true) == request.wasApplicationActive,
             document.id == request.context.documentID, document.revision == request.context.revision,
             brackets.resource == request.context.resource, viewSelections == request.selections,
+            selectionGeneration == request.selectionGeneration, focusGeneration == request.focusGeneration,
             index.documentID == document.id, index.revision == document.revision,
+            request.cancellation?.withLock({ $0 }) != true,
             let caret = primarySelection?.head
         else {
             return
@@ -376,6 +456,7 @@ extension EditorView {
         needsDisplay = true
         revealSelection()
         onSelection?()
+        request.onSuccess?()
     }
 
     /// 业务作用：在原始正文坐标上标出当前括号及其配对，未匹配字符具有独立提示颜色。
