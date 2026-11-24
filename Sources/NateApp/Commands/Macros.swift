@@ -29,6 +29,20 @@ extension ApplicationController {
         appendRecordedMacroAction(.clipboardCopy(cutting: cutting, copyLineWithoutSelection: copyLine))
     }
 
+    /// 业务作用：成功书签动作记录相对播放位置的语义，后台动作不能跨到新录制。
+    /// 参数说明:
+    /// - action: 已完成的书签动作。
+    /// - generation: 动作开始时拥有的录制代次。
+    /// 返回：原录制仍有效且动作受支持时追加一次。
+    func recordBookmarkAction(_ action: BookmarkAction, generation: UUID?) {
+        guard macroRecording, !macroPlaying, let generation, generation == macroRecordingGeneration,
+            action.macroTitle != nil, quickFindContext() != nil
+        else {
+            return
+        }
+        appendRecordedMacroAction(.command(action.rawValue))
+    }
+
     /// 业务作用：方向、选择和删除按成功的语义记录，不把光标绝对位置或删除结果当作输入文字。
     /// 参数说明:
     /// - command: 实际正文视图完整执行成功的编辑意图。
@@ -70,7 +84,7 @@ extension ApplicationController {
     /// - repetitions: 用户指定次数。
     /// - selectedActions: 命名宏或文件预览明确选择的动作，省略时使用当前临时录制。
     /// - untilDocumentEnd: 每轮完整动作之间按主光标检查文末，不采用固定次数。
-    /// 返回：动作失败、取消或失权立即停止；正文、完整选择与空命中继续状态无净进展时停止，文末模式另有执行预算。
+    /// 返回：动作失败、取消或失权立即停止；正文、选择、书签及空命中状态无净进展时停止，文末模式另有预算。
     func playMacro(repetitions: Int, selectedActions: [MacroAction]? = nil, untilDocumentEnd: Bool = false)
         async
     {
@@ -116,6 +130,7 @@ extension ApplicationController {
             }
             let revision = active.buffer.revision
             let originalSelection = editor.viewSelectionState
+            let originalBookmarks = active.buffer.bookmarks
             let originalContinuation = searchContinuation
             if untilDocumentEnd, editor.primarySelection?.head == active.buffer.text.byteCount {
                 mainWindow?.status.stringValue = "宏已到达文档末尾。"
@@ -172,6 +187,11 @@ extension ApplicationController {
                             }
                         }
                     }
+                    else if let bookmark = BookmarkAction(rawValue: name), bookmark.macroTitle != nil {
+                        guard await playBookmarkAction(bookmark) else {
+                            return
+                        }
+                    }
                     else {
                         mainWindow?.status.stringValue = "宏已停止：无法识别的编辑动作“" + name + "”。"
                         return
@@ -197,14 +217,39 @@ extension ApplicationController {
                 await Task.yield()
             }
             if active.buffer.revision == revision && editor.viewSelectionState == originalSelection
+                && active.buffer.bookmarks == originalBookmarks
                 && searchContinuation == originalContinuation
             {
-                mainWindow?.status.stringValue = "宏已停止：完整一轮的正文、选择和空命中状态均没有净进展。"
+                mainWindow?.status.stringValue = "宏已停止：完整一轮的正文、选择、书签和空命中状态均没有净进展。"
                 return
             }
         }
         if untilDocumentEnd {
             mainWindow?.status.stringValue = "宏已停止：文末循环达到一百万轮预算，已完成步骤保留。"
+        }
+    }
+
+    /// 业务作用：回放使用当前文档书签和主光标，反转确认实际发布后才继续下一项。
+    /// 参数说明:
+    /// - action: 宏归档中已经明确支持的书签动作。
+    /// 返回：同步语义完成或后台发布成功时为真；取消、失权和失败时停止后续动作。
+    private func playBookmarkAction(_ action: BookmarkAction) async -> Bool {
+        switch bookmarkCommand(action.rawValue) {
+        case .unavailable:
+            return false
+        case .completed:
+            return true
+        case .pending(let task):
+            // 取消播放先回收反转的发布资格，已经结束的动作保留其真实结果。
+            let applied = await withTaskCancellationHandler(
+                operation: {
+                    await task.value
+                },
+                onCancel: {
+                    task.cancel()
+                }
+            )
+            return applied && !Task.isCancelled
         }
     }
 

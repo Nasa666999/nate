@@ -23,6 +23,9 @@ public enum MacroActionPresentation {
             let preview = String(String.UnicodeScalarView(text.unicodeScalars.prefix(60)))
             return "输入 " + visible(preview)
         case .command(let name):
+            if let title = BookmarkAction(rawValue: name)?.macroTitle {
+                return title
+            }
             return "文本命令：" + (commandNames[name] ?? name)
         case .lineSort(let options):
             let direction =
@@ -66,6 +69,9 @@ public enum MacroActionPresentation {
         case .input(let text):
             return "输入 · \(text.utf8.count) 字节\n\n" + visible(text)
         case .command(let name):
+            if let title = BookmarkAction(rawValue: name)?.macroTitle {
+                return title + "\n使用播放时的当前文档、书签集合及主光标。"
+            }
             return "文本命令：" + (commandNames[name] ?? name) + "\n标识：" + name
         case .lineSort(let options):
             let direction =

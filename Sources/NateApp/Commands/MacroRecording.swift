@@ -115,7 +115,9 @@ extension ApplicationController {
     /// - id: 当前统一菜单命令身份，内部状态通知没有对应菜单项。
     /// 返回：只登记可见命令，不执行、暂停或重放任何正文动作。
     func noteUnrecordedMacroCommand(_ id: String) {
-        guard macroRecording, !macroPlaying, !id.hasPrefix("edit:"), !id.hasPrefix("sort:") else {
+        guard macroRecording, !macroPlaying, !id.hasPrefix("edit:"), !id.hasPrefix("sort:"),
+            BookmarkAction(rawValue: id)?.macroTitle == nil
+        else {
             return
         }
         let quiet: Set<String> = [

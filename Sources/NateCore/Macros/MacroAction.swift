@@ -46,7 +46,8 @@ public enum MacroAction: Codable, Sendable {
                 throw NateError.message("宏输入超过单次 64 MiB 预算。")
             }
         case .command(let name):
-            guard TextCommand(rawValue: name) != nil else {
+            guard TextCommand(rawValue: name) != nil || BookmarkAction(rawValue: name)?.macroTitle != nil
+            else {
                 let label = name.unicodeScalars.prefix(128).map {
                     $0.value < 32 ? "�" : String($0)
                 }.joined()

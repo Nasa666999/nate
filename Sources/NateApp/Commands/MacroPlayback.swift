@@ -26,6 +26,7 @@ struct MacroPlaybackProof {
     var documentSelection: UUID
     var viewSelection: UUID
     var clipboard: UUID
+    var bookmarks: UUID
 
     /// 业务作用：固定宏真实作用的文档实例、视图和控制代次，不能沿往返焦点或后来选择继续执行。
     /// 参数说明:
@@ -44,6 +45,7 @@ struct MacroPlaybackProof {
         documentSelection = document.buffer.selectionGeneration
         viewSelection = editor.selectionGeneration
         clipboard = editor.clipboardOperationGeneration
+        bookmarks = document.buffer.bookmarkGeneration
     }
 
     /// 业务作用：宏自己的事务可以推进正文，但窗口、焦点和编辑权限必须一直属于原实例。
@@ -60,7 +62,7 @@ struct MacroPlaybackProof {
             && document.buffer.editingAuthorityGeneration == editing && !document.buffer.isReadOnly
     }
 
-    /// 业务作用：动作之间让出事件循环后复验上一项的真实结果，用户的新输入或选择不能成为旧宏的新起点。
+    /// 业务作用：让出事件循环后复验上项真实结果，外来输入、选择和书签变化不能成为旧宏的新起点。
     /// 参数说明:
     /// - application: 当前活动工作区。
     /// 返回：原控制证据及上一项发布的正文和选择均未变化时为真。
@@ -69,16 +71,18 @@ struct MacroPlaybackProof {
             && document.buffer.selectionGeneration == documentSelection
             && editor.selectionGeneration == viewSelection
             && editor.clipboardOperationGeneration == clipboard
+            && document.buffer.bookmarkGeneration == bookmarks
     }
 
     /// 业务作用：只在本项真实成功且控制证据仍有效后登记下一项来源，不接受让出事件循环期间的外来变更。
     /// 参数说明: 无。
-    /// 返回：下一项使用刚完成动作的正文和完整选择代次。
+    /// 返回：下一项使用刚完成动作的正文、选择及书签代次。
     mutating func advance() {
         revision = document.buffer.revision
         documentSelection = document.buffer.selectionGeneration
         viewSelection = editor.selectionGeneration
         clipboard = editor.clipboardOperationGeneration
+        bookmarks = document.buffer.bookmarkGeneration
     }
 }
 

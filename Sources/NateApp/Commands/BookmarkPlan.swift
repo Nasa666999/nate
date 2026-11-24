@@ -1,33 +1,6 @@
 import Foundation
 import NateCore
 
-enum BookmarkAction: String, Sendable {
-    case toggle = "bookmark"
-    case next = "nextBookmark"
-    case previous = "previousBookmark"
-    case clear = "clearBookmarks"
-    case invert = "invertBookmarks"
-    case copy = "copyBookmarks"
-    case cut = "cutBookmarks"
-    case replace = "replaceBookmarks"
-    case delete = "deleteBookmarks"
-    case deleteOthers = "deleteUnbookmarked"
-
-    /// 业务作用：将正文写入动作与只读元数据动作分开校验权限。
-    /// 参数说明: 无。
-    /// 返回：剪切、替换和两类删除需要正文写入权。
-    var changesText: Bool {
-        [.cut, .replace, .delete, .deleteOthers].contains(self)
-    }
-
-    /// 业务作用：明确哪些动作会发布系统剪贴板内容。
-    /// 参数说明: 无。
-    /// 返回：仅复制和剪切需要剪贴板输出权限。
-    var changesClipboard: Bool {
-        self == .copy || self == .cut
-    }
-}
-
 struct BookmarkPlan: Sendable {
     let transaction: PreparedTransaction?
     let bookmarks: Set<Int>?
