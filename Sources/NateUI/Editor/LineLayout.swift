@@ -117,7 +117,8 @@ final class LineLayout {
                 theme: theme,
                 language: language,
                 fontZoomAdjustment: fontZoomAdjustment,
-                wordIndex: wideTabs?.wordWrap
+                wordIndex: wideTabs?.wordWrap,
+                ideographs: wideTabs?.han
             )
         }
         else if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil {

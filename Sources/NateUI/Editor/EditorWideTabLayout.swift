@@ -155,6 +155,12 @@ extension EditorView {
                         narrow: narrow,
                         deadline: deadline
                     )
+                    if index == nil, !snapshot.text.isPrintableASCII(in: key.range),
+                        let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline),
+                        han.containsOnlyUnifiedIdeographs
+                    {
+                        return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil)
+                    }
                     return EditorWideTabLayout.Entry(
                         columns: nil,
                         han: nil,

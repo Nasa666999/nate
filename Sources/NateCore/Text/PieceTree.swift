@@ -16,6 +16,7 @@ final class PieceNode: Sendable {
     let fingerprintPower: UInt64
     let printableASCII: Bool
     let alphanumericASCII: Bool
+    let unifiedIdeographs: Bool
 
     /// 业务作用：缓存叶片的坐标与行索引，限制每次局部扫描的规模。
     /// 参数说明:
@@ -49,6 +50,7 @@ final class PieceNode: Sendable {
         fingerprintPower = power
         self.printableASCII = printableASCII
         self.alphanumericASCII = alphanumericASCII
+        unifiedIdeographs = utf16Count == count / 3 && Self.onlyUnifiedIdeographs(bytes[...])
     }
 
     /// 业务作用：聚合子树索引，跨节点 CRLF 只计一行。
@@ -70,6 +72,24 @@ final class PieceNode: Sendable {
         fingerprintPower = left.fingerprintPower &* right.fingerprintPower
         printableASCII = left.printableASCII && right.printableASCII
         alphanumericASCII = left.alphanumericASCII && right.alphanumericASCII
+        unifiedIdeographs = left.unifiedIdeographs && right.unifiedIdeographs
+    }
+
+    /// 业务作用：为每个共享正文节点确定是否可按固定三字节宽度投影基本统一汉字。
+    /// 参数说明:
+    /// - bytes: 已经验证为完整 UTF-8 的一个有界叶片范围。
+    /// 返回：每个实际原标量都在 U+4E00 至 U+9FFF 时为真。
+    static func onlyUnifiedIdeographs(_ bytes: ArraySlice<UInt8>) -> Bool {
+        guard bytes.count.isMultiple(of: 3) else {
+            return false
+        }
+        for position in stride(from: bytes.startIndex, to: bytes.endIndex, by: 3) {
+            let first = bytes[position]
+            if !(229...233).contains(first), first != 228 || bytes[position + 1] < 184 {
+                return false
+            }
+        }
+        return true
     }
 
     /// 业务作用：在不可变正文中固定能够复用等宽软换行证据的字母与数字范围。

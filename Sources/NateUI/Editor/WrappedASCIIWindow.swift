@@ -22,6 +22,8 @@ final class WrappedASCIIWindow: LongLineProjection {
     private let advance: CGFloat
     private let metrics: WrappedASCIIGeometry
     private let wordIndex: ASCIIWordWrapIndex?
+    private let hanFont: NativeHanLineFont?
+    private let fixedByteWidth: Int
     let rowCount: Int
     private var rows: Range<Int>
     private var native: LineLayout
@@ -37,7 +39,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         native.range
     }
     var characterCount: Int {
-        wordIndex?.characterCount ?? range.count
+        wordIndex?.characterCount ?? range.count / fixedByteWidth
     }
     var width: CGFloat {
         CGFloat(max(metrics.columns, wordIndex?.maximumRowLength ?? 0)) * advance
@@ -60,6 +62,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - language: 当前绑定的原语言。
     /// - fontZoomAdjustment: 当前视图实际缩放差值。
     /// - wordIndex: 含空格的同一原文及实际宽度已得到的完整断行索引。
+    /// - ideographs: 确认整个原行仅包含独立基本统一汉字的证据。
     /// 返回：具备完整原生断行证据的初始窗口；不支持的内容、字体或宽度交回普通段落门禁。
     init?(
         snapshot: DocumentSnapshot,
@@ -70,7 +73,8 @@ final class WrappedASCIIWindow: LongLineProjection {
         theme: EditorThemeDefinition?,
         language: String?,
         fontZoomAdjustment: CGFloat,
-        wordIndex: ASCIIWordWrapIndex? = nil
+        wordIndex: ASCIIWordWrapIndex? = nil,
+        ideographs: PlainHanLine? = nil
     ) {
         let actual = EditorThemePresentation.baseFont(
             font,
@@ -78,15 +82,31 @@ final class WrappedASCIIWindow: LongLineProjection {
             language: language,
             adjustment: fontZoomAdjustment
         )
-        // 字间断行必须已有固定原文索引，单个连续 ASCII 单词可以直接沿原生字距定位。
+        let han: NativeHanLineFont?
+        if let ideographs {
+            guard wordIndex == nil, ideographs.range == range, ideographs.matches(snapshot.text),
+                ideographs.containsOnlyUnifiedIdeographs,
+                let resolved = NativeHanLineFont.resolve(from: actual)
+            else {
+                return nil
+            }
+            han = resolved
+        }
+        else {
+            han = nil
+        }
+        // 断行必须拥有完整原文与实际字体证据，基本汉字的真实步距来自已确认的级联字体。
         guard range.count > EditorNativeLayoutPolicy.maximumParagraphBytes,
             snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
             containerWidth.isFinite, containerWidth > 0,
-            let advance = NativeMonospaceGeometry.uniformAdvance(actual, appearance: appearance),
+            let advance = han?.advance
+                ?? NativeMonospaceGeometry.uniformAdvance(actual, appearance: appearance),
             containerWidth / advance <= 8192, let lineOrigin = snapshot.text.utf16Offset(byte: range.lower)
         else {
             return nil
         }
+        let byteWidth = han == nil ? 1 : 3
+        let total = wordIndex?.characterCount ?? range.count / byteWidth
         let sample: ByteRange
         let expected: WrappedASCIIGeometry?
         let indexedRows: [ByteRange]?
@@ -117,11 +137,11 @@ final class WrappedASCIIWindow: LongLineProjection {
             expected = grid
         }
         else {
-            guard snapshot.text.isAlphanumericASCII(in: range) else {
+            guard han != nil || snapshot.text.isAlphanumericASCII(in: range) else {
                 return nil
             }
             let guess = max(1, Int(containerWidth / advance))
-            sample = ByteRange(range.lower, range.lower + min(range.count, guess * 4))
+            sample = ByteRange(range.lower, range.lower + min(total, guess * 4) * byteWidth)
             indexedRows = nil
             expected = nil
         }
@@ -133,7 +153,8 @@ final class WrappedASCIIWindow: LongLineProjection {
             width: containerWidth,
             theme: theme,
             language: language,
-            fontZoomAdjustment: fontZoomAdjustment
+            fontZoomAdjustment: fontZoomAdjustment,
+            hanFont: han
         )
         guard
             let metrics = native.uniformWrapping(
@@ -156,10 +177,13 @@ final class WrappedASCIIWindow: LongLineProjection {
         self.advance = advance
         self.metrics = metrics
         self.wordIndex = wordIndex
-        rowCount = wordIndex?.rowCount ?? (range.count - 1) / metrics.columns + 1
+        hanFont = han
+        fixedByteWidth = byteWidth
+        rowCount = wordIndex?.rowCount ?? (total - 1) / metrics.columns + 1
         // 只有末行也属于固定列边界时可复用试样窗口，避免将试样截断处冒用为完整长行的真实行末。
-        let completeSample = indexedRows != nil || sample.count.isMultiple(of: metrics.columns)
-        rows = completeSample ? 0..<(indexedRows?.count ?? sample.count / metrics.columns) : 0..<0
+        let sampleCharacters = sample.count / byteWidth
+        let completeSample = indexedRows != nil || sampleCharacters.isMultiple(of: metrics.columns)
+        rows = completeSample ? 0..<(indexedRows?.count ?? sampleCharacters / metrics.columns) : 0..<0
         self.native = native
         if !completeSample {
             project(covering: 0...0)
@@ -360,7 +384,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         if wordIndex?.narrowScalars.isEmpty == false {
             return snapshot.text.byteOffset(utf16: lineOriginUTF16 + character)
         }
-        return range.lower + character
+        return range.lower + character * fixedByteWidth
     }
 
     /// 业务作用：从真实视觉行开始重新交付原生段落，复验字形后才撤换旧片段。
@@ -405,8 +429,8 @@ final class WrappedASCIIWindow: LongLineProjection {
         else {
             indexedRows = nil
             segment = ByteRange(
-                range.lower + first * metrics.columns,
-                range.lower + min(characterCount, last * metrics.columns)
+                range.lower + first * metrics.columns * fixedByteWidth,
+                range.lower + min(characterCount, last * metrics.columns) * fixedByteWidth
             )
         }
         let candidate = Self.layout(
@@ -417,7 +441,8 @@ final class WrappedASCIIWindow: LongLineProjection {
             width: containerWidth,
             theme: theme,
             language: language,
-            fontZoomAdjustment: fontZoomAdjustment
+            fontZoomAdjustment: fontZoomAdjustment,
+            hanFont: hanFont
         )
         // 不同片段都必须重现原来的断行端点和像素几何，失配时不会发布旧窗口之外的坐标。
         guard candidate.uniformWrapping(advance: advance, expected: metrics, indexedRows: indexedRows) != nil
@@ -440,6 +465,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - theme: 当前主题。
     /// - language: 当前语言。
     /// - fontZoomAdjustment: 所属视图真实缩放差值。
+    /// - hanFont: 纯基本统一汉字采用的已确认字体。
     /// 返回：绑定原字节的真实 TextKit 软换行段落。
     private static func layout(
         snapshot: DocumentSnapshot,
@@ -449,7 +475,8 @@ final class WrappedASCIIWindow: LongLineProjection {
         width: CGFloat,
         theme: EditorThemeDefinition?,
         language: String?,
-        fontZoomAdjustment: CGFloat
+        fontZoomAdjustment: CGFloat,
+        hanFont: NativeHanLineFont? = nil
     ) -> LineLayout {
         LineLayout(
             snapshot: snapshot,
@@ -461,6 +488,7 @@ final class WrappedASCIIWindow: LongLineProjection {
             rtl: false,
             appearance: appearance,
             nativeASCII: true,
+            nativeHanFont: hanFont,
             theme: theme,
             language: language
         )

@@ -3,6 +3,7 @@ import Foundation
 public struct PlainHanLine: Sendable {
     public let range: ByteRange
     public let characterCount: Int
+    public let containsOnlyUnifiedIdeographs: Bool
     private let sourceIdentity: UUID
     private let text: PieceTree
     private let checkpoints: [Int]
@@ -34,6 +35,17 @@ public struct PlainHanLine: Sendable {
         let slice = try source.slicing(range)
         guard slice.byteCount > slice.utf16Count else {
             return nil
+        }
+        if source.containsOnlyUnifiedIdeographs(in: range) {
+            // 固定三字节宽度已由不可变节点确认，可跳过逐块构建检查点，仍保留同一正文和时限门禁。
+            try Self.requireTime(until: deadline)
+            self.range = range
+            sourceIdentity = source.root.identity
+            text = slice
+            characterCount = range.count / 3
+            containsOnlyUnifiedIdeographs = true
+            checkpoints = []
+            return
         }
         var bytes = 0
         var characters = 0
@@ -95,6 +107,7 @@ public struct PlainHanLine: Sendable {
         self.sourceIdentity = source.root.identity
         self.text = slice
         self.characterCount = characters
+        containsOnlyUnifiedIdeographs = false
         self.checkpoints = checkpoints
     }
 
@@ -119,7 +132,10 @@ public struct PlainHanLine: Sendable {
     /// - character: 行首起算的 UTF-16 偏移，经过验证的区间每标量占一个单元。
     /// 返回：完整正文的原 UTF-8 端点，行外偏移为空。
     public func byte(at character: Int) -> Int? {
-        text.byteOffset(utf16: character).map { range.lower + $0 }
+        if containsOnlyUnifiedIdeographs {
+            return (0...characterCount).contains(character) ? range.lower + character * 3 : nil
+        }
+        return text.byteOffset(utf16: character).map { range.lower + $0 }
     }
 
     /// 业务作用：普通光标的逻辑列与实际汉字长行共享原字节证据，每个已验证标量都是独立字素。
@@ -130,7 +146,11 @@ public struct PlainHanLine: Sendable {
         guard (range.lower...range.upper).contains(offset) else {
             return nil
         }
-        return text.utf16Offset(byte: offset - range.lower)
+        let relative = offset - range.lower
+        if containsOnlyUnifiedIdeographs {
+            return relative.isMultiple(of: 3) ? relative / 3 : nil
+        }
+        return text.utf16Offset(byte: relative)
     }
 
     /// 业务作用：原生行宽和窗口偏移使用实际已测字体距离，按原字节数量精确区分 ASCII 与汉字。
@@ -142,11 +162,11 @@ public struct PlainHanLine: Sendable {
     public func distance(through character: Int, ascii: Double, han: Double) -> Double? {
         guard ascii.isFinite, han.isFinite,
             (0...4096).contains(ascii), (0...4096).contains(han), ascii > 0, han > 0,
-            let offset = character == characterCount ? range.count : text.byteOffset(utf16: character)
+            let offset = byte(at: character)
         else {
             return nil
         }
-        return Self.distance(bytes: offset, characters: character, ascii: ascii, han: han)
+        return Self.distance(bytes: offset - range.lower, characters: character, ascii: ascii, han: han)
     }
 
     /// 业务作用：通过浏览位置选取附近原生片段，只访问一个已验证分块的原字节。
@@ -160,6 +180,17 @@ public struct PlainHanLine: Sendable {
             let fullWidth = distance(through: characterCount, ascii: ascii, han: han), x <= fullWidth
         else {
             return nil
+        }
+        if containsOnlyUnifiedIdeographs {
+            let estimate = min(characterCount, Int((x / han).rounded(.down)))
+            // 远端的浮点除法可能把原生端点舍入一列；用同一字形乘积复验相邻插入点。
+            if estimate < characterCount, Double(estimate + 1) * han <= x {
+                return estimate + 1
+            }
+            if estimate > 0, Double(estimate) * han > x {
+                return estimate - 1
+            }
+            return estimate
         }
         var lower = 0
         var upper = checkpoints.count
