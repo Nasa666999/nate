@@ -69,14 +69,14 @@ enum FortranIndentationPlan {
         }
     }
 
-    /// 业务作用：自由格式 Fortran 换行使用原生词法已确认的完整结构，所有光标共享同一正文和准备期限。
+    /// 业务作用：Fortran 换行使用实际源格式和原生词法已确认的完整结构，所有光标共享同一正文和准备期限。
     /// 参数说明:
     /// - snapshot: 所有真实输入目标固定的不可变正文。
-    /// - language: 实际自由格式 Fortran 词表及样式资源。
+    /// - language: 实际自由格式或固定格式词表及样式资源。
     /// - ranges: 已验证的普通或矩形真实替换范围。
     /// - deadline: 前置词法、原前缀、事务及提交的实际共同截止。
     /// - permit: 本次编辑继续有效的资格。
-    /// 返回：完整逐目标缩进动作；固定格式、未确认续行及特殊声明不借用冲突结构。
+    /// 返回：完整逐目标缩进动作；固定格式保护列、未确认续行及特殊声明不借用冲突结构。
     static func actions(
         snapshot: DocumentSnapshot,
         language: LanguageDefinition,
@@ -104,6 +104,7 @@ enum FortranIndentationPlan {
             throw NateError.message("Fortran 结构缩进的前置传播超过一百万行。")
         }
         let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
+        let fixedFormat = language.id == "fortran77"
         var lexical = SyntaxState()
         var sourcesRemaining = 64 * 1_048_576
         var prefixesRemaining = 1_048_576
@@ -143,13 +144,30 @@ enum FortranIndentationPlan {
             if let error = lexical.diagnostic {
                 throw NateError.message(error)
             }
+            let bytes = Array(source.utf8.prefix(content.count))
             let row = try FortranIndentationLine(
-                bytes: Array(source.utf8.prefix(content.count)),
+                bytes: bytes,
                 range: content,
                 tokens: tokens,
+                languageID: language.id,
                 check: check
             )
             let targets = byLine[line] ?? []
+            if fixedFormat, !row.atoms.isEmpty {
+                // 前五列只能承担标签，第六列可能续接上一语句。仅六个连续的原空格取得普通结构缩进资格。
+                let ordinaryColumns = bytes.count >= 6 && bytes.prefix(6).allSatisfy { $0 == 32 }
+                let followingContinuation =
+                    ordinaryColumns
+                    ? try fixedContinuationFollows(after: line, text: text, check: check) : false
+                if !ordinaryColumns || followingContinuation {
+                    scopes.removeAll()
+                    for target in targets {
+                        try check()
+                        result[target] = .inherit
+                    }
+                    continue
+                }
+            }
             if row.crossesStatements || row.directive || (row.beginsContinuation && continuation == nil) {
                 // 同行多语句、预处理或没有已知出处的续接会改变实际块关系，先撤回旧缩进资格。
                 scopes.removeAll()
@@ -253,4 +271,41 @@ enum FortranIndentationPlan {
         try check()
         return result
     }
+
+    /// 业务作用：固定格式必须看清下一条有效记录的真实第六列，不能把后续续接的上一行当成完整声明。
+    /// 参数说明:
+    /// - line: 正在确认的实际物理行号。
+    /// - text: 本次输入固定的完整正文。
+    /// - check: 全部目标共同拥有的继续资格。
+    /// 返回：下一条有效记录的第六列是有效续接标记时为真，文件尾或新语句时为假。
+    private static func fixedContinuationFollows(
+        after line: Int,
+        text: PieceTree,
+        check: () throws -> Void
+    ) throws -> Bool {
+        var visited = 0
+        for next in (line + 1)..<text.lineCount {
+            try check()
+            let row = text.lineRange(next, includeEnding: false)
+            let length = min(72, row.count)
+            guard visited <= 64 * 1_048_576 - length, next < 1_048_576 else {
+                throw NateError.message("Fortran 固定格式续接前瞻超过原文或行数预算。")
+            }
+            visited += length
+            let bytes = text.bytes(in: ByteRange(row.lower, row.lower + length))
+            if bytes.first.map({ [67, 99, 42].contains($0) }) == true {
+                continue
+            }
+            guard let first = bytes.firstIndex(where: { !FortranCharacters.space(UInt32($0)) }),
+                bytes[first] != 33
+            else {
+                continue
+            }
+            // 以原字节计算列，不把用户配置的可见 Tab 停靠位当作固定格式的字段位置。
+            return bytes.count >= 6 && !FortranCharacters.space(UInt32(bytes[5])) && bytes[5] != 48
+                && bytes[5] != 33
+        }
+        return false
+    }
+
 }

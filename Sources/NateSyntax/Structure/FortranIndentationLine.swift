@@ -40,17 +40,19 @@ struct FortranIndentationLine {
     let endsContinuation: Bool
     let directive: Bool
 
-    /// 业务作用：自由格式结构只使用当前原生词法确认过的水平空白、关键字和标点，注释与字面保持独立。
+    /// 业务作用：Fortran 结构只使用当前格式原生词法确认过的水平空白、关键字和标点，注释与字面保持独立。
     /// 参数说明:
     /// - bytes: 当前不含结束符的完整原字节。
     /// - range: 与原字节一致的真实物理行范围。
     /// - tokens: 同一原始范围的原生词法结果。
+    /// - languageID: 当前确定的自由格式或固定格式语言身份。
     /// - check: 本次各行和光标共用的继续资格。
     /// 返回：有界词元及原始前缀；没有完整词法或超量时不交付部分结构。
     init(
         bytes: [UInt8],
         range: ByteRange,
         tokens: [SyntaxToken],
+        languageID: String,
         check: () throws -> Void
     ) throws {
         var leading = 0
@@ -63,6 +65,9 @@ struct FortranIndentationLine {
         prefix = ByteRange(range.lower, range.lower + leading)
         directive = leading < bytes.count && bytes[leading] == 35
         opaque = tokens.filter(\.isStructureOpaque)
+        let keywordStyle = languageID + ":8"
+        let identifierStyle = languageID + ":7"
+        let freeForm = languageID == "fortran"
         var atoms: [Atom] = []
         var index = leading
         var tokenIndex = 0
@@ -119,16 +124,16 @@ struct FortranIndentationLine {
                     value: value,
                     // 主词表未包含少数新语句，只有原生已确认为普通名称且完全匹配专用词时才进入结构判断。
                     keyword: word
-                        && (token?.lexicalStyle == "fortran:8"
-                            || token?.lexicalStyle == "fortran:7"
+                        && (token?.lexicalStyle == keywordStyle
+                            || token?.lexicalStyle == identifierStyle
                                 && Self.modernStructureWords.contains(value)),
                     identifier: word
                 )
             )
         }
         self.atoms = atoms
-        beginsContinuation = atoms.first?.value == "&"
-        endsContinuation = atoms.last?.value == "&"
+        beginsContinuation = freeForm && atoms.first?.value == "&"
+        endsContinuation = freeForm && atoms.last?.value == "&"
         crossesStatements = atoms.contains { $0.value == ";" }
     }
 
@@ -143,7 +148,7 @@ struct FortranIndentationLine {
         }
         if protectedIndex < opaque.count, opaque[protectedIndex].range.lower < position {
             let token = opaque[protectedIndex]
-            if position < token.range.upper || token.kind == .comment || token.lexicalStyle == "fortran:5" {
+            if position < token.range.upper || token.kind == .comment || token.lexicalStyle.hasSuffix(":5") {
                 return nil
             }
         }

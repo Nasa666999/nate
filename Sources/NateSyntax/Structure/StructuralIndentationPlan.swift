@@ -50,6 +50,7 @@ public struct StructuralIndentationPlan: Sendable {
         self.permit = permit
         let identifier = language?.id ?? "normal"
         let lisp = identifier == "lisp" || identifier == "scheme"
+        let fortran = identifier == "fortran" || identifier == "fortran77"
         let curly: Set<String> = [
             "c", "cpp", "java", "cs", "objc", "php", "javascript", "javascript.js", "jsp", "css",
             "perl", "rust", "powershell", "json", "json5", "typescript", "go", "swift", "r",
@@ -59,7 +60,7 @@ public struct StructuralIndentationPlan: Sendable {
             && (identifier == "python" || identifier == "lua" || identifier == "mssql" || identifier == "sql"
                 || identifier == "cmake" || identifier == "autoit" || identifier == "bash"
                 || identifier == "yaml" || identifier == "toml" || identifier == "html" || identifier == "xml"
-                || identifier == "pascal" || identifier == "fortran" || lisp
+                || identifier == "pascal" || fortran || lisp
                 || curly.contains(identifier))
         guard usesLanguageRules, let language else {
             actions = Dictionary(
@@ -130,7 +131,7 @@ public struct StructuralIndentationPlan: Sendable {
             )
             return
         }
-        if identifier == "fortran" {
+        if fortran {
             actions = try FortranIndentationPlan.actions(
                 snapshot: snapshot,
                 language: language,
