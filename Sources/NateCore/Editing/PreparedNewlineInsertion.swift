@@ -125,12 +125,15 @@ public struct PreparedNewlineInsertion: Sendable {
             // 插入点仍在前导空白中时，原生边缘保留的 Tab 列也是本次实际缩进，不能在换行后丢掉。
             let extra = indent.continuesIndentation ? target.leadingSpaces : 0
             let action = inheritIndentation ? try structuralIndentation?(target) ?? .inherit : .inherit
-            if case .align(let prefix, _) = action {
+            switch action {
+            case .align(let prefix, _), .expandAlignedPair(let prefix):
                 // 对齐来源也是整批输入读取的真实前缀，不能为每个光标重新取得一份完整额度。
                 guard prefix.utf8.count <= remaining else {
                     throw NateError.message("全部换行缩进读取超过 1 MiB，原正文与选择保留。")
                 }
                 remaining -= prefix.utf8.count
+            default:
+                break
             }
             let prepared = try NewlineIndentationText.prepare(
                 prefix: indent.text,
