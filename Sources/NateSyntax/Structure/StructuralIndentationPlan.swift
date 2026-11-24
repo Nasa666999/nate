@@ -137,6 +137,7 @@ public struct StructuralIndentationPlan: Sendable {
             throw NateError.message("语言缩进的前置词法传播超过一百万行。")
         }
         let scanner = SyntaxScanner(language: language, snapshot: snapshot, deadline: deadline)
+        let rust = identifier == "rust"
         let supportsControlLines =
             identifier != "python"
             && !["perl", "rust", "powershell", "json", "json5", "lua", "sql", "css"].contains(identifier)
@@ -170,6 +171,7 @@ public struct StructuralIndentationPlan: Sendable {
                 continue
             }
             var code = Array(source.utf8)
+            let rustSource = rust ? code : []
             let directiveLine =
                 startsInDirective
                 || tokens.contains {
@@ -308,6 +310,7 @@ public struct StructuralIndentationPlan: Sendable {
                     identifier == "objc"
                     && (token?.lexicalStyle == "objc:2" || token?.lexicalStyle == "objc:15")
                     || identifier == "r" && token?.lexicalStyle == "r:1"
+                    || rust && (token?.lexicalStyle == "rust:2" || token?.lexicalStyle == "rust:4")
                     || identifier == "lua"
                         && (token?.lexicalStyle == "lua:2" || token?.lexicalStyle == "lua:3")
                     || scriptContext?.lineComment == true || mssqlContext?.mode == 2
@@ -316,6 +319,13 @@ public struct StructuralIndentationPlan: Sendable {
                     } == true
                 // 行注释中的后继闭合符没有代码资格，换行只能使用注释前已经确认的标点和条件头。
                 var following = nativeLineComment ? nil : snapshot.text.byte(at: target.upper)
+                if rust {
+                    let end = target.upper - row.lower
+                    // Rust 的闭合符必须来自当前物理行的代码区，原始字符串和文档注释不参与配对。
+                    if !code.indices.contains(end) || code[end] != following {
+                        following = nil
+                    }
+                }
                 if identifier == "css", following == 123 || following == 125 {
                     let end = target.upper - row.lower
                     if end >= 0 && end < code.count && code[end] != following || cssContext?.mode == 16 {
@@ -368,6 +378,19 @@ public struct StructuralIndentationPlan: Sendable {
                 else if let cssContext {
                     insideNativeLiteral = !CSSLexing.isCode(cssContext)
                 }
+                else if rust,
+                    RustNewlineDelimiters.closer(for: last) != nil
+                        || RustNewlineDelimiters.isCloser(following)
+                {
+                    // 后继闭合可能不属于插入点，候选规则只在实际前缀已经回到代码区时可以改变缩进。
+                    insideNativeLiteral = try !RustLexing.isCode(
+                        source: rustSource,
+                        offset: offset,
+                        base: row.lower,
+                        initial: initial,
+                        scanner: scanner
+                    )
+                }
                 else if ["powershell", "objc", "r", "lua", "javascript.js", "typescript"].contains(identifier)
                 {
                     insideNativeLiteral = try !StructuralInsertionContext.isCode(
@@ -410,6 +433,17 @@ public struct StructuralIndentationPlan: Sendable {
                         previous: before,
                         allowFollowing: !nativeLineComment,
                         precedingCondition: precedingCondition
+                    )
+                }
+                else if rust {
+                    output[target] = try RustNewlineDelimiters.action(
+                        in: code,
+                        source: rustSource,
+                        before: before,
+                        end: target.upper - row.lower,
+                        allowFollowing: !nativeLineComment,
+                        deadline: deadline,
+                        permit: permit
                     )
                 }
                 else {
