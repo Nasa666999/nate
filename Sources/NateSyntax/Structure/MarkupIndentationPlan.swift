@@ -216,7 +216,9 @@ enum MarkupIndentationPlan {
             else {
                 leading = false
             }
-            tail = leading ? Tail(kind: .close, end: tag.range.upper, prefix: matching, name: tag.name) : nil
+            tail =
+                leading
+                ? Tail(kind: .close, end: tag.range.upper, prefix: matching.prefix, name: tag.name) : nil
         }
     }
 

@@ -25,7 +25,7 @@ struct MarkupLexing {
 
     static let voidNames: Set<String> = [
         "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
-        "wbr", "param", "basefont", "bgsound", "frame", "keygen", "command",
+        "wbr", "param", "basefont", "bgsound", "frame", "keygen", "command", "isindex",
     ]
     static let rawNames: Set<String> = [
         "script", "style", "title", "textarea", "xmp", "iframe", "noembed", "noframes", "noscript",
@@ -88,8 +88,12 @@ struct MarkupLexing {
                 terminalCount = 0
                 declarationTail = []
             }
+            else if dialect == .html, byte == 33, terminalCount == 2 {
+                // HTML 的注释错误结束符属于真实边界，XML 仍需连续的两个连字符。
+                terminalCount = 3
+            }
             else {
-                terminalCount = byte == 45 ? min(2, terminalCount + 1) : 0
+                terminalCount = byte == 45 ? (terminalCount == 3 ? 1 : min(2, terminalCount + 1)) : 0
             }
         case .cdata:
             if byte == 62 && terminalCount >= 2 {
