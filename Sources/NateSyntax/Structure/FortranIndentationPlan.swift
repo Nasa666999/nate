@@ -26,6 +26,49 @@ enum FortranIndentationPlan {
         }
     }
 
+    private struct Continuation {
+        let prefix: ByteRange
+        var atoms: [FortranIndentationLine.Atom] = []
+        var sourceBytes = 0
+        var trailing: FortranIndentationLine.Atom?
+        var unresolved = false
+
+        /// 业务作用：合并已由原生词法确认的物理续行，保留同一原语句的开放或关闭资格。
+        /// 参数说明:
+        /// - row: 当前已经解析的完整物理行。
+        /// - bytes: 实际物理行的原字节数，包含结束符。
+        /// 返回：安全的完整原词元顺序；跨行拆开的名称标为未确认，超限拒绝整批。
+        mutating func append(_ row: FortranIndentationLine, bytes: Int) throws {
+            let start = row.beginsContinuation ? 1 : 0
+            let end = max(start, row.atoms.count - (row.endsContinuation ? 1 : 0))
+            let content = row.atoms[start..<end]
+            guard bytes <= 1_048_576 - sourceBytes, content.count <= 65_536 - atoms.count else {
+                throw NateError.message("Fortran 续接语句超过 1 MiB 或 65536 个词元。")
+            }
+            sourceBytes += bytes
+            unresolved = unresolved || row.beginsContinuation && row.endsContinuation && row.atoms.count == 1
+            // 无间隔写在两个物理续行符旁的名称可能是同一个词，部分结果不能冒充语义关键字。
+            if let trailing, let previous = atoms.last, let first = content.first, row.beginsContinuation,
+                previous.range.upper == trailing.range.lower, first.range.lower == row.atoms[0].range.upper,
+                Self.wordPart(previous), Self.wordPart(first)
+            {
+                unresolved = true
+            }
+            if !content.isEmpty || row.endsContinuation {
+                trailing = row.endsContinuation ? row.atoms.last : nil
+            }
+            atoms.append(contentsOf: content)
+        }
+
+        /// 业务作用：名称及数字续接可能拼成不同原词，无法确认的半段不具备结构资格。
+        /// 参数说明:
+        /// - atom: 原生词法确认的当前边缘词元。
+        /// 返回：可归入被拆开名称或数字时为真。
+        private static func wordPart(_ atom: FortranIndentationLine.Atom) -> Bool {
+            atom.identifier || atom.value.utf8.first.map { (48...57).contains($0) } == true
+        }
+    }
+
     /// 业务作用：自由格式 Fortran 换行使用原生词法已确认的完整结构，所有光标共享同一正文和准备期限。
     /// 参数说明:
     /// - snapshot: 所有真实输入目标固定的不可变正文。
@@ -66,7 +109,7 @@ enum FortranIndentationPlan {
         var prefixesRemaining = 1_048_576
         var prefixCache: [ByteRange: String] = [:]
         var scopes: [Frame] = []
-        var continued = false
+        var continuation: Continuation?
         var result: [ByteRange: NewlineIndentationAction] = [:]
 
         /// 业务作用：真实开端的混合空白只读取一次，所有编辑目标共同使用容量。
@@ -107,18 +150,44 @@ enum FortranIndentationPlan {
                 check: check
             )
             let targets = byLine[line] ?? []
-            let requiresFallback =
-                continued || row.beginsContinuation || row.endsContinuation
-                || row.crossesStatements || row.directive
-            continued = row.endsContinuation || continued && row.atoms.isEmpty
-            if requiresFallback {
-                // 多条语句、跨行续接和条件编译可能改变关闭关系，旧块不能在不完整证据之后继续授权。
+            if row.crossesStatements || row.directive || (row.beginsContinuation && continuation == nil) {
+                // 同行多语句、预处理或没有已知出处的续接会改变实际块关系，先撤回旧缩进资格。
                 scopes.removeAll()
+                continuation = nil
                 for target in targets {
                     try check()
                     result[target] = .inherit
                 }
                 continue
+            }
+            let origin = continuation?.prefix ?? row.prefix
+            let earlier = continuation?.atoms.count ?? 0
+            let wasContinued = continuation != nil
+            var logical = continuation ?? Continuation(prefix: row.prefix)
+            continuation = nil
+            if wasContinued || row.endsContinuation {
+                try logical.append(row, bytes: physical.count)
+                if row.endsContinuation || row.atoms.isEmpty {
+                    continuation = logical
+                    // 未完成声明只继承当前物理行。独立注释和空白保持等待中的完整语句来源。
+                    for target in targets {
+                        try check()
+                        result[target] = .inherit
+                    }
+                    continue
+                }
+                if logical.unresolved {
+                    // 不完整的词不能从上下文推断其类型，防止它改变后续关闭的原前缀权威。
+                    scopes.removeAll()
+                    for target in targets {
+                        try check()
+                        result[target] = .inherit
+                    }
+                    continue
+                }
+            }
+            else {
+                logical.atoms = row.atoms
             }
             for target in targets {
                 try check()
@@ -126,10 +195,12 @@ enum FortranIndentationPlan {
                     result[target] = .inherit
                     continue
                 }
-                let event = try FortranIndentationLine.classify(before, check: check)
+                let leading = row.beginsContinuation ? 1 : 0
+                let count = earlier + max(0, before.count - leading)
+                let event = try FortranIndentationLine.classify(logical.atoms.prefix(count), check: check)
                 switch event {
                 case .opening:
-                    result[target] = .align(prefix: try prefix(row.prefix), levels: 1)
+                    result[target] = .align(prefix: try prefix(origin), levels: 1)
                 case .branch(let block, let name, let levels):
                     if let scope = scopes.last, scope.matches(block, name: name, closing: false) {
                         result[target] = .align(prefix: try prefix(scope.prefix), levels: levels)
@@ -145,7 +216,7 @@ enum FortranIndentationPlan {
                         result[target] = .inherit
                     }
                 case .neutral:
-                    if before.isEmpty, target.upper < content.upper,
+                    if earlier == 0, before.isEmpty, target.upper < content.upper,
                         let tail = row.suffixAtoms(at: target.upper),
                         case .closing(let block, let name) = try FortranIndentationLine.classify(
                             tail,
@@ -160,13 +231,13 @@ enum FortranIndentationPlan {
                     }
                 }
             }
-            let event = try FortranIndentationLine.classify(row.atoms[...], check: check)
+            let event = try FortranIndentationLine.classify(logical.atoms[...], check: check)
             switch event {
             case .opening(let block, let name):
                 guard scopes.count < 4096 else {
                     throw NateError.message("Fortran 结构缩进超过 4096 层活动块。")
                 }
-                scopes.append(Frame(block: block, name: name, prefix: row.prefix))
+                scopes.append(Frame(block: block, name: name, prefix: origin))
             case .closing(let block, let name):
                 if let scope = scopes.last, scope.matches(block, name: name) {
                     scopes.removeLast()
