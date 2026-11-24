@@ -25,7 +25,7 @@ public struct FoldIndex: Sendable {
         }
         return [
             "python", "ini", "props", "diff", "registry", "ihex", "tex", "latex", "yaml", "lua", "mssql",
-            "sql", "toml", "cmake", "pascal", "asm", "fortran", "fortran77", "autoit", "bash",
+            "sql", "toml", "cmake", "pascal", "asm", "fortran", "fortran77", "autoit", "bash", "xml",
         ]
         .contains(
             language?.id ?? ""
@@ -55,7 +55,7 @@ public struct FoldIndex: Sendable {
             by: [
                 "python", "ini", "props", "diff", "c", "cpp", "registry", "ihex", "tex", "latex", "lisp",
                 "scheme", "rust", "yaml", "powershell", "objc", "r", "lua", "mssql", "sql", "css", "toml",
-                "cmake", "pascal", "asm", "fortran", "fortran77", "autoit", "bash",
+                "cmake", "pascal", "asm", "fortran", "fortran77", "autoit", "bash", "xml",
             ].contains(
                 language?.id ?? ""
             ) || language?.usesSharedCLexer == true || udl != nil
@@ -80,6 +80,9 @@ public struct FoldIndex: Sendable {
         }
         else if let language, language.id == "bash" {
             candidates = try BashFolding.regions(snapshot: snapshot, deadline: deadline)
+        }
+        else if let language, language.id == "xml" {
+            candidates = try XMLFolding.regions(snapshot: snapshot, deadline: deadline)
         }
         else if let language, ["fortran", "fortran77"].contains(language.id) {
             candidates = try FortranFolding.regions(

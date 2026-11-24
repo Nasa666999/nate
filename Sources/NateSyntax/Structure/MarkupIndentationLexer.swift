@@ -17,6 +17,16 @@ struct MarkupIndentationLexer {
     private var scanner: MarkupLexing
     private var candidate: (offset: Int, prefix: ByteRange)?
 
+    /// 标记词法的当前原文模式，供折叠确认注释、CDATA 与声明的真实开闭。
+    var mode: MarkupMode {
+        scanner.mode
+    }
+
+    /// 正在读取的标记起点，用于仅识别完整的 XML 声明前缀。
+    var constructStart: Int? {
+        candidate?.offset
+    }
+
     /// 业务作用：复用标签闭合使用的标记词法，保持注释、属性和原始文本的同一识别边界。
     /// 参数说明:
     /// - dialect: 当前明确的 HTML 或 XML 方言。
