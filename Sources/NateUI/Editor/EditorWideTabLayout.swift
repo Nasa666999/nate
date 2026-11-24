@@ -98,11 +98,12 @@ extension EditorView {
                 else {
                     return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
                 }
+                let hanColumns = wideHanWrappingColumns(snapshot: snapshot, range: range, font: actual)
                 prepareWideLine(
                     snapshot: snapshot,
                     key: key,
                     width: tabSettings.width,
-                    wrappingColumns: grid.columns
+                    wrappingColumns: (grid.columns, hanColumns)
                 )
             }
             else {
@@ -131,13 +132,13 @@ extension EditorView {
     /// - snapshot: 当前逻辑行所属的不可变正文。
     /// - key: 测量开始时固定的视图布局来源。
     /// - width: 当前真实 Tab 宽度。
-    /// - wrappingColumns: 自动换行时已确认的实际列数，其它请求使用制表布局。
+    /// - wrappingColumns: 自动换行时实测的窄字形及可用的全角列数。
     /// 返回：同一来源内替换暂未排版窗口，迟到、取消或超量时保留原文和选择。
     private func prepareWideLine(
         snapshot: DocumentSnapshot,
         key: EditorWideTabLayout.Key,
         width: Int,
-        wrappingColumns: Int? = nil
+        wrappingColumns: (narrow: Int, fullWidth: Int?)? = nil
     ) {
         wideTabLayout.task = Task { [weak self] in
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
@@ -151,15 +152,30 @@ extension EditorView {
                     let index = try ASCIIWordWrapIndex(
                         text: snapshot.text,
                         range: key.range,
-                        columns: wrappingColumns,
+                        columns: wrappingColumns.narrow,
                         narrow: narrow,
                         deadline: deadline
                     )
-                    if index == nil, !snapshot.text.isPrintableASCII(in: key.range),
+                    if index == nil, let fullWidth = wrappingColumns.fullWidth,
                         let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline),
-                        han.containsOnlyUnifiedIdeographs
+                        han.characterCount * 3 == key.range.count
                     {
-                        return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil)
+                        if han.containsOnlyUnifiedIdeographs {
+                            return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil)
+                        }
+                        let full = try ASCIIWordWrapIndex(
+                            text: snapshot.text,
+                            range: key.range,
+                            columns: fullWidth,
+                            fullWidth: han,
+                            deadline: deadline
+                        )
+                        return EditorWideTabLayout.Entry(
+                            columns: nil,
+                            han: full == nil ? nil : han,
+                            status: nil,
+                            wordWrap: full
+                        )
                     }
                     return EditorWideTabLayout.Entry(
                         columns: nil,
@@ -250,6 +266,28 @@ extension EditorView {
                 self.revealSelection()
             }
         }
+    }
+
+    /// 业务作用：源长度符合全角范围时测量级联字体的软换行容量，后台仍须确认每个原标量。
+    /// 参数说明:
+    /// - snapshot: 当前不可变的正文证据。
+    /// - range: 当前完整逻辑行的原始范围。
+    /// - font: 主题及缩放已经确定的基础字体。
+    /// 返回：全角字体能在同一容器形成固定真实视觉列时提供列数。
+    private func wideHanWrappingColumns(snapshot: DocumentSnapshot, range: ByteRange, font: NSFont) -> Int? {
+        guard let start = snapshot.text.utf16Offset(byte: range.lower),
+            let end = snapshot.text.utf16Offset(byte: range.upper),
+            (end - start) * 3 == range.count,
+            let han = NativeHanLineFont.resolve(from: font)
+        else {
+            return nil
+        }
+        return WrappedASCIIWindow.referenceGeometry(
+            font: font,
+            width: nativeBodyLayoutWidth,
+            appearance: effectiveAppearance,
+            hanFont: han
+        )?.columns
     }
 
     /// 业务作用：长行制表只能沿所属真实视图的主题字体、字号与实际制表规则建立像素证据。

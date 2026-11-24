@@ -62,7 +62,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - language: 当前绑定的原语言。
     /// - fontZoomAdjustment: 当前视图实际缩放差值。
     /// - wordIndex: 含空格的同一原文及实际宽度已得到的完整断行索引。
-    /// - ideographs: 确认整个原行仅包含独立基本统一汉字的证据。
+    /// - ideographs: 确认整个原行只由基本统一汉字及所支持全角标点组成的证据。
     /// 返回：具备完整原生断行证据的初始窗口；不支持的内容、字体或宽度交回普通段落门禁。
     init?(
         snapshot: DocumentSnapshot,
@@ -84,8 +84,10 @@ final class WrappedASCIIWindow: LongLineProjection {
         )
         let han: NativeHanLineFont?
         if let ideographs {
-            guard wordIndex == nil, ideographs.range == range, ideographs.matches(snapshot.text),
-                ideographs.containsOnlyUnifiedIdeographs,
+            guard ideographs.range == range, ideographs.matches(snapshot.text),
+                ideographs.characterCount * 3 == range.count,
+                wordIndex?.usesFullWidthFont == true
+                    || wordIndex == nil && ideographs.containsOnlyUnifiedIdeographs,
                 let resolved = NativeHanLineFont.resolve(from: actual)
             else {
                 return nil
@@ -93,6 +95,9 @@ final class WrappedASCIIWindow: LongLineProjection {
             han = resolved
         }
         else {
+            guard wordIndex?.usesFullWidthFont != true else {
+                return nil
+            }
             han = nil
         }
         // 断行必须拥有完整原文与实际字体证据，基本汉字的真实步距来自已确认的级联字体。
@@ -125,7 +130,8 @@ final class WrappedASCIIWindow: LongLineProjection {
                 let grid = Self.referenceGeometry(
                     font: actual,
                     width: containerWidth,
-                    appearance: appearance
+                    appearance: appearance,
+                    hanFont: han
                 ),
                 wordIndex.range == range, wordIndex.matches(snapshot.text, columns: grid.columns),
                 let first = wordIndex.rows(startingAt: 0, count: 1)?.first
@@ -195,27 +201,33 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - font: 已根据实际主题和缩放选定的原生字体。
     /// - width: 当前原生正文容器的真实宽度。
     /// - appearance: 当前编辑视图的外观。
+    /// - hanFont: 测量实际全角网格时采用的已确认级联字体。
     /// 返回：TextKit 实测的固定网格；字体或容器不能形成该网格时为空。
-    static func referenceGeometry(font: NSFont, width: CGFloat, appearance: NSAppearance)
-        -> WrappedASCIIGeometry?
-    {
+    static func referenceGeometry(
+        font: NSFont,
+        width: CGFloat,
+        appearance: NSAppearance,
+        hanFont: NativeHanLineFont? = nil
+    ) -> WrappedASCIIGeometry? {
         guard width.isFinite, width > 0,
-            let advance = NativeMonospaceGeometry.uniformAdvance(font, appearance: appearance),
+            let advance = hanFont?.advance
+                ?? NativeMonospaceGeometry.uniformAdvance(font, appearance: appearance),
             width / advance <= 8192
         else {
             return nil
         }
         let size = max(1, Int(width / advance)) * 4
-        let tree = PieceTree(String(repeating: "A", count: size))
+        let tree = PieceTree(String(repeating: hanFont == nil ? "A" : "中", count: size))
         let native = Self.layout(
             snapshot: DocumentSnapshot(id: UUID(), revision: 0, text: tree),
-            range: ByteRange(0, size),
+            range: ByteRange(0, tree.byteCount),
             font: font,
             appearance: appearance,
             width: width,
             theme: nil,
             language: nil,
-            fontZoomAdjustment: 0
+            fontZoomAdjustment: 0,
+            hanFont: hanFont
         )
         return native.uniformWrapping(advance: advance)
     }

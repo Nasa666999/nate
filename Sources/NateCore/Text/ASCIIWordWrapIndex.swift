@@ -7,6 +7,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     public let maximumRowLength: Int
     public let characterCount: Int
     public let narrowScalars: [UInt16]
+    public let usesFullWidthFont: Bool
 
     private struct Anchor: Sendable {
         let row: Int
@@ -18,7 +19,14 @@ public struct ASCIIWordWrapIndex: Sendable {
         case row
     }
 
+    private enum Script {
+        case ascii
+        case narrow
+        case han
+    }
+
     private let text: PieceTree
+    private let script: Script
     private let anchors: [Anchor]
     private static let anchorDistance = 4096
     private static let maximumRowBytes = 65_536
@@ -49,21 +57,77 @@ public struct ASCIIWordWrapIndex: Sendable {
         narrow: PlainNarrowUnicodeLine?,
         deadline: ContinuousClock.Instant
     ) throws {
+        try self.init(
+            text: text,
+            range: range,
+            columns: columns,
+            narrow: narrow,
+            han: nil,
+            deadline: deadline
+        )
+    }
+
+    /// 业务作用：全角汉字与明确标点采用实测级联字体的固定字形数及原始断行边界。
+    /// 参数说明:
+    /// - text: 当前提交的不可变正文。
+    /// - range: 排除原始结束符的完整逻辑行。
+    /// - columns: 当前容器和实际全角字体确认的每行字形数。
+    /// - han: 同一完整原行的全角字符证据。
+    /// - deadline: 全部字体范围的共同准备截止。
+    /// 返回：原始字节软换行，遇到窄字形、超限或源变化时不发布部分索引。
+    public init?(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        fullWidth han: PlainHanLine,
+        deadline: ContinuousClock.Instant
+    ) throws {
+        try self.init(text: text, range: range, columns: columns, narrow: nil, han: han, deadline: deadline)
+    }
+
+    /// 业务作用：不同字体类型复用同一完整视觉行索引和有界稀疏锚点。
+    /// 参数说明:
+    /// - text: 当前固定的原正文。
+    /// - range: 待确认的完整逻辑行原字节范围。
+    /// - columns: 实际对应字体和容器的列数。
+    /// - narrow: 可选的同源多字节窄字母证明。
+    /// - han: 可选的同源全角字形证明。
+    /// - deadline: 准备任务的共同截止。
+    /// 返回：字体类别和所有边界已经核对的完整索引，超量或非法字符时拒绝。
+    private init?(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        narrow: PlainNarrowUnicodeLine?,
+        han: PlainHanLine?,
+        deadline: ContinuousClock.Instant
+    ) throws {
         guard range.lower >= 0, range.upper > range.lower, range.upper <= text.byteCount,
             range.count <= 1_073_741_824, (1...8192).contains(columns)
         else {
             return nil
         }
-        if let narrow {
+        let script: Script
+        if let han {
+            // 只有整行字形都由同一个全角字体提供时，才可按固定视觉列计算断点。
+            guard han.range == range, han.matches(text), han.characterCount * 3 == range.count else {
+                return nil
+            }
+            script = .han
+        }
+        else if let narrow {
             guard narrow.range == range, narrow.matches(text) else {
                 return nil
             }
+            script = .narrow
         }
-        else if !text.isPrintableASCII(in: range) {
-            return nil
+        else {
+            guard text.isPrintableASCII(in: range) else {
+                return nil
+            }
+            script = .ascii
         }
-        let supportsNarrow = narrow != nil
-        var cursor = Cursor(text: text, range: range, supportsNarrow: supportsNarrow)
+        var cursor = Cursor(text: text, range: range, script: script)
         var anchors = [Anchor(row: 0, byte: range.lower)]
         var row = 0
         var start = range.lower
@@ -97,13 +161,15 @@ public struct ASCIIWordWrapIndex: Sendable {
             throw NateError.message("超长自动换行的原字节索引超过共同截止。")
         }
         self.text = text
+        self.script = script
         self.range = range
         self.columns = columns
         self.anchors = anchors
         rowCount = row
         maximumRowLength = widest
-        characterCount = narrow?.characterCount ?? range.count
+        characterCount = han?.characterCount ?? narrow?.characterCount ?? range.count
         narrowScalars = narrow?.scalars ?? []
+        usesFullWidthFont = script == .han
     }
 
     /// 业务作用：不同修订、排版宽度或正文根不能使用另一份视觉行范围。
@@ -121,14 +187,14 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - downstream: 是否采用断点之后的视觉行，文件行尾始终属于最后一个视觉行。
     /// 返回：实际视觉行号；原字节越界或证据不足时为空。
     public func row(at byte: Int, downstream: Bool) -> Int? {
-        guard range.lower <= byte, byte <= range.upper, narrowScalars.isEmpty || text.isBoundary(byte) else {
+        guard range.lower <= byte, byte <= range.upper, script == .ascii || text.isBoundary(byte) else {
             return nil
         }
         let target = max(range.lower, min(range.upper - 1, downstream ? byte : byte - 1))
         let anchor = anchor(at: target, by: \.byte)
         var row = anchor.row
         var start = anchor.byte
-        var cursor = Cursor(text: text, range: range, supportsNarrow: !narrowScalars.isEmpty)
+        var cursor = Cursor(text: text, range: range, script: script)
         while let next = try? cursor.nextRow(after: start, columns: columns) {
             if target < next.end {
                 return row
@@ -149,7 +215,7 @@ public struct ASCIIWordWrapIndex: Sendable {
             return nil
         }
         let anchor = anchor(at: row, by: \.row)
-        var cursor = Cursor(text: text, range: range, supportsNarrow: !narrowScalars.isEmpty)
+        var cursor = Cursor(text: text, range: range, script: script)
         var start = anchor.byte
         var output: [ByteRange] = []
         output.reserveCapacity(count)
@@ -190,7 +256,7 @@ extension ASCIIWordWrapIndex {
     private struct Cursor {
         let text: PieceTree
         let range: ByteRange
-        let supportsNarrow: Bool
+        let script: Script
         private var pageStart = 0
         private var page: [UInt8] = []
 
@@ -198,12 +264,12 @@ extension ASCIIWordWrapIndex {
         /// 参数说明:
         /// - text: 当前固定正文。
         /// - range: 原逻辑行的合法原字节范围。
-        /// - supportsNarrow: 当前范围已通过多字节独立窄字母确认时为真。
+        /// - script: 原文范围已确认的字形类别。
         /// 返回：独立的有界读缓存。
-        init(text: PieceTree, range: ByteRange, supportsNarrow: Bool) {
+        init(text: PieceTree, range: ByteRange, script: Script) {
             self.text = text
             self.range = range
-            self.supportsNarrow = supportsNarrow
+            self.script = script
         }
 
         /// 业务作用：按实际等宽软换行规则分隔独立单词和尾随空格，过长单词按原字节边界分段。
@@ -214,6 +280,9 @@ extension ASCIIWordWrapIndex {
         mutating func nextRow(after start: Int, columns: Int) throws -> (end: Int, cells: Int) {
             guard start < range.upper else {
                 throw Refusal.row
+            }
+            if script == .han {
+                return try nextHanRow(after: start, columns: columns)
             }
             var position = start
             var cells = 0
@@ -228,7 +297,7 @@ extension ASCIIWordWrapIndex {
                 else if PieceNode.isASCIIAlphanumeric(scalar) {
                     position += 1
                 }
-                else if supportsNarrow, (194...223).contains(scalar) {
+                else if script == .narrow, (194...223).contains(scalar) {
                     // 两字节独立窄字母已由同一原文的标量证据确认，不能在 UTF-8 内切开视觉行。
                     position += 2
                 }
@@ -251,6 +320,56 @@ extension ASCIIWordWrapIndex {
                 cells += 1
             } while position < range.upper && byte(at: position) == 32
             return (position, cells)
+        }
+
+        private static let opens = Set("〈《「『【〔（［｛".utf16)
+        private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
+
+        /// 业务作用：保留全角行首和行尾标点约束，容器不足时按实际完整字形强制断行。
+        /// 参数说明:
+        /// - start: 上一视觉行已确认的实际原字节边界。
+        /// - columns: 已确认的全角字体单行容量。
+        /// 返回：下一视觉行真实端点及前一行占用的 UTF-16 单元数。
+        private mutating func nextHanRow(after start: Int, columns: Int) throws -> (end: Int, cells: Int) {
+            let hard = min(range.upper, start + columns * 3)
+            guard hard < range.upper else {
+                return (hard, (hard - start) / 3)
+            }
+            var previous = hanScalar(at: start)
+            var valid: Int?
+            for boundary in stride(from: start + 3, through: hard, by: 3) {
+                let following = hanScalar(at: boundary)
+                if !Self.opens.contains(previous), !Self.cannotStart.contains(following) {
+                    valid = boundary
+                }
+                previous = following
+            }
+            if previous == 0x3000 {
+                // 真实 TextKit 只在空白后的下一个字符允许行首时，把溢出的全角空白归到前一行。
+                var end = hard
+                while end < range.upper, hanScalar(at: end) == 0x3000 {
+                    guard end - start <= ASCIIWordWrapIndex.maximumRowBytes - 3 else {
+                        throw Refusal.row
+                    }
+                    end += 3
+                }
+                if end == range.upper || !Self.cannotStart.contains(hanScalar(at: end)) {
+                    return (end, (end - start) / 3)
+                }
+            }
+            let end = valid ?? hard
+            return (end, (end - start) / 3)
+        }
+
+        /// 业务作用：直接在同源 UTF-8 中取得已证明的完整三字节全角标量。
+        /// 参数说明:
+        /// - offset: 完整原标量的起点。
+        /// 返回：可完整参与标点约束的单个 BMP 标量。
+        private mutating func hanScalar(at offset: Int) -> UInt16 {
+            let first = UInt16(byte(at: offset) & 15)
+            let second = UInt16(byte(at: offset + 1) & 63)
+            let third = UInt16(byte(at: offset + 2) & 63)
+            return (first << 12) | (second << 6) | third
         }
 
         /// 业务作用：读取同源的原字节，独立窄字母可能跨越局部读取缓存。
