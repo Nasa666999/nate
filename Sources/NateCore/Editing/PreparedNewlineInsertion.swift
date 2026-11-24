@@ -32,7 +32,7 @@ public struct PreparedNewlineInsertion: Sendable {
     /// - tabSettings: 结构动作增加或减少缩进时采用的当前语言规则。
     /// - structuralIndentation: 同一来源证据为每个完整目标提供的结构动作，省略时只继承。
     /// - permit: 前缀读取、容量检查和事务构建共享的继续资格。
-    /// 返回：保留建立顺序、身份和主项的完整事务；缩进读取累计超过 1 MiB 或任一目标失败时全部保留。
+    /// 返回：保留建立顺序、身份和主项的完整事务；原行和对齐前缀读取累计超过 1 MiB 或任一目标失败时全部保留。
     public init(
         snapshot: DocumentSnapshot,
         targets: [NewlineInsertionTarget]? = nil,
@@ -125,6 +125,13 @@ public struct PreparedNewlineInsertion: Sendable {
             // 插入点仍在前导空白中时，原生边缘保留的 Tab 列也是本次实际缩进，不能在换行后丢掉。
             let extra = indent.continuesIndentation ? target.leadingSpaces : 0
             let action = inheritIndentation ? try structuralIndentation?(target) ?? .inherit : .inherit
+            if case .align(let prefix, _) = action {
+                // 对齐来源也是整批输入读取的真实前缀，不能为每个光标重新取得一份完整额度。
+                guard prefix.utf8.count <= remaining else {
+                    throw NateError.message("全部换行缩进读取超过 1 MiB，原正文与选择保留。")
+                }
+                remaining -= prefix.utf8.count
+            }
             let prepared = try NewlineIndentationText.prepare(
                 prefix: indent.text,
                 ending: ending,
