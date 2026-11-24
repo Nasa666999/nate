@@ -67,7 +67,11 @@ public struct FoldIndex: Sendable {
             candidates = try UDLFolding.regions(snapshot: snapshot, definition: udl, deadline: deadline)
         }
         else if language?.id == "ruby" {
-            candidates = try RubyFolding.regions(snapshot: snapshot, deadline: deadline)
+            candidates = try RubyFolding.regions(
+                snapshot: snapshot,
+                brackets: brackets.structuralPairs,
+                deadline: deadline
+            )
         }
         else if let language, language.id == "lua" {
             candidates = try LuaFolding.regions(snapshot: snapshot, language: language, deadline: deadline)
