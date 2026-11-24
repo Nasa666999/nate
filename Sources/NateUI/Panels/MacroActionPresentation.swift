@@ -29,6 +29,9 @@ public enum MacroActionPresentation {
             if let navigation = BracketNavigation(rawValue: name) {
                 return navigation.title
             }
+            if let quickFind = QuickFindAction(rawValue: name) {
+                return quickFind.title
+            }
             return "文本命令：" + (commandNames[name] ?? name)
         case .lineSort(let options):
             let direction =
@@ -77,6 +80,13 @@ public enum MacroActionPresentation {
             }
             if let navigation = BracketNavigation(rawValue: name) {
                 return navigation.title + "\n使用播放时的正文、语言和主光标。"
+            }
+            if let quickFind = QuickFindAction(rawValue: name) {
+                let options =
+                    quickFind.isVolatile
+                    ? "保留查找条件与历史，忽略大小写、允许子串并循环。"
+                    : "更新当前查询与历史，采用当前大小写、整词与循环选项。"
+                return quickFind.title + "\n查找播放时的实际选区或完整光标词。\n" + options
             }
             return "文本命令：" + (commandNames[name] ?? name) + "\n标识：" + name
         case .lineSort(let options):

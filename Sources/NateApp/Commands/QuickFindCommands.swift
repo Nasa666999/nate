@@ -3,27 +3,6 @@ import NateCore
 import NateSearch
 import NateUI
 
-enum QuickFindAction: String, Sendable {
-    case selectNext = "selectFindNext"
-    case selectPrevious = "selectFindPrevious"
-    case volatileNext = "volatileFindNext"
-    case volatilePrevious = "volatileFindPrevious"
-
-    /// 业务作用：明确区分临时查询与更新当前查找条件的用户意图。
-    /// 参数说明: 无。
-    /// 返回：临时查找不更新完整查找窗口与历史。
-    var isVolatile: Bool {
-        self == .volatileNext || self == .volatilePrevious
-    }
-
-    /// 业务作用：快捷动作方向独立于查找窗口当前方向选项。
-    /// 参数说明: 无。
-    /// 返回：上一个匹配动作为反向，其余为正向。
-    var backwards: Bool {
-        self == .selectPrevious || self == .volatilePrevious
-    }
-}
-
 extension ApplicationController {
     /// 业务作用：只收回当前快捷查找的导航权，正文修改或退出不能继续发布旧修订的命中。
     /// 参数说明: 无。
@@ -71,13 +50,56 @@ extension ApplicationController {
         return (document, window, window.editor)
     }
 
-    /// 业务作用：从真实正文选择执行 Select and Find 或 Volatile Find，后台提取与导航分别复验同一来源。
+    /// 业务作用：从真实正文选择执行快捷动作，仅在同一录制内登记实际发布的命中。
     /// 参数说明:
     /// - action: 是否更新当前条件，以及明确的导航方向。
-    /// 返回：完整原文匹配后仅发布一个命中；临时查找保留查询、历史与窗口可见性，过期或取消不移动新光标。
+    /// 返回：安排实际取词与导航，失败、过期或取消不记录宏动作。
     func quickFind(_ action: QuickFindAction) {
-        guard let (document, window, editor) = quickFindContext() else {
+        guard macroRecording, !macroPlaying else {
+            _ = requestQuickFind(action, onMatch: nil)
             return
+        }
+        let recording = macroRecordingGeneration
+        _ = requestQuickFind(action) { [weak self] in
+            guard let self, self.macroRecordingGeneration == recording else {
+                return
+            }
+            self.appendRecordedMacroAction(.command(action.rawValue))
+        }
+    }
+
+    /// 业务作用：宏按播放时实际选区或完整光标词导航，等待匹配实际发布后才交给下一步。
+    /// 参数说明:
+    /// - action: 归档明确指定的快捷查询方式与方向。
+    /// 返回：取得实际匹配时为真，边界、取消、失权或准备失败时为假。
+    func playQuickFind(_ action: QuickFindAction) async -> Bool {
+        var matched = false
+        guard !Task.isCancelled, let pending = requestQuickFind(action, onMatch: { matched = true }) else {
+            return false
+        }
+        // 取消只撤销本次查找，之后接管查询的用户命令仍持有独立任务。
+        await withTaskCancellationHandler(
+            operation: {
+                await pending.value
+            },
+            onCancel: {
+                pending.cancel()
+            }
+        )
+        return matched && !Task.isCancelled
+    }
+
+    /// 业务作用：快捷查找的后台取词、设置更新和导航分别复验同一正文来源。
+    /// 参数说明:
+    /// - action: 查询方式及明确方向。
+    /// - onMatch: 当前实际选中完整命中后调用一次，到达边界时不调用。
+    /// 返回：已登记的查找任务或无效来源时为空；临时查询保持窗口和搜索历史。
+    private func requestQuickFind(
+        _ action: QuickFindAction,
+        onMatch: (@MainActor () -> Void)?
+    ) -> Task<Void, Never>? {
+        guard let (document, window, editor) = quickFindContext() else {
+            return nil
         }
         let snapshot = document.buffer.snapshot
         let selections = editor.viewSelections
@@ -131,7 +153,7 @@ extension ApplicationController {
             return true
         }
         window.status.stringValue = "正在快捷查找…"
-        searchTask = Task {
+        let task = Task {
             [weak self, weak editor] in
             guard let self else {
                 return
@@ -221,6 +243,9 @@ extension ApplicationController {
                 self.mainWindow?.refreshEditors()
                 self.refreshUI()
                 self.mainWindow?.status.stringValue = result.hits.isEmpty ? "快捷查找已到达边界或没有匹配。" : "已定位快捷匹配。"
+                if !result.hits.isEmpty {
+                    onMatch?()
+                }
             }
             catch {
                 if current() {
@@ -228,6 +253,8 @@ extension ApplicationController {
                 }
             }
         }
+        searchTask = task
+        return task
     }
 
     /// 业务作用：快捷菜单只验证上下文与选区形态，不为菜单显示扫描正文或建立查找窗口。

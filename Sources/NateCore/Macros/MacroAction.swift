@@ -48,7 +48,7 @@ public enum MacroAction: Codable, Sendable {
         case .command(let name):
             guard
                 TextCommand(rawValue: name) != nil || BookmarkAction(rawValue: name)?.macroTitle != nil
-                    || BracketNavigation(rawValue: name) != nil
+                    || BracketNavigation(rawValue: name) != nil || QuickFindAction(rawValue: name) != nil
             else {
                 let label = name.unicodeScalars.prefix(128).map {
                     $0.value < 32 ? "�" : String($0)

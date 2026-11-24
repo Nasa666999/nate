@@ -223,6 +223,11 @@ extension ApplicationController {
                             return
                         }
                     }
+                    else if let quickFind = QuickFindAction(rawValue: name) {
+                        guard await playQuickFind(quickFind) else {
+                            return
+                        }
+                    }
                     else {
                         mainWindow?.status.stringValue = "宏已停止：无法识别的编辑动作“" + name + "”。"
                         return
