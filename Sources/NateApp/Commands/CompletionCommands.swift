@@ -36,6 +36,14 @@ extension ApplicationController {
         let snapshot = document.buffer.snapshot
         let selections = editor.viewSelections
         let wordBoundaries = editor.wordBoundaries
+        let signatureLanguage = editor.userLanguage == nil ? editor.language : nil
+        let checkpoint = editor.primarySelection.flatMap {
+            var start = max(0, $0.head - CompletionEngine.maximumSignatureContextBytes)
+            while !snapshot.text.isBoundary(start) {
+                start += 1
+            }
+            return editor.completionSyntaxCheckpoint(atOrBefore: start)
+        }
         let languageID = document.language
         let current: @MainActor () -> Bool = { [weak self, weak document] in
             guard let self, let document, !self.closing, !document.closing, !Task.isCancelled,
@@ -69,6 +77,9 @@ extension ApplicationController {
             }
             do {
                 let worker = Task.detached(priority: .userInitiated) {
+                    () throws -> (
+                        CompletionResult, SignatureHint?, String?
+                    ) in
                     let context = try CompletionEngine.context(
                         in: snapshot,
                         selections: selections,
@@ -87,18 +98,28 @@ extension ApplicationController {
                         languageWords: showWords && mode != "completeWords" && languageWords,
                         wordBoundaries: wordBoundaries
                     )
-                    let hint =
-                        !automatic || automaticOptions.signatures
-                        ? try definition.flatMap {
-                            try CompletionEngine.signature(
-                                snapshot: snapshot,
-                                caret: context.range.upper,
-                                definition: $0
-                            )
-                        } : nil
-                    return (result, hint)
+                    guard !automatic || automaticOptions.signatures, let definition else {
+                        return (result, nil, nil)
+                    }
+                    do {
+                        let hint = try CompletionEngine.signature(
+                            snapshot: snapshot,
+                            caret: context.range.upper,
+                            definition: definition,
+                            language: signatureLanguage,
+                            checkpoint: checkpoint
+                        )
+                        return (result, hint, nil)
+                    }
+                    catch is CancellationError {
+                        throw CancellationError()
+                    }
+                    catch {
+                        // 参数提示缺少词法证据时，已经独立验证的文档及语言候选仍然可以呈现。
+                        return (result, nil, error.localizedDescription)
+                    }
                 }
-                let (result, hint) = try await withTaskCancellationHandler(
+                let (result, hint, hintFailure) = try await withTaskCancellationHandler(
                     operation: {
                         try await worker.value
                     },
@@ -114,7 +135,7 @@ extension ApplicationController {
                     self.mainWindow?.status.stringValue = "补全前缀超过 4096 字节。"
                 }
                 else if !automatic && result.candidates.isEmpty && hint == nil {
-                    self.mainWindow?.status.stringValue = "没有匹配的补全或函数参数规则。"
+                    self.mainWindow?.status.stringValue = hintFailure ?? "没有匹配的补全或函数参数规则。"
                 }
                 editor.presentCompletions(
                     result,

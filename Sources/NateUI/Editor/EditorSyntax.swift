@@ -3,6 +3,27 @@ import NateCore
 import NateSyntax
 
 extension EditorView {
+    /// 业务作用：函数参数提示可复用当前正文的行首状态，深处的注释和字面不会被误当作独立代码。
+    /// 参数说明:
+    /// - position: 同一快照中待扫描窗口的最早字节位置。
+    /// 返回：同一文档、修订及内置词法来源的最近检查点，尚未验证的状态不提供。
+    public func completionSyntaxCheckpoint(atOrBefore position: Int) -> (line: Int, state: LexicalState)? {
+        guard let language, userLanguage == nil, syntaxDocument == document.id,
+            syntaxRevision == document.revision, syntaxLanguage == language.id + ":",
+            document.text.isBoundary(position)
+        else {
+            return nil
+        }
+        let line = document.text.lineNumber(at: position)
+        guard let start = syntaxCheckpoints.keys.filter({ $0 <= line }).max(),
+            let state = syntaxCheckpoints[start],
+            case .native = state
+        else {
+            return nil
+        }
+        return (start, state)
+    }
+
     /// 业务作用：在当前视口保留语法计算的等待或容量边界，不让周期保存刷新掩盖失败原因。
     /// 参数说明: 无。
     /// 返回：仅当前文档修订和视口适用的语法状态，其它情况为空。
