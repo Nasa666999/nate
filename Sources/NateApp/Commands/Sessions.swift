@@ -67,10 +67,14 @@ extension ApplicationController {
     /// 业务作用：导入会话先校验格式与路径，远程位置未经选择不主动连接。
     /// 参数说明:
     /// - url: 用户选择的会话文件。
+    /// - requestedPlacement: 系统请求选定的窗口，菜单打开时捕获当前编辑窗口。
     /// 返回：逐项打开有效文件，部分失败按实际清单显示。
-    func loadSession(_ url: URL) async {
+    func loadSession(_ url: URL, placement requestedPlacement: FileOpenPlacement? = nil) async {
+        let placement = requestedPlacement ?? FileOpenPlacement(mode: .reuseWindow, origin: mainWindow)
         // 候选仍持有原输入目标，必须成功确认后才能由会话改变选择与编辑权限。
-        guard mainWindow?.finishCompositions() != false else {
+        guard !closing, isWorkspaceWindowAvailable(placement.window),
+            placement.window?.finishCompositions() != false
+        else {
             return
         }
         do {
@@ -90,7 +94,7 @@ extension ApplicationController {
                 return session
             }
             // 会话读取期间退出可能已经接管工作区，旧载入不得再改变已冻结的视图与权限。
-            guard !closing else {
+            guard !closing, !Task.isCancelled, isWorkspaceWindowAvailable(placement.window) else {
                 return
             }
             var skipped: [String] = []
@@ -102,52 +106,53 @@ extension ApplicationController {
                     skipped.append(entry.path)
                     continue
                 }
-                await openFile(URL(fileURLWithPath: entry.path))
-                // 文件等待返回后重新检查退出权威，不能把迟到会话设置发布到已经冻结的工作区。
-                guard !closing else {
+                let opened = await openFile(URL(fileURLWithPath: entry.path), placement: placement)
+                // 文件等待返回后复验原窗口和退出权威，迟到会话不能修改另一窗口的选区。
+                guard !closing, !Task.isCancelled, isWorkspaceWindowAvailable(placement.window) else {
                     return
                 }
-                guard
-                    let document = documents.first(where: {
-                        $0.url?.path == entry.path
-                    })
-                else {
+                guard let document = opened, document.url != nil else {
                     skipped.append(entry.path)
                     continue
                 }
-                guard mainWindow?.finishCompositions() != false else {
+                guard finishWorkspaceCompositions(documentID: document.buffer.id) else {
                     return
                 }
                 document.language = entry.language
                 document.languageExplicit = true
-                if let state = entry.selectionState {
-                    do {
+                do {
+                    let state = try document.selectionForRestore(
+                        entry.selectionState,
+                        legacySelections: entry.selections
+                    )
+                    if let window = placement.window, window.editor.document === document.buffer {
+                        try window.editor.setSelectionState(state)
+                        window.editor.revealSelection()
+                    }
+                    else if placement.window == nil {
                         try document.buffer.setSelectionState(state)
                     }
-                    catch {
-                        // 路径正文可能在会话保存后改变，保留已打开内容和当前合法光标，不丢弃部分稳定身份。
-                        selectionFailures.append(entry.path + "：" + error.localizedDescription)
-                    }
                 }
-                else {
-                    try document.restoreSelections(nil, legacySelections: entry.selections)
+                catch {
+                    // 路径正文可能在会话保存后改变，保留已打开内容和当前合法光标，不丢弃部分稳定身份。
+                    selectionFailures.append(entry.path + "：" + error.localizedDescription)
                 }
-                document.buffer.isReadOnly = entry.readOnly
                 document.buffer.bookmarks = entry.bookmarks
+                setReadOnly(document, value: entry.readOnly)
             }
             if !skipped.isEmpty || !selectionFailures.isEmpty {
                 let paths = skipped.isEmpty ? "" : "以下路径未打开：\n" + skipped.joined(separator: "\n")
                 let selections =
                     selectionFailures.isEmpty
                     ? "" : "以下完整选择与当前正文不符，保留当前光标：\n" + selectionFailures.joined(separator: "\n")
-                mainWindow?.showResults(
+                placement.window?.showResults(
                     "会话部分载入\n"
                         + [paths, selections].filter {
                             !$0.isEmpty
                         }.joined(separator: "\n")
                 )
             }
-            mainWindow?.editor.refresh(reveal: true)
+            placement.window?.refreshEditors()
             refreshUI()
         }
         catch {

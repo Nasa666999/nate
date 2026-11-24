@@ -211,14 +211,16 @@ extension ApplicationController {
     /// - url: 解码失败的原目标。
     /// - reason: 原始失败原因。
     /// - window: 原文件打开请求的编辑窗口。
+    /// - placement: 系统打开请求原先选择的组内窗口策略。
     /// - permit: 原请求继续发布的资格。
-    /// 返回：用户确认后打开所选代码页或独立字节视图。
+    /// 返回：用户确认后打开所选代码页或独立字节视图；取消、关闭或失败时为空。
     func offerDecode(
         _ url: URL,
         reason: String,
         in window: EditorWindow?,
+        placement: FileOpenPlacement?,
         permit: @MainActor () -> Bool
-    ) async {
+    ) async -> WorkspaceDocument? {
         /// 业务作用：模态操作与字节读取再次确认原解码来源，不能依赖初次文件读取的权限。
         /// 参数说明: 无。
         /// 返回：调用、窗口和应用状态均保持有效时为真。
@@ -238,13 +240,14 @@ extension ApplicationController {
         let choice = alert.runModal()
         // 模态期间可能关闭了原窗口或撤销打开意图，不能把响应交给另一窗口。
         guard mayPublish() else {
-            return
+            return nil
         }
         if choice == .alertFirstButtonReturn {
-            await openFile(
+            return await openFile(
                 url,
                 explicitEncoding: TextEncoding.available[popup.indexOfSelectedItem],
                 in: window,
+                placement: placement,
                 permit: permit
             )
         }
@@ -283,13 +286,18 @@ extension ApplicationController {
                         + lines.joined(separator: "\n")
                 }
                 // 字节样本只属于原请求；关闭期间或撤销后不建立新文档。
-                guard mayPublish() else {
-                    return
+                guard mayPublish(), documents.count < 1024 else {
+                    return nil
                 }
                 let document = WorkspaceDocument(name: url.lastPathComponent + " · 字节视图", text: display)
                 document.buffer.isReadOnly = true
                 documents.append(document)
-                activate(document.buffer.id, in: window)
+                let displayed =
+                    placement?.present(document, using: self) ?? activate(document.buffer.id, in: window)
+                if !displayed {
+                    refreshUI()
+                }
+                return displayed ? document : nil
             }
             catch {
                 if mayPublish() {
@@ -297,5 +305,6 @@ extension ApplicationController {
                 }
             }
         }
+        return nil
     }
 }

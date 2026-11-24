@@ -51,12 +51,14 @@ private final class FileOpeningForm: NSObject {
     let language = NSPopUpButton()
     let ending = NSPopUpButton()
     let directory = NSPopUpButton()
+    let finderWindow = NSPopUpButton()
     let custom: NSTextField
     let recent: NSTextField
     let folder = NSButton(title: "选择目录…", target: nil, action: nil)
     let status: NSTextField
     private var languageIDs: [String]
     private let directoryModes: [FileDirectoryMode] = [.lastUsed, .currentDocument, .custom]
+    private let windowModes: [FileOpenWindowMode] = [.reuseWindow, .newWindow]
 
     /// 业务作用：固定菜单身份并保留未载入语言与停用目录草稿，资源暂时缺席不丢失用户选择。
     /// 参数说明:
@@ -87,6 +89,8 @@ private final class FileOpeningForm: NSObject {
         directory.selectItem(at: directoryModes.firstIndex(of: initial.directoryMode) ?? 0)
         directory.target = self
         directory.action = #selector(updateDirectory)
+        finderWindow.addItems(withTitles: ["复用当前窗口", "打开新窗口"])
+        finderWindow.selectItem(at: windowModes.firstIndex(of: initial.finderWindowMode) ?? 0)
         folder.target = self
         folder.action = #selector(chooseDirectory)
         language.setAccessibilityLabel("新建默认语言")
@@ -94,6 +98,7 @@ private final class FileOpeningForm: NSObject {
         directory.setAccessibilityLabel("文件对话框默认目录")
         custom.setAccessibilityLabel("自定义默认目录路径")
         recent.setAccessibilityLabel("最近文件数量上限")
+        finderWindow.setAccessibilityLabel("Finder 打开文件的窗口")
         status.textColor = .systemOrange
         status.preferredMaxLayoutWidth = 480
         let pathRow = NSStackView(views: [custom, folder])
@@ -112,7 +117,8 @@ private final class FileOpeningForm: NSObject {
             NSTextField(labelWithString: "新建文档语言"), language,
             NSTextField(labelWithString: "新建文档换行"), ending,
             NSTextField(labelWithString: "打开与另存为的起始目录"), directory,
-            pathRow, NSTextField(labelWithString: "最近文件数量"), recent, note, status,
+            pathRow, NSTextField(labelWithString: "Finder 打开文件"), finderWindow,
+            NSTextField(labelWithString: "最近文件数量"), recent, note, status,
         ] {
             stack.addArrangedSubview(view)
         }
@@ -155,16 +161,18 @@ private final class FileOpeningForm: NSObject {
                 $0 >= 48 && $0 <= 57
             }), let limit = Int(count), languageIDs.indices.contains(language.indexOfSelectedItem),
             directoryModes.indices.contains(directory.indexOfSelectedItem),
+            windowModes.indices.contains(finderWindow.indexOfSelectedItem),
             LineEnding.allCases.indices.contains(ending.indexOfSelectedItem)
         else {
-            throw NateError.message("请选择完整语言、换行与目录来源，并输入 0–200 的整数。")
+            throw NateError.message("请选择语言、换行、目录来源与 Finder 窗口，并输入 0–200 的整数。")
         }
         return try FileOpeningSettings(
             defaultLanguage: languageIDs[language.indexOfSelectedItem],
             lineEnding: LineEnding.allCases[ending.indexOfSelectedItem],
             recentFileLimit: limit,
             directoryMode: directoryModes[directory.indexOfSelectedItem],
-            customDirectory: custom.stringValue
+            customDirectory: custom.stringValue,
+            finderWindowMode: windowModes[finderWindow.indexOfSelectedItem]
         )
     }
 }

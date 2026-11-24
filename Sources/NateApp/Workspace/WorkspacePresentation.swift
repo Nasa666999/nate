@@ -30,15 +30,7 @@ extension ApplicationController {
         renderWorkspaceTabs()
         window.window?.title = active.name + " — Nate"
         window.window?.representedURL = active.url
-        window.editor.language = registry?.language(active.language)
-        if active.language == "markdown" {
-            let dark = window.editor.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            window.editor.userLanguage =
-                userLanguages[dark ? "udl:Markdown (preinstalled dark mode)" : "udl:Markdown (preinstalled)"]
-        }
-        else {
-            window.editor.userLanguage = userLanguages[active.language]
-        }
+        applyLanguagePresentation(for: active, in: window)
         applyCurrentTabSettings()
         window.setIndentationSettings(currentIndentationSettings())
         window.setPairInsertionSettings(currentPairSettings())
@@ -157,7 +149,25 @@ extension ApplicationController {
             if window !== mainWindow, let document = documents.first(where: { $0.buffer.id == id }) {
                 window.window?.title = document.name + " — Nate"
                 window.window?.representedURL = document.url
+                applyLanguagePresentation(for: document, in: window)
             }
+        }
+    }
+
+    /// 业务作用：源窗口在后台读入新正文时也使用它的真实语言和所属窗口的外观。
+    /// 参数说明:
+    /// - document: 已绑定到窗口的实际文档。
+    /// - window: 需要更新语法呈现的编辑窗口。
+    /// 返回：当前视图采用相应原生词法或用户定义语言，保留独立选择和焦点。
+    private func applyLanguagePresentation(for document: WorkspaceDocument, in window: EditorWindow) {
+        window.editor.language = registry?.language(document.language)
+        if document.language == "markdown" {
+            let dark = window.editor.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            window.editor.userLanguage =
+                userLanguages[dark ? "udl:Markdown (preinstalled dark mode)" : "udl:Markdown (preinstalled)"]
+        }
+        else {
+            window.editor.userLanguage = userLanguages[document.language]
         }
     }
 }

@@ -14,6 +14,7 @@ struct CLIArguments: Codable, Sendable {
     var noRestore = false
     var folders: [URL] = []
     var session: URL?
+    var windowMode: FileOpenWindowMode?
     static let help = """
         Nate — 原生 macOS 文本与代码编辑器
         用法：nate [选项] [--] 文件…
@@ -23,6 +24,8 @@ struct CLIArguments: Codable, Sendable {
           -ro                    编辑器只读
           --monitor              只读监视文件
           --no-restore           本次启动不恢复会话
+          --new-window           本批请求打开独立窗口
+          --reuse-window         本批请求复用当前窗口（默认）
           -openSession 文件      打开 Nate 命名会话
           -openFoldersAsWorkspace 目录…  显示目录工作区
           --                     后续参数全部按文件名解释
@@ -76,6 +79,12 @@ struct CLIArguments: Codable, Sendable {
                 monitor = true
                 readOnly = true
             case "--no-restore", "-nosession": noRestore = true
+            case "--new-window", "--reuse-window":
+                let selected: FileOpenWindowMode = value == "--new-window" ? .newWindow : .reuseWindow
+                guard windowMode == nil || windowMode == selected else {
+                    throw NateError.message("--new-window 与 --reuse-window 不能同时使用。")
+                }
+                windowMode = selected
             case "-l", "-udl", "-n", "-c", "-p", "-openSession":
                 guard i < arguments.count else {
                     throw NateError.message("\(value) 缺少参数。")
@@ -121,30 +130,41 @@ extension ApplicationController {
     /// 业务作用：把命令行打开与定位请求合并到现有工作区。
     /// 参数说明:
     /// - request: 通过命令行或主实例入口取得的已规范化请求。
-    /// 返回：真实文件按身份去重，位置使用明确的 UTF-8 和字形单位。
-    func handleCLI(_ request: CLIArguments? = nil) async {
+    /// 返回：真实文件按身份去重，成功时返回本批请求的窗口，位置使用明确的 UTF-8 和字形单位。
+    @discardableResult
+    func handleCLI(_ request: CLIArguments? = nil) async -> EditorWindow? {
         do {
             let arguments = try request ?? CLIArguments(Array(CommandLine.arguments.dropFirst()))
-            let window = mainWindow
+            let placement = FileOpenPlacement(mode: arguments.windowMode ?? .reuseWindow, origin: mainWindow)
+            if arguments.files.isEmpty, arguments.session == nil, arguments.folders.isEmpty,
+                placement.needsWindow, placement.prepareWindow(using: self) == nil
+            {
+                return nil
+            }
             for url in arguments.files {
-                guard let document = await openFile(url, in: window) else {
+                guard let document = await openFile(url, placement: placement) else {
                     continue
                 }
-                try await applyCLISelection(arguments, to: document, in: window)
+                try await applyCLISelection(arguments, to: document, in: placement.window)
             }
-            if arguments.files.isEmpty, arguments.language != nil, let active, mainWindow === window {
-                try await applyCLISelection(arguments, to: active, in: window)
+            if arguments.files.isEmpty, arguments.session == nil, arguments.folders.isEmpty,
+                arguments.language != nil, let active, mainWindow === placement.window
+            {
+                try await applyCLISelection(arguments, to: active, in: placement.window)
             }
             if let session = arguments.session {
-                await loadSession(session)
+                await loadSession(session, placement: placement)
             }
-            if let folder = arguments.folders.first {
+            if let folder = arguments.folders.first, let window = placement.prepareWindow(using: self) {
                 await showFolder(folder, in: window)
             }
             refreshUI()
+            return !placement.needsWindow && isWorkspaceWindowAvailable(placement.window)
+                ? placement.window : nil
         }
         catch {
             SystemIntegration.alert("启动参数", error.localizedDescription)
+            return nil
         }
     }
 

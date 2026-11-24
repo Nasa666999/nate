@@ -118,7 +118,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var closing = false
     var closingDocumentIDs: Set<UUID> = []
     var initialized = false
-    var pendingURLs: [URL] = []
+    var pendingFinderURLs: [[URL]] = []
+    var finderOpenTask: Task<Void, Never>?
     var recentClosed: [ClosedTab] = []
     var clipboardHistory: [ClipboardHistoryRecord] = []
     let historyPersistence = ClipboardHistoryRuntime()
@@ -371,11 +372,8 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
         for document in documents where document.pendingOriginalPath != nil {
             verifyRecoveryBinding(document)
         }
-        let paths = pendingURLs
-        pendingURLs.removeAll()
-        for url in paths {
-            await openFile(url)
-        }
+        startFinderOpenRequests()
+        await finderOpenTask?.value
         await handleCLI(startupArguments)
         await drainInstanceRequests()
     }

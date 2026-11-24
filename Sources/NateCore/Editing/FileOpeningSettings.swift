@@ -6,12 +6,18 @@ public enum FileDirectoryMode: String, Sendable, Codable, CaseIterable {
     case custom
 }
 
+public enum FileOpenWindowMode: String, Sendable, Codable, CaseIterable {
+    case reuseWindow
+    case newWindow
+}
+
 public struct FileOpeningSettings: Sendable, Codable, Equatable {
     public let defaultLanguage: String
     public let lineEnding: LineEnding
     public let recentFileLimit: Int
     public let directoryMode: FileDirectoryMode
     public let customDirectory: String
+    public let finderWindowMode: FileOpenWindowMode
 
     private enum CodingKeys: String, CodingKey {
         case defaultLanguage
@@ -19,9 +25,10 @@ public struct FileOpeningSettings: Sendable, Codable, Equatable {
         case recentFileLimit
         case directoryMode
         case customDirectory
+        case finderWindowMode
     }
 
-    /// 业务作用：新建文档默认采用纯文本与 LF，文件对话框沿用上次目录并保留三十条最近文件。
+    /// 业务作用：新建文档采用纯文本与 LF，文件对话框沿用上次目录，Finder 复用窗口，保留三十条最近文件。
     /// 参数说明: 无。
     /// 返回：不需要访问文件系统或改写现有文档的默认偏好。
     public init() {
@@ -30,6 +37,7 @@ public struct FileOpeningSettings: Sendable, Codable, Equatable {
         recentFileLimit = 30
         directoryMode = .lastUsed
         customDirectory = ""
+        finderWindowMode = .reuseWindow
     }
 
     /// 业务作用：完整验证文件入口与新建文档偏好，目录只是用户草稿，不在读取配置时访问磁盘。
@@ -39,13 +47,15 @@ public struct FileOpeningSettings: Sendable, Codable, Equatable {
     /// - recentFileLimit: 显示及记录最近文件的上限，零表示停用。
     /// - directoryMode: 文件对话框的起始目录来源。
     /// - customDirectory: 自定义绝对路径，未启用时可以为空并保留草稿。
+    /// - finderWindowMode: Finder 打开每组路径时复用窗口或建立独立窗口。
     /// 返回：所有字段完整合法时建立偏好；无效身份、容量或目录格式整体拒绝。
     public init(
         defaultLanguage: String,
         lineEnding: LineEnding,
         recentFileLimit: Int,
         directoryMode: FileDirectoryMode,
-        customDirectory: String
+        customDirectory: String,
+        finderWindowMode: FileOpenWindowMode = .reuseWindow
     ) throws {
         guard !defaultLanguage.isEmpty, defaultLanguage.utf8.count <= 8192,
             !defaultLanguage.unicodeScalars.contains(where: {
@@ -66,12 +76,13 @@ public struct FileOpeningSettings: Sendable, Codable, Equatable {
         self.recentFileLimit = recentFileLimit
         self.directoryMode = directoryMode
         self.customDirectory = customDirectory
+        self.finderWindowMode = finderWindowMode
     }
 
     /// 业务作用：归档恢复执行与原生表单相同的完整约束，损坏内容不能授予文件入口偏好。
     /// 参数说明:
     /// - decoder: 完整文件偏好归档。
-    /// 返回：全部必填字段有效时恢复，缺失或非法字段整体失败。
+    /// 返回：全部必填字段有效时恢复，旧记录缺少窗口策略时复用窗口，显式非法值整体失败。
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         try self.init(
@@ -79,7 +90,9 @@ public struct FileOpeningSettings: Sendable, Codable, Equatable {
             lineEnding: values.decode(LineEnding.self, forKey: .lineEnding),
             recentFileLimit: values.decode(Int.self, forKey: .recentFileLimit),
             directoryMode: values.decode(FileDirectoryMode.self, forKey: .directoryMode),
-            customDirectory: values.decode(String.self, forKey: .customDirectory)
+            customDirectory: values.decode(String.self, forKey: .customDirectory),
+            finderWindowMode: values.contains(.finderWindowMode)
+                ? values.decode(FileOpenWindowMode.self, forKey: .finderWindowMode) : .reuseWindow
         )
     }
 
@@ -91,6 +104,7 @@ public struct FileOpeningSettings: Sendable, Codable, Equatable {
     public static func == (lhs: FileOpeningSettings, rhs: FileOpeningSettings) -> Bool {
         lhs.lineEnding == rhs.lineEnding && lhs.recentFileLimit == rhs.recentFileLimit
             && lhs.directoryMode == rhs.directoryMode
+            && lhs.finderWindowMode == rhs.finderWindowMode
             && lhs.defaultLanguage.utf8.elementsEqual(rhs.defaultLanguage.utf8)
             && lhs.customDirectory.utf8.elementsEqual(rhs.customDirectory.utf8)
     }

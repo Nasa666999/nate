@@ -92,15 +92,17 @@ extension ApplicationController {
     /// 参数说明: 无。
     /// 返回：仅改变新输入及显示规则，既有原文、选择身份、历史与保存点保持原状。
     func applyCurrentTabSettings() {
-        mainWindow?.setDocumentTabLayout(currentDocumentTabLayout())
+        let layout = currentDocumentTabLayout()
         let settings = currentTabSettings()
-        mainWindow?.setTabSettings(
-            Dictionary(
-                uniqueKeysWithValues: documents.map {
-                    ($0.buffer.id, settings.settings(for: $0.language))
-                }
-            )
+        let perDocument = Dictionary(
+            uniqueKeysWithValues: documents.map {
+                ($0.buffer.id, settings.settings(for: $0.language))
+            }
         )
+        for window in editorWindows {
+            window.setDocumentTabLayout(layout)
+            window.setTabSettings(perDocument)
+        }
     }
 
     /// 业务作用：同时配置全局默认和当前语言覆盖，表单不得覆盖后来改变的实际偏好。

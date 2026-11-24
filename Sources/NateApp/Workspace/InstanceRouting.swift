@@ -55,12 +55,14 @@ extension ApplicationController {
                 }
                 do {
                     let arguments = try JSONDecoder().decode(CLIArguments.self, from: request.data)
-                    await handleCLI(arguments)
+                    let window = await handleCLI(arguments)
                     // 关闭期间读取可以晚到，但请求不能被当作已经打开并从队列删除。
                     guard !closing, !Task.isCancelled else {
                         return
                     }
-                    mainWindow?.window?.makeKeyAndOrderFront(nil)
+                    if isWorkspaceWindowAvailable(window) {
+                        window?.window?.makeKeyAndOrderFront(nil)
+                    }
                     NSApp.activate(ignoringOtherApps: true)
                 }
                 catch {

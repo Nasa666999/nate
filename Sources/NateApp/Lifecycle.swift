@@ -6,18 +6,13 @@ extension ApplicationController {
     /// 参数说明:
     /// - application: 系统应用对象。
     /// - urls: 用户明确要求打开的文件。
-    /// 返回：初始化前排队，完成后逐个按文件身份去重。
+    /// 返回：初始化前按原事件分组排队，完成后按窗口设置打开并按文件身份去重。
     func application(_ application: NSApplication, open urls: [URL]) {
-        if !initialized {
-            pendingURLs.append(contentsOf: urls)
+        guard !closing, !urls.isEmpty else {
+            return
         }
-        else {
-            Task {
-                for url in urls {
-                    await openFile(url)
-                }
-            }
-        }
+        pendingFinderURLs.append(urls)
+        startFinderOpenRequests()
     }
 
     /// 业务作用：最后窗口关闭也保留正常应用生命周期，由统一退出流程保护内容。
@@ -229,6 +224,7 @@ extension ApplicationController {
     /// 返回：原有保存周期继续推进，仍未返回的任务保持登记。
     func restoreAfterCancelledExit(_ protectedDocuments: [WorkspaceDocument]) {
         closing = false
+        startFinderOpenRequests()
         scheduleSidebarRecovery(force: true)
         directoryWorkspace?.resume()
         fileOperations.resumePublications()

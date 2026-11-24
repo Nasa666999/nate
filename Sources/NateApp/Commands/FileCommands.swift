@@ -10,6 +10,7 @@ extension ApplicationController {
     /// - url: Finder、对话框或 CLI 提供的路径。
     /// - explicitEncoding: 用户选择的重新解释代码页。
     /// - targetWindow: 明确发起打开的编辑窗口，省略时捕获请求开始时的当前窗口。
+    /// - placement: Finder 或命令行整组请求的窗口意图，优先采用组内窗口。
     /// - activateOnOpen: 是否在读取完成后立即激活；异步结果导航可先建立后台标签再复验自己的焦点权限。
     /// - permit: 主执行域中的发布权限，失效时不添加标签、改变焦点或发布迟到错误。
     /// 返回：实际打开的文档；无效 URL 在类型探测前拒绝，失败返回空，不误用先前活动标签。
@@ -18,17 +19,26 @@ extension ApplicationController {
         _ url: URL,
         explicitEncoding: TextEncoding? = nil,
         in targetWindow: EditorWindow? = nil,
+        placement: FileOpenPlacement? = nil,
         activateOnOpen: Bool = true,
         permit: @MainActor () -> Bool = {
             true
         }
     ) async -> WorkspaceDocument? {
-        let window = targetWindow ?? mainWindow
+        let window = placement?.window ?? targetWindow ?? mainWindow
         /// 业务作用：读取和解码中的每个挂起点共用原窗口的发布门禁。
         /// 参数说明: 无。
         /// 返回：原窗口和调用权仍有效，且应用没有进入退出时为真。
         func mayPublish() -> Bool {
             permit() && !closing && !Task.isCancelled && isWorkspaceWindowAvailable(window)
+        }
+        /// 业务作用：已有及新读入文档共享组内窗口逻辑，后台查询只登记文档。
+        /// 参数说明:
+        /// - document: 已按真实文件身份统一的文档。
+        /// 返回：后台登记或实际展示成功时为真。
+        func display(_ document: WorkspaceDocument) -> Bool {
+            !activateOnOpen
+                || (placement?.present(document, using: self) ?? activate(document.buffer.id, in: window))
         }
         // 打开请求的调用权也可能被后来的导航撤销，读取前不能先改变原视图。
         guard mayPublish() else {
@@ -53,7 +63,14 @@ extension ApplicationController {
             }
             if directory {
                 if activateOnOpen {
-                    await showFolder(url, in: window)
+                    if let placement {
+                        if let destination = placement.prepareWindow(using: self) {
+                            await showFolder(url, in: destination)
+                        }
+                    }
+                    else {
+                        await showFolder(url, in: window)
+                    }
                 }
                 return nil
             }
@@ -80,16 +97,14 @@ extension ApplicationController {
                 guard !existing.closing else {
                     throw NateError.message("该文档正在确认关闭，请稍后重新打开。")
                 }
-                if activateOnOpen {
-                    guard activate(existing.buffer.id, in: window) else {
-                        return nil
-                    }
-                }
-                return existing
+                return display(existing) ? existing : nil
             }
             // 保存或批量替换还未发布绑定时，不能从旧磁盘快照建立另一个写入者。
             guard targetReservations[loaded.baseline.resolvedPath] == nil else {
                 throw NateError.message("该目标正在完成文件操作，请稍后重新打开。")
+            }
+            guard documents.count < 1024 else {
+                throw NateError.message("工作区已打开 1024 个文档，请先关闭部分文档。")
             }
             let document = WorkspaceDocument(
                 name: url.lastPathComponent,
@@ -115,7 +130,7 @@ extension ApplicationController {
                 + recentFiles.filter {
                     !$0.utf8.elementsEqual(url.path.utf8)
                 }
-            let displayed = !activateOnOpen || activate(document.buffer.id, in: window)
+            let displayed = display(document)
             if !activateOnOpen || !displayed {
                 refreshUI()
             }
@@ -138,7 +153,13 @@ extension ApplicationController {
                 window?.showResults("读取未完成：" + url.path + "\n" + error.localizedDescription)
             }
             else if error is FileDecodingFailure, explicitEncoding == nil {
-                await offerDecode(url, reason: error.localizedDescription, in: window, permit: permit)
+                return await offerDecode(
+                    url,
+                    reason: error.localizedDescription,
+                    in: window,
+                    placement: placement,
+                    permit: permit
+                )
             }
             else {
                 SystemIntegration.alert("无法打开 \(url.lastPathComponent)", error.localizedDescription)
