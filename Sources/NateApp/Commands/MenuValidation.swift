@@ -51,6 +51,15 @@ extension ApplicationController {
             let prefix = "nate.documentListSearch."
             return !source.hasPrefix(prefix) || source == prefix + window.tabOrderIdentity.uuidString
         }
+        if id.hasPrefix("tabSwitchOrder:") {
+            guard !closing, mainWindow != nil,
+                let order = WorkspaceTabSwitchOrder(rawValue: String(id.dropFirst("tabSwitchOrder:".count)))
+            else {
+                return false
+            }
+            menuItem.state = workspaceTabSwitchOrder == order ? .on : .off
+            return true
+        }
         if id == "newWindow" || id == "cloneToWindow" {
             return !closing && editorWindows.count < 32
                 && (id == "newWindow" ? documents.count < 1024 : active?.closing == false)

@@ -71,7 +71,7 @@ extension ApplicationController {
                             !token.isCancelled
                         }
                     )
-                    let configuration = try UserConfigurationSchema.preservingRecoveryPolicy(
+                    let configuration = try UserConfigurationSchema.preservingAddedPreferences(
                         decoded,
                         source: source
                     )

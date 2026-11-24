@@ -8,8 +8,9 @@ extension ApplicationController {
     /// 业务作用：为所有 UI 入口提供唯一语义路由，正文写入统一使用内核事务。
     /// 参数说明:
     /// - id: 稳定动作标识及必要的资源标识。
+    /// - keyboardEvent: 应用本地事件循环传入的真实按键，用于保持同一次标签遍历。
     /// 返回：执行动作或明确反馈实际失败。
-    func route(_ id: String) {
+    func route(_ id: String, keyboardEvent: NSEvent? = nil) {
         // 退出已固定保护集合，期间只允许观察和撤销，不再增加正文或路径副作用。
         guard
             !closing
@@ -20,6 +21,10 @@ extension ApplicationController {
         noteUnrecordedMacroCommand(id)
         if id.hasPrefix("workspacePanelPlacement:") {
             applyWorkspacePanelCommand(id)
+            return
+        }
+        if id.hasPrefix("tabSwitchOrder:") {
+            chooseWorkspaceTabSwitchOrder(id)
             return
         }
         if id.hasPrefix("tabLayout:"),
@@ -391,7 +396,7 @@ extension ApplicationController {
             if let active {
                 setReadOnly(active, value: !active.buffer.isReadOnly)
             }
-        case "nextTab", "previousTab": cycleTab(forward: id == "nextTab")
+        case "nextTab", "previousTab": cycleTab(forward: id == "nextTab", event: keyboardEvent)
         case "goto": gotoLine()
         case "importUDL": importUDL()
         case "exportUDL": exportUDL()

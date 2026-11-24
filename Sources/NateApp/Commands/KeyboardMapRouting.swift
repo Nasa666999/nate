@@ -23,7 +23,7 @@ extension ApplicationController {
         guard runtime.monitor == nil else {
             return
         }
-        runtime.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+        runtime.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) {
             [weak self] event in
             guard let self else {
                 return event
@@ -37,6 +37,12 @@ extension ApplicationController {
     /// - event: 由本应用事件循环收到的按键。
     /// 返回：已拥有并处理组合时为真，其它事件继续进入原生输入系统。
     func routeKeyboardEvent(_ event: NSEvent) -> Bool {
+        if event.type == .flagsChanged {
+            if !event.modifierFlags.contains(.control) {
+                finishWorkspaceTabCycle()
+            }
+            return false
+        }
         let runtime = keyboardMap
         guard !closing, runtime.ready, let resolution = runtime.resolution,
             let window = NSApp.keyWindow, event.windowNumber == window.windowNumber
@@ -62,6 +68,16 @@ extension ApplicationController {
             })
         else {
             return false
+        }
+        if owner == "nextTab" || owner == "previousTab", let item = entry.items.first, item.target === self {
+            guard window === mainWindow?.window, window.attachedSheet == nil else {
+                finishWorkspaceTabCycle()
+                return false
+            }
+            if validateMenuItem(item) {
+                route(owner, keyboardEvent: event)
+            }
+            return true
         }
         if entry.managedElsewhere {
             let item = NSMenuItem(title: entry.title, action: nil, keyEquivalent: "")

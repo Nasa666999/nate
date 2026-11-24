@@ -95,6 +95,7 @@ private enum UserConfigurationLabels {
         "searchUserPreferences": "搜索行为、输入字体与结果呈现",
         "selectedTextHighlightOptions": "选中文字智能高亮",
         "showSymbols": "既有符号显示偏好",
+        WorkspaceTabSwitchOrder.preferenceKey: "标签切换顺序",
         "structure.sortByName": "函数列表排序",
         "webSearchSettings": "搜索引擎与固定网址模板",
         "wordBoundarySettings": "词字符与边界",

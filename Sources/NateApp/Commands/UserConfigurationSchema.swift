@@ -30,14 +30,15 @@ enum UserConfigurationSchema {
         "recoveryStoragePolicy": 4096,
         "searchUserPreferences": 65_536,
     ]
-    static let keys = booleanKeys.union(dataLimits.keys).union(["completion.threshold", "fontSize"]).sorted()
+    static let keys = booleanKeys.union(dataLimits.keys)
+        .union(["completion.threshold", "fontSize", WorkspaceTabSwitchOrder.preferenceKey]).sorted()
 
-    /// 业务作用：未包含恢复总量的既有完整配置沿用当前限制，不能因旧归档缺字段而放宽恢复保护。
+    /// 业务作用：已知旧配置使用当前新增偏好，完整旧来源才有资格迁移。
     /// 参数说明:
     /// - configuration: 已完成容器校验的导入候选。
     /// - source: 本次确认期间固定的当前完整偏好来源。
-    /// 返回：当前字段集原样保留；仅缺少恢复总量的完整既有字段集补入当前值，其它遗漏或未知字段拒绝。
-    static func preservingRecoveryPolicy(
+    /// 返回：当前字段集原样保留；缺少后来引入的字段时补入当前值，其它遗漏或未知字段拒绝。
+    static func preservingAddedPreferences(
         _ configuration: UserConfiguration,
         source: UserConfiguration
     ) throws -> UserConfiguration {
@@ -45,20 +46,20 @@ enum UserConfigurationSchema {
         if fields == keys {
             return configuration
         }
-        // 只迁移一个明确缺失的字段，不能借兼容入口忽略其它未知或遗漏的业务约束。
+        let beforeTabSwitching = keys.filter { $0 != WorkspaceTabSwitchOrder.preferenceKey }
+        let beforeRecoveryPolicy = beforeTabSwitching.filter { $0 != "recoveryStoragePolicy" }
+        // 只迁移已发布的完整字段集合，未知字段或其它遗漏不能取得部分发布资格。
         guard source.entries.map(\.key) == keys,
-            fields
-                == keys.filter({
-                    $0 != "recoveryStoragePolicy"
-                }),
-            let retained = source.entries.first(where: {
-                $0.key == "recoveryStoragePolicy"
-            })
+            fields == beforeTabSwitching || fields == beforeRecoveryPolicy
         else {
             throw NateError.message("用户配置字段集合不受支持，未采用部分设置。")
         }
-        try validate(retained)
-        return try UserConfiguration(entries: configuration.entries + [retained])
+        let existing = Set(fields)
+        let retained = source.entries.filter { !existing.contains($0.key) }
+        for entry in retained {
+            try validate(entry)
+        }
+        return try UserConfiguration(entries: configuration.entries + retained)
     }
 
     /// 业务作用：应用只接受完整且明确的配置字段集合，未知或遗漏字段不能产生部分导入。
@@ -117,6 +118,12 @@ enum UserConfigurationSchema {
         if entry.key == "completion.threshold" {
             guard case .integer(let value) = entry.value, (1...20).contains(value) else {
                 throw NateError.message("补全起始长度须为 1–20 的整数。")
+            }
+            return
+        }
+        if entry.key == WorkspaceTabSwitchOrder.preferenceKey {
+            guard case .text(let value) = entry.value, WorkspaceTabSwitchOrder(rawValue: value) != nil else {
+                throw NateError.message("标签切换顺序必须是已知的完整选项。")
             }
             return
         }

@@ -330,6 +330,11 @@ extension ApplicationController: NSMenuItemValidation {
         let windows = NSMenu(title: "窗口")
         add(windows, "下一个标签", "nextTab")
         add(windows, "上一个标签", "previousTab")
+        let tabSwitching = NSMenu(title: "标签切换顺序")
+        for order in WorkspaceTabSwitchOrder.allCases {
+            add(tabSwitching, order.title, "tabSwitchOrder:" + order.rawValue)
+        }
+        attach(tabSwitching, to: windows)
         add(windows, "在新窗口克隆当前文档", "cloneToWindow")
         add(windows, "移动当前标签到另一窗口…", "moveTabToWindow")
         add(windows, "文档列表…", "documentList")

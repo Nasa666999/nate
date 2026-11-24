@@ -2,6 +2,14 @@ import AppKit
 import NatePlatform
 
 extension ApplicationController {
+    /// 业务作用：失去应用焦点时结束当前键盘遍历，防止应用外松开 Control 后继续旧顺序。
+    /// 参数说明:
+    /// - notification: 系统的应用失去焦点通知。
+    /// 返回：保留最后实际显示的标签，收回本轮 Control 遍历状态。
+    func applicationDidResignActive(_ notification: Notification) {
+        finishWorkspaceTabCycle()
+    }
+
     /// 业务作用：Finder 冷启动和运行中打开事件进入同一工作区队列。
     /// 参数说明:
     /// - application: 系统应用对象。

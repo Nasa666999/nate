@@ -20,6 +20,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     var mainWindow: EditorWindow?
     var workspaceWindows: [EditorWindow] = []
     var windowTabGroups: [ObjectIdentifier: [UUID]] = [:]
+    let workspaceTabSwitching = WorkspaceTabSwitching()
     var registry: LanguageRegistry?
     var completionCatalog: CompletionCatalog?
     var functionListCatalog: FunctionListCatalog?
@@ -437,7 +438,7 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             guard let self, self.mainWindow === window else {
                 return
             }
-            self.route(command)
+            self.route(command, keyboardEvent: NSApp.currentEvent)
         }
         connectWorkspaceTabs(window)
         window.onEdit = {
@@ -530,9 +531,10 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
     /// 参数说明:
     /// - id: 稳定文档身份。
     /// - targetWindow: 需要显示正文的原窗口，省略时使用当前编辑窗口。
+    /// - recordTabVisit: 正常激活更新窗口访问顺序，持续 Control 浏览等手势结束再确认。
     /// 返回：正文成功显示时为真；退出、旧窗口或未确认输入拒绝切换。
     @discardableResult
-    func activate(_ id: UUID, in targetWindow: EditorWindow? = nil) -> Bool {
+    func activate(_ id: UUID, in targetWindow: EditorWindow? = nil, recordTabVisit: Bool = true) -> Bool {
         let window = targetWindow ?? mainWindow
         // 退出已经固定工作区保护集合，标签选择不能在最终索引发布期间改变活动身份。
         guard !closing, isWorkspaceWindowAvailable(window),
@@ -552,6 +554,12 @@ final class ApplicationController: NSObject, NSApplicationDelegate {
             return false
         }
         attachWorkspaceTab(id, to: window)
+        if recordTabVisit, let window {
+            if workspaceTabSwitching.cycle?.window === window {
+                finishWorkspaceTabCycle()
+            }
+            rememberWorkspaceTab(id, in: window)
+        }
         if isCurrent {
             activeID = id
             window?.restoreEditorFocusFromFloatingPanel()

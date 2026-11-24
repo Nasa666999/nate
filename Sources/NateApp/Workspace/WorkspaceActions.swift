@@ -4,19 +4,6 @@ import NatePlatform
 import NateStorage
 
 extension ApplicationController {
-    /// 业务作用：按当前标签顺序循环切换，不生成重复缓冲区。
-    /// 参数说明:
-    /// - forward: 是否切换到后一个标签。
-    /// 返回：激活对应文档。
-    func cycleTab(forward: Bool) {
-        let order = workspaceTabIDs(in: mainWindow)
-        guard let activeID, let index = order.firstIndex(of: activeID)
-        else {
-            return
-        }
-        activate(order[(index + (forward ? 1 : order.count - 1)) % order.count])
-    }
-
     /// 业务作用：批量关闭固定开始时的文档集合，逐个执行内容保护。
     /// 参数说明:
     /// - command: 明确的关闭范围。

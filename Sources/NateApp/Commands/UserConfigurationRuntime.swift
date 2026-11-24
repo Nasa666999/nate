@@ -40,6 +40,7 @@ extension ApplicationController {
     /// - domain: 本次完整用户配置所属的偏好域。
     /// 返回：所有偏好读取使用同一域，不读取文件、加载历史或保存默认值。
     func connectConfigurationDefaults(_ domain: UserDefaults) {
+        finishWorkspaceTabCycle()
         userConfiguration.generation = UUID()
         userConfiguration.defaults = domain
         recoveryStorage.loaded = false
@@ -76,6 +77,7 @@ extension ApplicationController {
             pairPreferences.generation, wordPreferences.generation, delimiterPreferences.generation,
             dateTimePreferences.generation, fileOpeningPreferences.generation, webSearch.generation,
             printing.generation, selectedTextPreferences.generation, recoveryStorage.generation,
+            workspaceTabSwitching.preferenceGeneration,
         ]
         if let findWindow {
             values.append(findWindow.configurationIdentity)

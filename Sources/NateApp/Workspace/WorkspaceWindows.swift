@@ -83,6 +83,7 @@ extension ApplicationController {
             return
         }
         // 撤销依赖旧焦点的异步意图，再发布新窗口和活动文档，防止迟到任务跨窗口改变选区。
+        finishWorkspaceTabCycle()
         suspendSearchForInput()
         cancelQuickFind()
         cancelBookmarkAction()
@@ -94,6 +95,7 @@ extension ApplicationController {
         cancelMacro()
         mainWindow = window
         activeID = document.id
+        rememberWorkspaceTab(document.id, in: window)
         refreshUI()
     }
 
@@ -125,6 +127,7 @@ extension ApplicationController {
             retireWorkspaceTabGroup(window, preservingIn: destination, survivors: others)
         }
         workspaceWindows = others
+        workspaceTabSwitching.visits.removeValue(forKey: ObjectIdentifier(window))
         if directoryWorkspace?.window === window {
             // 窗口退出前撤销关联目录读取与观察权限，迟到结果不能重建已关闭的侧栏。
             directoryWorkspace?.stop()

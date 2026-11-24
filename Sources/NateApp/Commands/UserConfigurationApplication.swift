@@ -23,7 +23,7 @@ extension ApplicationController {
             throw NateError.message("当前输入、搜索或历史动作尚未收束，请完成后再导入配置。")
         }
         let source = try configurationSource()
-        let candidate = try UserConfigurationSchema.preservingRecoveryPolicy(candidate, source: source)
+        let candidate = try UserConfigurationSchema.preservingAddedPreferences(candidate, source: source)
         try UserConfigurationSchema.validate(candidate)
         let runtime = userConfiguration
         runtime.preview = candidate
@@ -103,6 +103,8 @@ extension ApplicationController {
     private func synchronizeUserConfiguration(search: SearchUserPreferences, searchState: SearchWindowState)
         throws
     {
+        finishWorkspaceTabCycle()
+        workspaceTabSwitching.preferenceGeneration = UUID()
         cancelQuickFind()
         cancelMultipleSelection()
         cancelIncrementalSearch(resetOrigin: true)
