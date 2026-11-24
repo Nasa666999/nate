@@ -39,6 +39,7 @@ final class TabStrip: NSScrollView {
         dropIndicator.layer?.zPosition = 100
         dropIndicator.isHidden = true
         stack.addSubview(dropIndicator)
+        refreshAppearanceColors()
     }
 
     /// 业务作用：标签集合由工作区提供，不从系统归档另建身份。
@@ -47,6 +48,46 @@ final class TabStrip: NSScrollView {
     /// 返回：不支持归档初始化。
     required init?(coder: NSCoder) {
         return nil
+    }
+
+    /// 业务作用：所属窗口主题改变时同步已有标签及拖动指示颜色，不重新建立控件或撤销正在进行的手势。
+    /// 参数说明: 无。
+    /// 返回：背景与文字沿同一有效主题呈现，文档顺序、焦点和拖动资格保持。
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshAppearanceColors()
+    }
+
+    /// 业务作用：固定图层颜色按所属视图的实际绘制主题解析，独立窗口不能借用另一个窗口的颜色上下文。
+    /// 参数说明:
+    /// - selected: 当前标签是否为活动文档。
+    /// 返回：与当前有效主题匹配的完整背景颜色。
+    private func tabBackgroundColor(selected: Bool) -> CGColor {
+        var color = NSColor.clear.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            color = (selected ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
+        }
+        return color
+    }
+
+    /// 业务作用：主题刷新只更新同一文档标签的颜色，保留原标题实例、布局与键盘来源。
+    /// 参数说明: 无。
+    /// 返回：已有图层采用当前有效主题，未知或尚未建立的标签不取得其它文档的呈现状态。
+    private func refreshAppearanceColors() {
+        backgroundColor = .windowBackgroundColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            dropIndicator.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        }
+        let groups = stack.arrangedSubviews.compactMap { $0 as? NSStackView }
+        for (group, tab) in zip(groups, current) {
+            // 颜色更新不重新绑定身份，过渡中的未知控件不能借用同位置后来文档的状态。
+            guard let button = group.arrangedSubviews.first as? TabButton, button.documentID == tab.id else {
+                continue
+            }
+            group.layer?.backgroundColor = tabBackgroundColor(selected: tab.selected)
+            group.needsDisplay = true
+        }
+        needsDisplay = true
     }
 
     /// 业务作用：标签栏离开原窗口时立即撤销手势及周期任务，旧鼠标事件不能继续操作迁移后的视图。
@@ -109,7 +150,7 @@ final class TabStrip: NSScrollView {
             group.spacing = 2
             group.wantsLayer = true
             group.layer?.backgroundColor =
-                (tab.selected ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
+                tabBackgroundColor(selected: tab.selected)
             group.layer?.cornerRadius = 4
             group.edgeInsets = NSEdgeInsets(
                 top: 3,
@@ -168,7 +209,7 @@ final class TabStrip: NSScrollView {
             return
         }
         group.layer?.backgroundColor =
-            (tab.selected ? NSColor.controlBackgroundColor : NSColor.windowBackgroundColor).cgColor
+            tabBackgroundColor(selected: tab.selected)
         button.title = displayLabels[tab.id] ?? tab.statusPrefix + tab.title
         button.font = NSFont.systemFont(ofSize: 12, weight: tab.selected ? .semibold : .regular)
         button.toolTip = tab.path ?? "未命名临时文档"
