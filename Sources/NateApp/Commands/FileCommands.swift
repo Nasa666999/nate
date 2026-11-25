@@ -437,10 +437,10 @@ extension ApplicationController {
         }
     }
 
-    /// 业务作用：关闭最后视图前完成保存或可靠恢复，不销毁未保护内容。
+    /// 业务作用：关闭最后视图时按用户选择确认原文件、恢复副本或明确丢弃的工作区状态。
     /// 参数说明:
     /// - id: 被关闭文档身份。
-    /// 返回：确认保护后移除文档并更新索引；失败保留正文，退出接管后不新增关闭请求。
+    /// 返回：所选动作与工作区索引都已确认后移除文档；失败保留正文，退出接管后不新增关闭请求。
     func closeDocument(_ id: UUID) async {
         guard
             let document = documents.first(where: {
@@ -472,7 +472,7 @@ extension ApplicationController {
             document.setEditingSuspension(.documentClosing, active: false)
         }
         var archiveNeeded = document.url == nil && document.buffer.text.byteCount > 0
-        var discardDraft = false
+        var discardChanges = false
         if archiveNeeded {
             let alert = NSAlert()
             alert.messageText = "关闭临时文档 \(document.name)"
@@ -492,13 +492,13 @@ extension ApplicationController {
             else if choice == .alertThirdButtonReturn {
                 // 丢弃只收束工作区引用；此前未落盘的正文不能为归档或恢复入口新增持久化副本。
                 archiveNeeded = false
-                discardDraft = true
+                discardChanges = true
             }
             else if choice != .alertSecondButtonReturn {
                 return
             }
         }
-        if !discardDraft, !(await flush(document)) {
+        if !discardChanges, !(await flush(document)) {
             document.savePermit?.cancel()
             // 发布系统调用尚未返回时不能移除文档后重新打开同一路径建立另一个写入者。
             guard document.savePermit?.hasActivePublication != true else {
@@ -511,15 +511,26 @@ extension ApplicationController {
             alert.addButton(withTitle: "取消关闭")
             alert.addButton(withTitle: "另存为")
             alert.addButton(withTitle: "保留恢复副本并关闭")
+            alert.addButton(withTitle: "丢弃未保存的编辑并关闭").hasDestructiveAction = true
             let choice = alert.runModal()
             if choice == .alertSecondButtonReturn {
                 await saveAs(document)
                 return
             }
-            guard choice == .alertThirdButtonReturn, await flushRecovery() else {
-                return
+            let discard = NSApplication.ModalResponse(
+                rawValue: NSApplication.ModalResponse.alertThirdButtonReturn.rawValue + 1
+            )
+            if choice == discard {
+                // 待实际确认或尚未开始的原文件请求已失去新发布权限，关闭只移除未保存编辑的恢复入口。
+                archiveNeeded = false
+                discardChanges = true
             }
-            archiveNeeded = true
+            else {
+                guard choice == .alertThirdButtonReturn, await flushRecovery() else {
+                    return
+                }
+                archiveNeeded = true
+            }
         }
         if archiveNeeded {
             guard await flushRecovery(), let reference = document.recoveryReference, let store = recovery
@@ -551,7 +562,7 @@ extension ApplicationController {
             SystemIntegration.alert("关闭未完成", "打开文档索引未能可靠更新，内容保持打开。")
             return
         }
-        if !discardDraft {
+        if !discardChanges || document.url != nil {
             recentClosed.append(
                 ClosedTab(
                     url: archiveNeeded ? nil : document.url,
