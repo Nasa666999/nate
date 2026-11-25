@@ -38,6 +38,14 @@ extension ASCIIWordWrapIndex {
             if case .mixedHan(let metrics) = script {
                 return try nextMixedHanRow(after: start, metrics: metrics)
             }
+            if case .mixedHanTabs(let metrics, let grid, let contentEnd) = script {
+                return try nextMixedHanTabbedRow(
+                    after: start,
+                    metrics: metrics,
+                    grid: grid,
+                    contentEnd: contentEnd
+                )
+            }
             if case .tabbed(let width, let contentEnd, let narrowLetters) = script {
                 return try nextTabbedRow(
                     after: start,
@@ -316,6 +324,90 @@ extension ASCIIWordWrapIndex {
             let fullCount = (span.count - native.length) / 2
             let pixels = metrics.distance(ascii: native.length - fullCount, han: fullCount)
             return (end, Int((pixels / metrics.asciiAdvance).rounded(.up)))
+        }
+
+        /// 业务作用：真实 Tab 从本条视觉行的原点重新停靠，窄字与全角字形保留各自的实测距离。
+        /// 参数说明:
+        /// - start: 当前视觉行实际原字节起点。
+        /// - metrics: 当前容器宽度及两种字体实测步距。
+        /// - grid: 该语言采用的原生制表网格。
+        /// - contentEnd: 完整逻辑行最后一个非空白的原字节端点。
+        /// 返回：视觉行的完整原字节终点及能覆盖实际宽度的列数。
+        private mutating func nextMixedHanTabbedRow(
+            after start: Int,
+            metrics: MixedHanWrapMetrics,
+            grid: HanTabColumns.Metrics,
+            contentEnd: Int
+        ) throws -> (end: Int, cells: Int) {
+            var cursor = HanTabColumns.Cursor()
+            var lastBreak: HanTabColumns.Cursor?
+            while start + cursor.byte < range.upper {
+                let position = start + cursor.byte
+                if start == range.lower, position >= contentEnd {
+                    try appendMixedHanWhitespace(to: &cursor, lineStart: start, grid: grid, allowsTabs: true)
+                    break
+                }
+                let leading = byte(at: position)
+                let glyph = leading == 9 ? (wide: false, blank: true) : try mixedHanGlyph(at: position)
+                var following = cursor
+                following.advance(leading, using: grid)
+                if following.distance(using: grid) > metrics.width {
+                    if leading == 9 {
+                        if position == start {
+                            // 容器窄于一次制表停靠时，首个 Tab 仍占真实距离，后续视觉行重新起算。
+                            cursor = following
+                            try appendMixedHanWhitespace(to: &cursor, lineStart: start, grid: grid)
+                        }
+                        break
+                    }
+                    if position > start {
+                        if glyph.blank {
+                            try appendMixedHanWhitespace(to: &cursor, lineStart: start, grid: grid)
+                        }
+                        else if let lastBreak {
+                            cursor = lastBreak
+                        }
+                        break
+                    }
+                }
+                cursor = following
+                let offset = start + cursor.byte
+                if offset < range.upper, byte(at: offset) != 9 {
+                    let next = try mixedHanGlyph(at: offset)
+                    if !next.blank, glyph.blank || glyph.wide || next.wide {
+                        lastBreak = cursor
+                    }
+                }
+            }
+            let columns = (cursor.distance(using: grid) / metrics.asciiAdvance).rounded(.up)
+            return (start + cursor.byte, Int(columns))
+        }
+
+        /// 业务作用：将可留在视觉行末的空白计入实际横向距离并保留原字节容量门禁。
+        /// 参数说明:
+        /// - cursor: 当前视觉行的已确认像素前缀。
+        /// - lineStart: 本行实际原字节起点。
+        /// - grid: 同一容器采用的语言制表网格。
+        /// - allowsTabs: 原生首行可保留段落尾随制表时为真。
+        /// 返回：将允许的空白加入同一视觉行，超出容量时终止整个索引。
+        private mutating func appendMixedHanWhitespace(
+            to cursor: inout HanTabColumns.Cursor,
+            lineStart: Int,
+            grid: HanTabColumns.Metrics,
+            allowsTabs: Bool = false
+        ) throws {
+            while lineStart + cursor.byte < range.upper {
+                let position = lineStart + cursor.byte
+                let leading = byte(at: position)
+                let wideSpace = leading == 227 && hanScalar(at: position) == 0x3000
+                guard leading == 32 || leading == 9 && allowsTabs || wideSpace else {
+                    break
+                }
+                guard cursor.byte <= ASCIIWordWrapIndex.maximumRowBytes - (wideSpace ? 3 : 1) else {
+                    throw Refusal.row
+                }
+                cursor.advance(leading, using: grid)
+            }
         }
 
         /// 业务作用：只接纳已确认的两类字形度量；存在全角标点时还要有同一原文的分词证据。

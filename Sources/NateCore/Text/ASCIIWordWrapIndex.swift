@@ -28,6 +28,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         case narrow
         case han
         case mixedHan(MixedHanWrapMetrics)
+        case mixedHanTabs(MixedHanWrapMetrics, HanTabColumns.Metrics, contentEnd: Int)
         case tabbed(width: Int, contentEnd: Int, narrowLetters: Bool)
     }
 
@@ -44,6 +45,9 @@ public struct ASCIIWordWrapIndex: Sendable {
     public var tabWidth: Int? {
         if case .tabbed(let width, _, _) = script {
             return width
+        }
+        if case .mixedHanTabs(_, let metrics, _) = script {
+            return metrics.tabWidth
         }
         return nil
     }
@@ -251,6 +255,40 @@ public struct ASCIIWordWrapIndex: Sendable {
         }
     }
 
+    /// 业务作用：在已确认的中英文原字节上把真实 Tab 按每条视觉行自己的原点重新定位。
+    /// 参数说明:
+    /// - text: 当前不可变正文。
+    /// - range: 排除物理行尾的完整逻辑行。
+    /// - columns: 当前容器采用的基础字体列数。
+    /// - source: 同一正文和实际语言制表间隔已证明的字符与逻辑列。
+    /// - metrics: 当前真实容器的两种字体步距及行高。
+    /// - deadline: 同一测量请求的完整截止。
+    /// 返回：原生制表及两类字体均能确认时提供完整断点，标点或缺少字形证据时为空。
+    public static func withMixedHanTabs(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        source: HanTabColumns,
+        metrics: MixedHanWrapMetrics,
+        deadline: ContinuousClock.Instant
+    ) throws -> Self? {
+        do {
+            return try Self(
+                text: text,
+                range: range,
+                columns: columns,
+                narrow: nil,
+                han: nil,
+                mixedHan: metrics,
+                narrowTabs: source,
+                deadline: deadline
+            )
+        }
+        catch Refusal.sentencePunctuation {
+            return nil
+        }
+    }
+
     /// 业务作用：不同字体类型复用同一完整视觉行索引和有界稀疏锚点。
     /// 参数说明:
     /// - text: 当前固定的原正文。
@@ -260,7 +298,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - han: 可选的同源全角字形证明。
     /// - mixedHan: 存在窄字形及全角字形时采用的实际原生度量。
     /// - tabs: 可选的同源原始 ASCII 制表证明。
-    /// - narrowTabs: 可选的包含独立窄字母的同源制表证明。
+    /// - narrowTabs: 可选的已确认包含独立窄字母或全角字形的同源制表证明。
     /// - allowsPunctuation: 已请求逐页解释原生可用标点断行时为真。
     /// - deadline: 准备任务的共同截止。
     /// 返回：字体类别和所有边界已经核对的完整索引，超量或非法字符时拒绝。
@@ -311,13 +349,31 @@ public struct ASCIIWordWrapIndex: Sendable {
         }
         else if let narrowTabs {
             let width = narrowTabs.metrics.tabWidth
-            guard narrowTabs.range == range, narrowTabs.matches(text, tabWidth: width),
-                !narrowTabs.hasFullWidthCharacters, !narrowTabs.narrowScalars.isEmpty
-            else {
+            guard narrowTabs.range == range, narrowTabs.matches(text, tabWidth: width) else {
                 return nil
             }
-            let end = try Self.finalContentEnd(in: text, range: range, deadline: deadline)
-            script = .tabbed(width: width, contentEnd: end, narrowLetters: true)
+            if let mixedHan {
+                let grid = narrowTabs.metrics
+                guard narrowTabs.hasFullWidthCharacters, narrowTabs.narrowScalars.isEmpty,
+                    grid.asciiAdvance == mixedHan.asciiAdvance, grid.hanAdvance == mixedHan.hanAdvance
+                else {
+                    return nil
+                }
+                let end = try Self.finalContentEnd(
+                    in: text,
+                    range: range,
+                    includesFullwidthSpace: true,
+                    deadline: deadline
+                )
+                script = .mixedHanTabs(mixedHan, grid, contentEnd: end)
+            }
+            else {
+                guard !narrowTabs.hasFullWidthCharacters, !narrowTabs.narrowScalars.isEmpty else {
+                    return nil
+                }
+                let end = try Self.finalContentEnd(in: text, range: range, deadline: deadline)
+                script = .tabbed(width: width, contentEnd: end, narrowLetters: true)
+            }
         }
         else {
             guard text.isPrintableASCII(in: range) else {
@@ -401,11 +457,13 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// 参数说明:
     /// - text: 当前真实制表索引所属的原文。
     /// - range: 完整物理行原字节范围。
+    /// - includesFullwidthSpace: 原文已确认可含 Unicode 全角空格时为真。
     /// - deadline: 当前断行准备的共同截止。
     /// 返回：最后一个非空白字节之后的端点；全部为空白时返回行首。
     private static func finalContentEnd(
         in text: PieceTree,
         range: ByteRange,
+        includesFullwidthSpace: Bool = false,
         deadline: ContinuousClock.Instant
     ) throws -> Int {
         var end = range.upper
@@ -414,12 +472,27 @@ public struct ASCIIWordWrapIndex: Sendable {
             guard ContinuousClock.now < deadline else {
                 throw NateError.message("超长自动换行的尾随制表超过共同截止。")
             }
-            let start = max(range.lower, end - 8192)
+            var start = max(range.lower, end - 8192)
+            if includesFullwidthSpace {
+                // 从完整原标量开始扫描，尾部全角空格不会被读取分页的边界拆开。
+                while !text.isBoundary(start) {
+                    start += 1
+                }
+            }
             let bytes = text.bytes(in: ByteRange(start, end))
-            if let last = bytes.lastIndex(where: {
-                $0 != 9 && $0 != 32
-            }) {
-                return start + last + 1
+            var suffix = bytes.count
+            while suffix > 0 {
+                if bytes[suffix - 1] == 9 || bytes[suffix - 1] == 32 {
+                    suffix -= 1
+                }
+                else if includesFullwidthSpace, suffix >= 3, bytes[suffix - 3] == 227,
+                    bytes[suffix - 2] == 128, bytes[suffix - 1] == 128
+                {
+                    suffix -= 3
+                }
+                else {
+                    return start + suffix
+                }
             }
             end = start
         }

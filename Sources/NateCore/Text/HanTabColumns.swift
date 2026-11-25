@@ -29,9 +29,32 @@ public struct HanTabColumns: Sendable {
         public var interval: Double {
             Double(tabWidth) * asciiAdvance
         }
+
+        /// 业务作用：原生软换行窗口按同一制表距离复验每条视觉行的实际末尾。
+        /// 参数说明:
+        /// - units: 从视觉行首读取的有界原始 UTF-16 字符。
+        /// 返回：实际行首到行尾的距离；字形超出已支持的独立标量范围时为空。
+        public func visualWidth(of units: String.UTF16View) -> Double? {
+            guard units.count <= ASCIIWordWrapIndex.maximumRowBytes else {
+                return nil
+            }
+            var cursor = Cursor()
+            for unit in units {
+                if unit == 9 || (32...126).contains(unit) {
+                    cursor.advance(UInt8(unit), using: self)
+                }
+                else if PlainHanLine.usesHanFont(unit) {
+                    cursor.addHan()
+                }
+                else {
+                    return nil
+                }
+            }
+            return cursor.distance(using: self)
+        }
     }
 
-    private struct Cursor: Sendable {
+    struct Cursor: Sendable {
         var byte = 0
         var character = 0
         var logical = 0
@@ -79,8 +102,8 @@ public struct HanTabColumns: Sendable {
                 byte += 1
                 return
             }
-            character += 1
             if scalar == 9 {
+                character += 1
                 let relative = remainder(using: metrics) / metrics.interval
                 tabStop += ascii / metrics.tabWidth + Int(relative.rounded(.down)) + 1
                 ascii = 0
@@ -89,9 +112,7 @@ public struct HanTabColumns: Sendable {
                 logical += metrics.tabWidth - logical % metrics.tabWidth
             }
             else {
-                han += 1
-                byte += 3
-                logical += 1
+                addHan()
             }
         }
 
@@ -104,6 +125,16 @@ public struct HanTabColumns: Sendable {
             ascii += count
             byte += count
             logical += count
+        }
+
+        /// 业务作用：独立全角字形在一个逻辑列内占用完整的实测全角距离及三个原字节。
+        /// 参数说明: 无。
+        /// 返回：随后续真实 Tab 共同参与计算的横坐标前缀。
+        mutating func addHan() {
+            character += 1
+            han += 1
+            byte += 3
+            logical += 1
         }
     }
 

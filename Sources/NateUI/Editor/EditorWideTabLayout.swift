@@ -303,29 +303,51 @@ extension EditorView {
                             wordWrap: tabbed
                         )
                     }
-                    if index == nil, let metrics = wrappingColumns.tabMetrics,
+                    let mixedTabGrid = wrappingColumns.mixedHan.flatMap {
+                        HanTabColumns.Metrics(
+                            asciiAdvance: $0.asciiAdvance,
+                            hanAdvance: $0.hanAdvance,
+                            tabWidth: width
+                        )
+                    }
+                    if index == nil, let grid = mixedTabGrid ?? wrappingColumns.tabMetrics,
                         let tabs = try HanTabColumns(
                             text: snapshot.text,
                             range: key.range,
-                            metrics: metrics,
-                            permitsFullWidthCharacters: false,
-                            deadline: deadline
-                        ),
-                        let wrapped = try ASCIIWordWrapIndex.withNarrowTabs(
-                            text: snapshot.text,
-                            range: key.range,
-                            columns: wrappingColumns.narrow,
-                            tabs: tabs,
+                            metrics: grid,
+                            permitsFullWidthCharacters: mixedTabGrid != nil,
                             deadline: deadline
                         )
                     {
-                        return EditorWideTabLayout.Entry(
-                            columns: nil,
-                            han: nil,
-                            hanTabs: tabs,
-                            status: nil,
-                            wordWrap: wrapped
-                        )
+                        let wrapped: ASCIIWordWrapIndex?
+                        if let mixed = wrappingColumns.mixedHan, tabs.hasFullWidthCharacters {
+                            wrapped = try ASCIIWordWrapIndex.withMixedHanTabs(
+                                text: snapshot.text,
+                                range: key.range,
+                                columns: wrappingColumns.narrow,
+                                source: tabs,
+                                metrics: mixed,
+                                deadline: deadline
+                            )
+                        }
+                        else {
+                            wrapped = try ASCIIWordWrapIndex.withNarrowTabs(
+                                text: snapshot.text,
+                                range: key.range,
+                                columns: wrappingColumns.narrow,
+                                tabs: tabs,
+                                deadline: deadline
+                            )
+                        }
+                        if let wrapped {
+                            return EditorWideTabLayout.Entry(
+                                columns: nil,
+                                han: nil,
+                                hanTabs: tabs,
+                                status: nil,
+                                wordWrap: wrapped
+                            )
+                        }
                     }
                     return EditorWideTabLayout.Entry(
                         columns: nil,

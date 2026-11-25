@@ -67,7 +67,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - fontZoomAdjustment: 当前视图实际缩放差值。
     /// - tabWidth: 当前语言实际确认的制表宽度。
     /// - wordIndex: 含空格的同一原文及实际宽度已得到的完整断行索引。
-    /// - ideographs: 确认整个原行只由基本统一汉字及所支持全角标点组成的证据。
+    /// - ideographs: 可选的无制表全角字形证据，包含真实 Tab 的混排行从断行索引取得源证据。
     /// 返回：具备完整原生断行证据的初始窗口；不支持的内容、字体或宽度交回普通段落门禁。
     init?(
         snapshot: DocumentSnapshot,
@@ -90,12 +90,19 @@ final class WrappedASCIIWindow: LongLineProjection {
         )
         let mixed = wordIndex?.mixedHanMetrics
         let han: NativeHanLineFont?
-        if let ideographs {
+        if mixed != nil {
+            guard ideographs.map({ $0.range == range && $0.matches(snapshot.text) }) != false,
+                let resolved = NativeHanLineFont.resolve(from: actual)
+            else {
+                return nil
+            }
+            han = resolved
+        }
+        else if let ideographs {
             guard ideographs.range == range, ideographs.matches(snapshot.text),
-                mixed != nil
-                    || ideographs.characterCount * 3 == range.count
-                        && (wordIndex?.usesFullWidthFont == true
-                            || wordIndex == nil && ideographs.containsOnlyUnifiedIdeographs),
+                ideographs.characterCount * 3 == range.count,
+                wordIndex?.usesFullWidthFont == true
+                    || wordIndex == nil && ideographs.containsOnlyUnifiedIdeographs,
                 let resolved = NativeHanLineFont.resolve(from: actual)
             else {
                 return nil
@@ -103,7 +110,7 @@ final class WrappedASCIIWindow: LongLineProjection {
             han = resolved
         }
         else {
-            guard wordIndex?.usesFullWidthFont != true, mixed == nil else {
+            guard wordIndex?.usesFullWidthFont != true else {
                 return nil
             }
             han = nil
