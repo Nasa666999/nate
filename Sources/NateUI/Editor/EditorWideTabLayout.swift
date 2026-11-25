@@ -186,6 +186,20 @@ extension EditorView {
                         narrow: narrow,
                         deadline: deadline
                     )
+                    if index == nil, snapshot.text.isPrintableASCII(in: key.range) {
+                        let punctuation = try ASCIIWordWrapIndex.withASCIIPunctuation(
+                            text: snapshot.text,
+                            range: key.range,
+                            columns: wrappingColumns.narrow,
+                            deadline: deadline
+                        )
+                        return EditorWideTabLayout.Entry(
+                            columns: nil,
+                            han: nil,
+                            status: nil,
+                            wordWrap: punctuation
+                        )
+                    }
                     if index == nil, let fullWidth = wrappingColumns.fullWidth,
                         let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline),
                         han.characterCount * 3 == key.range.count
