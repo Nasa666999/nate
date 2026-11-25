@@ -79,8 +79,9 @@ enum RubyIndentationPlan {
                     try structure.consume(row.tokens[current], prefix: prefix)
                     current += 1
                 }
-                // 在原词中间、正文以外的块回退或未结束字面时，已消费的外层结构没有改写当前缩进的权限。
-                guard !(row.beginsInLiteral && offset == 0), !(row.holdsLiteral && offset == raw.count),
+                // 未闭合字面或下一行开始的 heredoc 正文沿用原空白，外层块不能改变其正文前缀。
+                guard !(row.beginsInLiteral && offset == 0),
+                    !((row.holdsLiteral || row.heredocCount > 0) && offset == raw.count),
                     current == row.tokens.count || row.tokens[current].span.lower >= offset,
                     row.commentStart.map({
                         offset <= $0 || offset == raw.count

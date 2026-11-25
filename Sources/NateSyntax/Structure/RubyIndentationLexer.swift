@@ -49,6 +49,9 @@ struct RubyIndentationLexer: Equatable, Sendable {
         let entirelyOpaque: Bool
         var opaqueStyle: RubyHighlightStyle? = nil
         var endingStyle: RubyHighlightStyle? = nil
+        var continuingLiteralStyle: RubyHighlightStyle? = nil
+        var heredocOpening: Int? = nil
+        var heredocCount = 0
         var heredocEnd: Int? = nil
         var interpolation: RubyInterpolationHighlights? = nil
     }
@@ -74,17 +77,31 @@ struct RubyIndentationLexer: Equatable, Sendable {
         if let document = heredocs.first {
             if let close = document.closingOffset(in: bytes) {
                 heredocs.removeFirst()
-                var row = Self.opaqueRow(document.style, ending: heredocs.first?.style)
+                var row = Self.opaqueRow(
+                    document.style,
+                    ending: heredocs.first?.continuationStyle ?? literal.liveStyle
+                )
                 row.heredocEnd = close
                 return row
             }
+            var embedded: [RubyHeredoc] = []
             let (interpolation, ending) = try heredocs[0].scanBody(
                 bytes,
                 highlight: highlightInterpolations,
+                embedded: &embedded,
                 check: check
             )
-            var row = Self.opaqueRow(document.style, ending: ending)
+            var row = Self.opaqueRow(document.style, ending: embedded.first?.style ?? ending)
             row.interpolation = interpolation
+            if let opening = embedded.first {
+                // 子正文在挂起的父正文之前消费，父分隔符不能在该段内结束外层字面或恢复结构权限。
+                guard embedded.count <= Self.maximumHeredocs - heredocs.count else {
+                    throw NateError.message("Ruby 同时等待的 heredoc 超过 256 个。")
+                }
+                row.heredocOpening = opening.openingOffset
+                row.heredocCount = embedded.count
+                heredocs.insert(contentsOf: embedded, at: 0)
+            }
             return row
         }
         if dataSection {
@@ -114,7 +131,13 @@ struct RubyIndentationLexer: Equatable, Sendable {
         var commentStart: Int?
         var code = RubyCodePosition(expectsOperand: !beginsInLiteral)
         if beginsInLiteral {
-            try literal.advance(in: bytes, from: &index, highlights: &highlights, check: check)
+            try literal.advance(
+                in: bytes,
+                from: &index,
+                highlights: &highlights,
+                heredocs: &heredocs,
+                check: check
+            )
             if index > 0 {
                 tokens.append(Token(kind: .operand, span: ByteRange(0, index), highlightStyle: literalStyle))
             }
@@ -146,10 +169,7 @@ struct RubyIndentationLexer: Equatable, Sendable {
             if acceptsLiteral,
                 let (document, after) = try RubyHeredoc.opening(in: bytes, at: index, check: check)
             {
-                guard heredocs.count < 256 else {
-                    throw NateError.message("Ruby 同行 heredoc 声明超过 256 个。")
-                }
-                heredocs.append(document)
+                try Self.appendHeredoc(document, to: &heredocs)
                 index = after
                 tokens.append(
                     Token(kind: .operand, span: ByteRange(start, index), highlightStyle: .heredocDelimiter)
@@ -162,7 +182,13 @@ struct RubyIndentationLexer: Equatable, Sendable {
                 literal.begin(delimiter)
                 index = after
                 let style = delimiter.style
-                try literal.advance(in: bytes, from: &index, highlights: &highlights, check: check)
+                try literal.advance(
+                    in: bytes,
+                    from: &index,
+                    highlights: &highlights,
+                    heredocs: &heredocs,
+                    check: check
+                )
                 literalStyle = literal.isOpen ? style : nil
                 tokens.append(Token(kind: .operand, span: ByteRange(start, index), highlightStyle: style))
                 code.consumeValue()
@@ -176,9 +202,26 @@ struct RubyIndentationLexer: Equatable, Sendable {
             holdsLiteral: literal.isOpen,
             commentStart: commentStart,
             entirelyOpaque: false,
-            endingStyle: literal.liveStyle ?? heredocs.first?.style,
+            endingStyle: heredocs.first?.style ?? literal.liveStyle,
+            continuingLiteralStyle: literalStyle,
+            heredocOpening: heredocs.first?.openingOffset,
+            heredocCount: heredocs.count,
             interpolation: highlights
         )
+    }
+
+    private static let maximumHeredocs = 256
+
+    /// 业务作用：顶层代码与插值声明共用当前物理行队列，多个正文依次沿原声明边界读取。
+    /// 参数说明:
+    /// - document: 当前语境完整确认的 heredoc 声明。
+    /// - queue: 该物理行已有声明的实际原始顺序。
+    /// 返回：预算内追加；超量停止整行，避免把未登记正文当作代码。
+    static func appendHeredoc(_ document: RubyHeredoc, to queue: inout [RubyHeredoc]) throws {
+        guard queue.count < maximumHeredocs else {
+            throw NateError.message("Ruby 同行 heredoc 声明超过 256 个。")
+        }
+        queue.append(document)
     }
 
     /// 业务作用：完全处于文档注释、heredoc 或数据段的行只发布着色资格，不发布结构词。

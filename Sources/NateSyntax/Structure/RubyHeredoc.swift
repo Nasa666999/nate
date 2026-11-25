@@ -4,6 +4,7 @@ struct RubyHeredoc: Equatable, Sendable {
     private let delimiter: [UInt8]
     private let allowsIndent: Bool
     let style: RubyHighlightStyle
+    let openingOffset: Int
     private var body = RubyLiteralState()
 
     /// 业务作用：仅从当前位置已确认的字面开端取得 heredoc 名称，普通左移运算继续按代码处理。
@@ -54,9 +55,17 @@ struct RubyHeredoc: Equatable, Sendable {
         let document = RubyHeredoc(
             delimiter: Array(bytes[name..<index]),
             allowsIndent: indented,
-            style: style
+            style: style,
+            openingOffset: start
         )
         return (document, index + (quoted ? 1 : 0))
+    }
+
+    /// 业务作用：内层正文结束后，恢复当前 heredoc 被暂停时的字面或插值类别。
+    /// 参数说明: 无。
+    /// 返回：已有正文沿用当前区域；尚未读取时按声明样式开始。
+    var continuationStyle: RubyHighlightStyle {
+        body.liveStyle ?? style
     }
 
     /// 业务作用：heredoc 只在同一真实分隔符结束，缩进及代码关键词不能提前打开后续正文。
@@ -80,11 +89,13 @@ struct RubyHeredoc: Equatable, Sendable {
     /// 参数说明:
     /// - bytes: 当前 heredoc 物理行正文的完整原字节。
     /// - highlight: 调用需要记录独立原生样式时为真。
+    /// - embedded: 已确认在这行插值内声明的子正文，按原声明顺序追加。
     /// - check: 本次原文读取的共同继续资格。
     /// 返回：原生调用的插值范围与当前物理换行的样式。
     mutating func scanBody(
         _ bytes: [UInt8],
         highlight: Bool,
+        embedded: inout [RubyHeredoc],
         check: () throws -> Void
     ) throws -> (RubyInterpolationHighlights?, RubyHighlightStyle) {
         guard style != .heredocLiteral else {
@@ -95,7 +106,7 @@ struct RubyHeredoc: Equatable, Sendable {
         }
         var events = highlight ? RubyInterpolationHighlights(initialDepth: body.interpolationDepth) : nil
         var index = 0
-        try body.advance(in: bytes, from: &index, highlights: &events, check: check)
-        return (events, body.liveStyle ?? style)
+        try body.advance(in: bytes, from: &index, highlights: &events, heredocs: &embedded, check: check)
+        return (events, continuationStyle)
     }
 }

@@ -80,12 +80,14 @@ struct RubyLiteralState: Equatable, Sendable {
     /// - bytes: 当前固定物理行不含结束符的原字节。
     /// - index: 已消费的原字节位置。
     /// - highlights: 着色调用的相对范围记录，结构调用不分配该记录。
+    /// - heredocs: 当前物理行已确认的 heredoc 声明，正文从下一物理行开始。
     /// - check: 整次读取的共同继续资格。
     /// 返回：推进到字面的真实终点或物理行尾，尚未结束的状态沿原界定符保留。
     mutating func advance(
         in bytes: [UInt8],
         from index: inout Int,
         highlights: inout RubyInterpolationHighlights?,
+        heredocs: inout [RubyHeredoc],
         check: () throws -> Void
     ) throws {
         while index < bytes.count, let region = regions.popLast() {
@@ -179,11 +181,27 @@ struct RubyLiteralState: Equatable, Sendable {
                     try highlights?.append(.token(token))
                     continue
                 }
-                if let (opening, after) = Self.opener(
-                    in: bytes,
-                    at: index,
-                    pattern: position.acceptsLiteral(in: bytes, at: index)
-                ) {
+                let acceptsLiteral = position.acceptsLiteral(in: bytes, at: index)
+                if acceptsLiteral,
+                    let (opening, after) = try RubyHeredoc.opening(in: bytes, at: index, check: check)
+                {
+                    // 声明行剩余表达式仍可闭合；正文从下一物理行按相同队列顺序读取，期间暂停外部字面。
+                    try RubyIndentationLexer.appendHeredoc(opening, to: &heredocs)
+                    position.consumeValue()
+                    regions.append(.interpolation(depth: depth, position: position))
+                    index = after
+                    try highlights?.append(
+                        .token(
+                            .init(
+                                kind: .operand,
+                                span: ByteRange(start, index),
+                                highlightStyle: .heredocDelimiter
+                            )
+                        )
+                    )
+                    continue
+                }
+                if let (opening, after) = Self.opener(in: bytes, at: index, pattern: acceptsLiteral) {
                     position.consumeValue()
                     regions.append(.interpolation(depth: depth, position: position))
                     try Self.requireRoom(regions.count)

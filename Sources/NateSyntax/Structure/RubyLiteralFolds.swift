@@ -11,8 +11,12 @@ struct RubyLiteralFolds {
         let style: RubyHighlightStyle
     }
 
-    private var heredoc: Opening?
-    private var pendingHeredocs = 0
+    private struct HeredocGroup {
+        let opening: Opening
+        var remaining: Int
+    }
+
+    private var heredocs: [HeredocGroup] = []
     private var words: WordList?
 
     /// 业务作用：Ruby 的 heredoc 与百分号单词数组只沿已确认的字面边界折叠，字面内的括号和关键词不提供代码块。
@@ -29,27 +33,31 @@ struct RubyLiteralFolds {
         check: () throws -> Void
     ) throws -> [FoldRegion] {
         var finished: [FoldRegion] = []
-        if row.heredocEnd != nil, let heredoc {
-            pendingHeredocs -= 1
-            if pendingHeredocs == 0 {
+        if row.heredocEnd != nil, var group = heredocs.popLast() {
+            group.remaining -= 1
+            if group.remaining == 0 {
                 // 同物理行可声明多个正文，最后一个真实分隔符之前始终属于同一行的折叠范围。
-                finished.append(region(from: heredoc, through: line, ending: body.upper))
-                self.heredoc = nil
+                finished.append(region(from: group.opening, through: line, ending: body.upper))
             }
+            else {
+                heredocs.append(group)
+            }
+        }
+        if let opening = row.heredocOpening {
+            // 当前行的内层声明先于挂起的外层结束，折叠不得越过仍依赖此正文的父范围。
+            heredocs.append(
+                HeredocGroup(
+                    opening: Opening(line: line, byte: body.lower + opening),
+                    remaining: row.heredocCount
+                )
+            )
         }
         for (index, token) in row.tokens.enumerated() {
             try check()
-            if token.highlightStyle == .heredocDelimiter {
-                if heredoc == nil {
-                    heredoc = Opening(line: line, byte: body.lower + token.span.lower)
-                }
-                pendingHeredocs += 1
-                continue
-            }
             guard let style = token.highlightStyle, style == .wordList || style == .interpolatedWords else {
                 continue
             }
-            let continues = token.span.upper == body.count && row.endingStyle == style
+            let continues = token.span.upper == body.count && row.continuingLiteralStyle == style
             if index == 0, row.beginsInLiteral, let opening = words, opening.style == style {
                 if !continues {
                     finished.append(
