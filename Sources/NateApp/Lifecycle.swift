@@ -204,7 +204,14 @@ extension ApplicationController {
                 sender.reply(toApplicationShouldTerminate: false)
                 return
             }
-            if !failures.isEmpty || !protected {
+            if !protected {
+                // 草稿仍只有较旧快照或内存副本，退出提示需要显示当前恢复通道拒绝写入的原因。
+                let cause =
+                    documents.lazy.compactMap(\.recoveryError).first
+                    ?? "恢复目录尚未确认保存当前正文和工作区索引。"
+                failures.append("工作区恢复：" + cause)
+            }
+            if !failures.isEmpty {
                 let alert = NSAlert()
                 alert.messageText = protected ? "恢复副本已保存，部分内容尚未持久化" : "恢复内容尚未全部落盘"
                 alert.informativeText = failures.joined(separator: "\n") + "\n取消可继续编辑并处理保存失败。"
