@@ -472,13 +472,15 @@ extension ApplicationController {
             document.setEditingSuspension(.documentClosing, active: false)
         }
         var archiveNeeded = document.url == nil && document.buffer.text.byteCount > 0
+        var discardDraft = false
         if archiveNeeded {
             let alert = NSAlert()
             alert.messageText = "关闭临时文档 \(document.name)"
-            alert.informativeText = "可以保存到文件，或保留独立恢复副本后关闭。最近 100 份关闭内容可从文件菜单恢复。"
+            alert.informativeText = "可以保存到文件、保留独立恢复副本，或丢弃这份草稿正文。最近 100 份明确保留的内容可从文件菜单恢复。"
             alert.addButton(withTitle: "另存为")
             alert.addButton(withTitle: "保留恢复副本并关闭")
-            alert.addButton(withTitle: "取消")
+            alert.addButton(withTitle: "丢弃并关闭").hasDestructiveAction = true
+            alert.addButton(withTitle: "取消").keyEquivalent = "\u{1b}"
             let choice = alert.runModal()
             if choice == .alertFirstButtonReturn {
                 await saveAs(document)
@@ -487,12 +489,16 @@ extension ApplicationController {
                 }
                 archiveNeeded = false
             }
+            else if choice == .alertThirdButtonReturn {
+                // 丢弃只收束工作区引用；此前未落盘的正文不能为归档或恢复入口新增持久化副本。
+                archiveNeeded = false
+                discardDraft = true
+            }
             else if choice != .alertSecondButtonReturn {
                 return
             }
         }
-        let saved = await flush(document)
-        if !saved {
+        if !discardDraft, !(await flush(document)) {
             document.savePermit?.cancel()
             // 发布系统调用尚未返回时不能移除文档后重新打开同一路径建立另一个写入者。
             guard document.savePermit?.hasActivePublication != true else {
@@ -545,13 +551,15 @@ extension ApplicationController {
             SystemIntegration.alert("关闭未完成", "打开文档索引未能可靠更新，内容保持打开。")
             return
         }
-        recentClosed.append(
-            ClosedTab(
-                url: archiveNeeded ? nil : document.url,
-                recovery: archiveNeeded ? document.recoveryReference : nil,
-                name: document.name
+        if !discardDraft {
+            recentClosed.append(
+                ClosedTab(
+                    url: archiveNeeded ? nil : document.url,
+                    recovery: archiveNeeded ? document.recoveryReference : nil,
+                    name: document.name
+                )
             )
-        )
+        }
         externalStamps.removeValue(forKey: id)
         if recentClosed.count > 20 {
             recentClosed.removeFirst()
