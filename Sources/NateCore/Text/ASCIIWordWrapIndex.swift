@@ -207,7 +207,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
-    /// 业务作用：基本汉字与 ASCII 词共用真实容器，每个视觉行按自身字体组成确认高度。
+    /// 业务作用：基本汉字、全角标点和 ASCII 词共用真实容器，每个视觉行按自身字体组成确认高度。
     /// 参数说明:
     /// - text: 当前不可变正文。
     /// - range: 排除实际换行符后的完整物理行范围。
@@ -215,7 +215,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - source: 已证明属于同一行的汉字与 ASCII 字形范围。
     /// - metrics: 当前真实基础及级联字体的容器、步距与行高。
     /// - deadline: 所有实际断行与垂直定位共用的截止。
-    /// 返回：词、基本汉字及空白完整确认时提供安全索引，其它断行类型仍由通用段落处理。
+    /// 返回：全部字形及可用断点确认后提供索引，存在无法定位的段落语境时为空。
     public static func withMixedHan(
         text: PieceTree,
         range: ByteRange,
@@ -310,12 +310,14 @@ public struct ASCIIWordWrapIndex: Sendable {
             script = .ascii
         }
         let punctuation: MonospaceLineBreaks?
-        if allowsPunctuation {
+        let fullwidthPunctuation = mixedHan != nil && han?.containsFullwidthPunctuation == true
+        if allowsPunctuation || fullwidthPunctuation {
             guard
                 let pages = try MonospaceLineBreaks(
                     text: text,
                     range: range,
                     allowsNarrowLetters: narrow != nil || narrowTabs != nil,
+                    allowsFullwidth: fullwidthPunctuation,
                     deadline: deadline
                 )
             else {
@@ -479,7 +481,7 @@ public struct ASCIIWordWrapIndex: Sendable {
             return totalHeight
         }
         let anchor = anchor(at: row, by: \.row)
-        var cursor = Cursor(text: text, range: range, script: script, punctuation: nil)
+        var cursor = Cursor(text: text, range: range, script: script, punctuation: punctuation)
         var start = anchor.byte
         var y = anchor.y
         for _ in anchor.row..<row {
@@ -510,7 +512,7 @@ public struct ASCIIWordWrapIndex: Sendable {
             return rowCount - 1
         }
         let anchor = anchor(at: max(0, y), by: \.y)
-        var cursor = Cursor(text: text, range: range, script: script, punctuation: nil)
+        var cursor = Cursor(text: text, range: range, script: script, punctuation: punctuation)
         var start = anchor.byte
         var offset = anchor.y
         for row in anchor.row..<rowCount {

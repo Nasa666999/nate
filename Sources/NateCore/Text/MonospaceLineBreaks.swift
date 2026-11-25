@@ -7,16 +7,21 @@ struct MonospaceLineBreaks: Sendable {
     private static let pageBytes = 32_768
     private static let boundarySearchBytes = 8192
 
-    /// 业务作用：把等宽长行的标点断行交给原生分词器逐页解释，页边保留数值与标点语境。
+    /// 业务作用：把已确认字形的长行交给原生分词器逐页解释，页边保留数值与标点语境。
     /// 参数说明:
     /// - text: 已提交的不可变正文。
-    /// - range: 由调用者确认的同一等宽物理行，可包含 ASCII 及当前模式许可的字母或 Tab。
+    /// - range: 已由调用者确认字符组成的同一物理行。
     /// - allowsNarrowLetters: 正文已完整确认可含独立的两字节窄字母时为真。
+    /// - allowsFullwidth: 同一正文已确认可含基本统一汉字和指定的全角标点时为真。
     /// - deadline: 本次完整断行工作共享的截止。
     /// 返回：所有页边均已确认时提供索引，缺少可靠页边时不发布部分证据。
-    init?(text: PieceTree, range: ByteRange, allowsNarrowLetters: Bool, deadline: ContinuousClock.Instant)
-        throws
-    {
+    init?(
+        text: PieceTree,
+        range: ByteRange,
+        allowsNarrowLetters: Bool,
+        allowsFullwidth: Bool = false,
+        deadline: ContinuousClock.Instant
+    ) throws {
         var ends: [Int] = []
         var lower = range.lower
         while lower < range.upper {
@@ -31,7 +36,12 @@ struct MonospaceLineBreaks: Sendable {
             }
             let start = maximum - Self.boundarySearchBytes
             let sample = text.bytes(in: ByteRange(start, maximum + 1))
-            guard let relative = Self.stableBoundary(in: sample, allowsNarrowLetters: allowsNarrowLetters)
+            guard
+                let relative = Self.stableBoundary(
+                    in: sample,
+                    allowsNarrowLetters: allowsNarrowLetters,
+                    allowsFullwidth: allowsFullwidth
+                )
             else {
                 return nil
             }
@@ -42,16 +52,29 @@ struct MonospaceLineBreaks: Sendable {
         pageEnds = ends
     }
 
-    /// 业务作用：只在普通字母数字之间的完整空白分隔后结束分词页，保留两侧原始断行语义。
+    /// 业务作用：只在词间完整空白或相邻基本统一汉字之间分开分词页，保留两侧原始断行语义。
     /// 参数说明:
     /// - sample: 当前页后段与少量后继的原始字节。
     /// - allowsNarrowLetters: 范围已由同一原文确认两字节窄字母时为真。
+    /// - allowsFullwidth: 范围允许确实成对相邻的基本统一汉字作为页边时为真。
     /// 返回：从样本起点计的真实分页端点；缺少完整周边证据时为空。
-    private static func stableBoundary(in sample: [UInt8], allowsNarrowLetters: Bool) -> Int? {
-        for current in stride(from: sample.count - 1, through: 2, by: -1)
-        where (sample[current - 1] == 32 || sample[current - 1] == 9)
-            && isWordStart(sample[current], allowsNarrowLetters: allowsNarrowLetters)
-        {
+    private static func stableBoundary(
+        in sample: [UInt8],
+        allowsNarrowLetters: Bool,
+        allowsFullwidth: Bool
+    ) -> Int? {
+        for current in stride(from: sample.count - 1, through: 2, by: -1) {
+            if allowsFullwidth, current >= 3, current + 1 < sample.count,
+                isUnifiedIdeograph(sample[current - 3], second: sample[current - 2]),
+                isUnifiedIdeograph(sample[current], second: sample[current + 1])
+            {
+                return current
+            }
+            guard (sample[current - 1] == 32 || sample[current - 1] == 9),
+                isWordStart(sample[current], allowsNarrowLetters: allowsNarrowLetters)
+            else {
+                continue
+            }
             var previous = current - 1
             while previous > 0, sample[previous] == 32 || sample[previous] == 9 {
                 previous -= 1
@@ -65,6 +88,15 @@ struct MonospaceLineBreaks: Sendable {
             }
         }
         return nil
+    }
+
+    /// 业务作用：用已验证 UTF-8 的前两个字节区分基本统一汉字与全角标点，页边不会落在标量内部。
+    /// 参数说明:
+    /// - first: 候选标量的首字节。
+    /// - second: 候选标量的后继字节。
+    /// 返回：完整三字节标量属于 U+4E00 至 U+9FFF 时为真。
+    private static func isUnifiedIdeograph(_ first: UInt8, second: UInt8) -> Bool {
+        (229...233).contains(first) || first == 228 && second >= 184
     }
 
     /// 业务作用：分页仅在普通字母数字通道重启，避免上下文字符跨越页边改变断行。

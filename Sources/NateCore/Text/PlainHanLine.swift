@@ -4,6 +4,7 @@ public struct PlainHanLine: Sendable {
     public let range: ByteRange
     public let characterCount: Int
     public let containsOnlyUnifiedIdeographs: Bool
+    let containsFullwidthPunctuation: Bool
     private let sourceIdentity: UUID
     private let text: PieceTree
     private let checkpoints: [Int]
@@ -44,11 +45,13 @@ public struct PlainHanLine: Sendable {
             text = slice
             characterCount = range.count / 3
             containsOnlyUnifiedIdeographs = true
+            containsFullwidthPunctuation = false
             checkpoints = []
             return
         }
         var bytes = 0
         var characters = 0
+        var containsFullwidthPunctuation = false
         var next = Self.interval
         var checkpoints = [0]
         checkpoints.reserveCapacity(1 + slice.utf16Count / Self.interval)
@@ -84,6 +87,7 @@ public struct PlainHanLine: Sendable {
                         guard Self.punctuationScalars.contains(scalar) else {
                             throw UnsupportedText.scalar
                         }
+                        containsFullwidthPunctuation = containsFullwidthPunctuation || scalar != 0x3000
                         size = 3
                     }
                     else {
@@ -108,6 +112,7 @@ public struct PlainHanLine: Sendable {
         self.text = slice
         self.characterCount = characters
         containsOnlyUnifiedIdeographs = false
+        self.containsFullwidthPunctuation = containsFullwidthPunctuation
         self.checkpoints = checkpoints
     }
 

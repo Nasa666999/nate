@@ -258,7 +258,7 @@ extension ASCIIWordWrapIndex {
         private static let opens = Set("〈《「『【〔（［｛".utf16)
         private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
 
-        /// 业务作用：窄词和全角正文共享真实容器，遇到不适用的字形必须拒绝整个长行投影。
+        /// 业务作用：窄词和全角正文共享真实容器，按已有原生分词证据处理标点并保护完整长行坐标。
         /// 参数说明:
         /// - start: 当前视觉行起点的完整原字节边界。
         /// - metrics: 当前已确认的两类字体步距及实际宽度。
@@ -293,7 +293,10 @@ extension ASCIIWordWrapIndex {
                 }
                 end += size
             }
-            if end < range.upper, try allowsMixedHanBreak(at: end) == false {
+            if end < range.upper, punctuation != nil {
+                end = try mixedHanPunctuationEnd(after: start, hard: hard, trailing: end)
+            }
+            else if end < range.upper, try allowsMixedHanBreak(at: end) == false {
                 while end > start {
                     end -= byte(at: end - 1) < 128 ? 1 : 3
                     if end > start, try allowsMixedHanBreak(at: end) {
@@ -313,7 +316,7 @@ extension ASCIIWordWrapIndex {
             return (end, Int((pixels / metrics.asciiAdvance).rounded(.up)))
         }
 
-        /// 业务作用：只有经验证的基础字母、数字、基本汉字和两种水平空白可参与混排原生证据。
+        /// 业务作用：只接纳已确认的两类字形度量；存在全角标点时还要有同一原文的分词证据。
         /// 参数说明:
         /// - offset: 当前完整 UTF-8 标量的准确起点。
         /// 返回：字形宽度类别与空白身份；其它字符终止混排准备。
@@ -326,10 +329,50 @@ extension ASCIIWordWrapIndex {
                 throw Refusal.character
             }
             let scalar = hanScalar(at: offset)
-            guard scalar == 0x3000 || (0x4E00...0x9FFF).contains(scalar) else {
+            guard
+                scalar == 0x3000 || (0x4E00...0x9FFF).contains(scalar)
+                    || punctuation != nil && PlainHanLine.usesHanFont(scalar)
+            else {
                 throw Refusal.character
             }
             return (true, scalar == 0x3000)
+        }
+
+        /// 业务作用：按原生分词确定全角标点的断点，并保留 ASCII 空格与全角空格间的实际字形边界。
+        /// 参数说明:
+        /// - start: 当前真实视觉行首。
+        /// - hard: 该行能够完整容纳的最后一个原字节端点。
+        /// - trailing: 该端点后的连续空白结束位置。
+        /// 返回：可确认的原断点；需要完整段落语境才能判断时拒绝整行投影。
+        private mutating func mixedHanPunctuationEnd(after start: Int, hard: Int, trailing: Int) throws -> Int
+        {
+            guard let boundary = try punctuation?.boundary(atOrBefore: trailing) else {
+                throw Refusal.character
+            }
+            if boundary > hard {
+                return boundary
+            }
+            // 段落切片可能改变无可用断点的行首空白归属。缺少同一原生断点时不能发布远端坐标。
+            guard boundary > start || byte(at: start) != 32 else {
+                throw Refusal.character
+            }
+            let fallback = boundary > start ? boundary : hard
+            var asciiTail = hard
+            while asciiTail < trailing, byte(at: asciiTail) == 32 {
+                asciiTail += 1
+            }
+            if asciiTail > hard, asciiTail < trailing {
+                var previous = hard
+                while previous > start {
+                    let wide = byte(at: previous - 1) >= 128
+                    previous -= wide ? 3 : 1
+                    let scalar = wide ? hanScalar(at: previous) : UInt16(byte(at: previous))
+                    if scalar != 32, scalar != 0x3000 {
+                        return Self.opens.contains(scalar) ? fallback : asciiTail
+                    }
+                }
+            }
+            return fallback
         }
 
         /// 业务作用：原生允许在基本汉字或完整空白段后断行，ASCII 词保持连续。
