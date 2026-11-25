@@ -45,10 +45,14 @@ final class WrappedASCIIWindow: LongLineProjection {
         CGFloat(max(metrics.columns, wordIndex?.maximumRowLength ?? 0)) * advance
     }
     var height: CGFloat {
-        max(20, metrics.firstBottom + CGFloat(rowCount - 1) * metrics.pitch)
+        if let variable = wordIndex?.variableOffset(at: rowCount) {
+            return max(20, CGFloat(variable))
+        }
+        return max(20, metrics.firstBottom + CGFloat(rowCount - 1) * metrics.pitch)
     }
+    private var variableWindowOffset: CGFloat?
     private var offsetY: CGFloat {
-        CGFloat(rows.lowerBound) * metrics.pitch
+        variableWindowOffset ?? CGFloat(rows.lowerBound) * metrics.pitch
     }
 
     /// 业务作用：实际字体、原文和全部断行范围均有证据时才以原生窗口呈现超长软换行。
@@ -84,12 +88,14 @@ final class WrappedASCIIWindow: LongLineProjection {
             language: language,
             adjustment: fontZoomAdjustment
         )
+        let mixed = wordIndex?.mixedHanMetrics
         let han: NativeHanLineFont?
         if let ideographs {
             guard ideographs.range == range, ideographs.matches(snapshot.text),
-                ideographs.characterCount * 3 == range.count,
-                wordIndex?.usesFullWidthFont == true
-                    || wordIndex == nil && ideographs.containsOnlyUnifiedIdeographs,
+                mixed != nil
+                    || ideographs.characterCount * 3 == range.count
+                        && (wordIndex?.usesFullWidthFont == true
+                            || wordIndex == nil && ideographs.containsOnlyUnifiedIdeographs),
                 let resolved = NativeHanLineFont.resolve(from: actual)
             else {
                 return nil
@@ -97,7 +103,7 @@ final class WrappedASCIIWindow: LongLineProjection {
             han = resolved
         }
         else {
-            guard wordIndex?.usesFullWidthFont != true else {
+            guard wordIndex?.usesFullWidthFont != true, mixed == nil else {
                 return nil
             }
             han = nil
@@ -106,11 +112,19 @@ final class WrappedASCIIWindow: LongLineProjection {
         guard range.count > EditorNativeLayoutPolicy.maximumParagraphBytes,
             snapshot.text.byteCount <= EditorNativeLayoutPolicy.maximumDocumentBytes,
             containerWidth.isFinite, containerWidth > 0,
-            let advance = han?.advance
+            let advance = (mixed == nil ? han?.advance : nil)
                 ?? NativeMonospaceGeometry.uniformAdvance(actual, appearance: appearance),
             containerWidth / advance <= 8192, let lineOrigin = snapshot.text.utf16Offset(byte: range.lower)
         else {
             return nil
+        }
+        if let mixed {
+            // 后台纵坐标和断点只属于同一容器与两种字体，重新定位前须确认原测量仍匹配。
+            guard mixed.width == Double(containerWidth), mixed.asciiAdvance == Double(advance),
+                han.map({ Double($0.advance) }) == mixed.hanAdvance
+            else {
+                return nil
+            }
         }
         let byteWidth = han == nil ? 1 : 3
         let total = wordIndex?.characterCount ?? range.count / byteWidth
@@ -145,7 +159,7 @@ final class WrappedASCIIWindow: LongLineProjection {
                     font: actual,
                     width: containerWidth,
                     appearance: appearance,
-                    hanFont: han
+                    hanFont: mixed == nil ? han : nil
                 ),
                 wordIndex.range == range, wordIndex.matches(snapshot.text, columns: grid.columns),
                 let first = wordIndex.rows(startingAt: 0, count: 1)?.first
@@ -183,7 +197,8 @@ final class WrappedASCIIWindow: LongLineProjection {
                 expected: expected,
                 indexedRows: indexedRows,
                 tabWidth: wordIndex?.tabWidth,
-                narrowLetters: wordIndex?.narrowScalars.isEmpty == false
+                narrowLetters: wordIndex?.narrowScalars.isEmpty == false,
+                mixedHan: mixed
             )
         else {
             return nil
@@ -390,13 +405,16 @@ final class WrappedASCIIWindow: LongLineProjection {
         native.drawForeground(at: NSPoint(x: origin.x, y: origin.y + offsetY), color: color, in: context)
     }
 
-    /// 业务作用：有界整数行号只由真实首行底边和固定行距换算。
+    /// 业务作用：先采用同一混排字形的实际累计高度；固定字体可用真实行距直接换算。
     /// 参数说明:
     /// - y: 相对完整逻辑行的原生纵坐标。
     /// 返回：合法范围内的视觉行号。
     private func row(at y: CGFloat) -> Int {
         guard y.isFinite else {
             return 0
+        }
+        if let variable = wordIndex?.variableRow(at: Double(y)) {
+            return variable
         }
         let number = floor((y - metrics.firstBottom) / metrics.pitch) + 1
         return Int(min(CGFloat(rowCount - 1), max(0, number)))
@@ -410,7 +428,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         guard (0...characterCount).contains(character) else {
             return nil
         }
-        if wordIndex?.narrowScalars.isEmpty == false {
+        if wordIndex?.narrowScalars.isEmpty == false || wordIndex?.mixedHanMetrics != nil {
             return snapshot.text.byteOffset(utf16: lineOriginUTF16 + character)
         }
         return range.lower + character * fixedByteWidth
@@ -481,14 +499,21 @@ final class WrappedASCIIWindow: LongLineProjection {
                 expected: metrics,
                 indexedRows: indexedRows,
                 tabWidth: wordIndex?.tabWidth,
-                narrowLetters: wordIndex?.narrowScalars.isEmpty == false
+                narrowLetters: wordIndex?.narrowScalars.isEmpty == false,
+                mixedHan: wordIndex?.mixedHanMetrics
             ) != nil
         else {
             unavailableReason = "超长软换行的原生断行位置无法确认，已暂停当前呈现。"
             return
         }
+        let variable = wordIndex?.variableOffset(at: first)
+        guard wordIndex?.mixedHanMetrics == nil || variable != nil else {
+            unavailableReason = "超长软换行缺少当前原生窗口的纵坐标。"
+            return
+        }
         native = candidate
         rows = first..<last
+        variableWindowOffset = variable.map { CGFloat($0) }
         unavailableReason = nil
     }
 

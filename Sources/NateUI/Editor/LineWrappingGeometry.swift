@@ -9,15 +9,19 @@ extension LineLayout {
     /// - indexedRows: 已独立确认的实际断行，连续单词可采用已确认的列数。
     /// - tabWidth: 原生制表视觉行使用的列宽；其它字形每个 UTF-16 单元独立占一列。
     /// - narrowLetters: 同一原文及字体已确认的独立窄字母可参与制表时为真。
+    /// - mixedHan: 同一容器中原生验证的两类字形步距与视觉行高度。
     /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
     func uniformWrapping(
         advance: CGFloat,
         expected: WrappedASCIIGeometry? = nil,
         indexedRows: [ByteRange]? = nil,
         tabWidth: Int? = nil,
-        narrowLetters: Bool = false
+        narrowLetters: Bool = false,
+        mixedHan: MixedHanWrapMetrics? = nil
     ) -> WrappedASCIIGeometry? {
-        guard unavailableReason == nil, orderedPositions, orderedHeights, let first = nativeLines.first else {
+        guard unavailableReason == nil, orderedPositions, orderedHeights, let first = nativeLines.first,
+            mixedHan == nil || indexedRows != nil && tabWidth == nil
+        else {
             return nil
         }
         let columns = expected?.columns ?? first.upper
@@ -29,6 +33,7 @@ extension LineLayout {
         else {
             return nil
         }
+        var variableTop: CGFloat = 0
         for (index, row) in nativeLines.enumerated() {
             let indexed = indexedRows?[index]
             let lower: Int
@@ -72,12 +77,26 @@ extension LineLayout {
             else {
                 cells = count
             }
-            let originY = CGFloat(index) * pitch
+            let originY: CGFloat
+            let rowBottom: CGFloat
+            let rowWidth: CGFloat
+            if let mixedHan, let indexed {
+                let han = (indexed.count - count) / 2
+                originY = variableTop
+                variableTop += CGFloat(han == 0 ? mixedHan.asciiHeight : mixedHan.hanHeight)
+                rowBottom = variableTop
+                rowWidth = CGFloat(count - han) * advance + CGFloat(han) * CGFloat(mixedHan.hanAdvance)
+            }
+            else {
+                originY = CGFloat(index) * pitch
+                rowBottom = bottom + originY
+                rowWidth = CGFloat(cells) * advance
+            }
             guard row.lower == lower, row.upper == lower + count,
                 abs(row.bounds.minY - (top + originY)) < 0.04,
-                abs(row.bounds.maxY - (bottom + originY)) < 0.04,
+                abs(row.bounds.maxY - rowBottom) < 0.04,
                 abs(row.caret(at: lower).minX) < 0.02,
-                abs(row.caret(at: row.upper).minX - CGFloat(cells) * advance) < 0.04
+                abs(row.caret(at: row.upper).minX - rowWidth) < 0.04
             else {
                 return nil
             }

@@ -100,6 +100,12 @@ extension EditorView {
                     return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
                 }
                 let hanColumns = wideHanWrappingColumns(snapshot: snapshot, range: range, font: actual)
+                let mixedHan = wideMixedHanWrappingMetrics(
+                    snapshot: snapshot,
+                    range: range,
+                    font: actual,
+                    ascii: grid
+                )
                 let tabMetrics = NativeMonospaceGeometry.uniformAdvance(
                     actual,
                     appearance: effectiveAppearance
@@ -111,7 +117,7 @@ extension EditorView {
                     snapshot: snapshot,
                     key: key,
                     width: tabSettings.width,
-                    wrappingColumns: (grid.columns, hanColumns, tabMetrics)
+                    wrappingColumns: (grid.columns, hanColumns, tabMetrics, mixedHan)
                 )
             }
             else {
@@ -140,13 +146,15 @@ extension EditorView {
     /// - snapshot: 当前逻辑行所属的不可变正文。
     /// - key: 测量开始时固定的视图布局来源。
     /// - width: 当前真实 Tab 宽度。
-    /// - wrappingColumns: 自动换行时实测的窄字形列数、可用的全角列数和真实制表度量。
+    /// - wrappingColumns: 自动换行时实测的列数、制表与混排字体度量。
     /// 返回：同一来源内替换暂未排版窗口，迟到、取消或超量时保留原文和选择。
     private func prepareWideLine(
         snapshot: DocumentSnapshot,
         key: EditorWideTabLayout.Key,
         width: Int,
-        wrappingColumns: (narrow: Int, fullWidth: Int?, tabMetrics: HanTabColumns.Metrics?)? = nil
+        wrappingColumns: (
+            narrow: Int, fullWidth: Int?, tabMetrics: HanTabColumns.Metrics?, mixedHan: MixedHanWrapMetrics?
+        )? = nil
     ) {
         wideTabLayout.task = Task { [weak self] in
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
@@ -242,6 +250,24 @@ extension EditorView {
                             han: full == nil ? nil : han,
                             status: nil,
                             wordWrap: full
+                        )
+                    }
+                    if index == nil, narrow == nil, let metrics = wrappingColumns.mixedHan,
+                        let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline),
+                        let wrapped = try ASCIIWordWrapIndex.withMixedHan(
+                            text: snapshot.text,
+                            range: key.range,
+                            columns: wrappingColumns.narrow,
+                            source: han,
+                            metrics: metrics,
+                            deadline: deadline
+                        )
+                    {
+                        return EditorWideTabLayout.Entry(
+                            columns: nil,
+                            han: han,
+                            status: nil,
+                            wordWrap: wrapped
                         )
                     }
                     if index == nil, narrow == nil, !snapshot.text.isPrintableASCII(in: key.range),
@@ -409,6 +435,44 @@ extension EditorView {
             appearance: effectiveAppearance,
             hanFont: han
         )?.columns
+    }
+
+    /// 业务作用：混排可能让同一逻辑行拥有两种原生视觉行高，后台必须使用各自真实高度。
+    /// 参数说明:
+    /// - snapshot: 当前不可变正文，用于限制仅可能包含两类宽度的完整物理行。
+    /// - range: 当前逻辑行的完整原字节范围。
+    /// - font: 已应用主题与缩放的字体。
+    /// - ascii: 同一容器中已确认的基础字形网格。
+    /// 返回：同一容器的两个实际字体度量；任何测量不完整时为空。
+    private func wideMixedHanWrappingMetrics(
+        snapshot: DocumentSnapshot,
+        range: ByteRange,
+        font: NSFont,
+        ascii: WrappedASCIIGeometry
+    ) -> MixedHanWrapMetrics? {
+        let width = nativeBodyLayoutWidth
+        guard let positions = snapshot.text.nsRange(range), positions.length < range.count,
+            positions.length * 3 > range.count,
+            let advance = NativeMonospaceGeometry.uniformAdvance(font, appearance: effectiveAppearance),
+            let fullFont = NativeHanLineFont.resolve(from: font),
+            let full = WrappedASCIIWindow.referenceGeometry(
+                font: font,
+                width: width,
+                appearance: effectiveAppearance,
+                hanFont: fullFont
+            ),
+            abs(ascii.firstTop) < 0.02, abs(full.firstTop) < 0.02,
+            abs(ascii.firstBottom - ascii.pitch) < 0.02, abs(full.firstBottom - full.pitch) < 0.02
+        else {
+            return nil
+        }
+        return MixedHanWrapMetrics(
+            width: width,
+            asciiAdvance: advance,
+            hanAdvance: fullFont.advance,
+            asciiHeight: ascii.pitch,
+            hanHeight: full.pitch
+        )
     }
 
     /// 业务作用：长行制表只能沿所属真实视图的主题字体、字号与实际制表规则建立像素证据。

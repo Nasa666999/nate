@@ -8,10 +8,13 @@ public struct ASCIIWordWrapIndex: Sendable {
     public let characterCount: Int
     public let narrowScalars: [UInt16]
     public let usesFullWidthFont: Bool
+    public let mixedHanMetrics: MixedHanWrapMetrics?
+    private let totalHeight: Double
 
     private struct Anchor: Sendable {
         let row: Int
         let byte: Int
+        let y: Double
     }
 
     enum Refusal: Error {
@@ -23,6 +26,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         case ascii
         case narrow
         case han
+        case mixedHan(MixedHanWrapMetrics)
         case tabbed(width: Int, contentEnd: Int, narrowLetters: Bool)
     }
 
@@ -203,6 +207,34 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
+    /// 业务作用：基本汉字与 ASCII 词共用真实容器，每个视觉行按自身字体组成确认高度。
+    /// 参数说明:
+    /// - text: 当前不可变正文。
+    /// - range: 排除实际换行符后的完整物理行范围。
+    /// - columns: 当前基础字体的原生列数，用于确认视口身份。
+    /// - source: 已证明属于同一行的汉字与 ASCII 字形范围。
+    /// - metrics: 当前真实基础及级联字体的容器、步距与行高。
+    /// - deadline: 所有实际断行与垂直定位共用的截止。
+    /// 返回：词、基本汉字及空白完整确认时提供安全索引，其它断行类型仍由通用段落处理。
+    public static func withMixedHan(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        source: PlainHanLine,
+        metrics: MixedHanWrapMetrics,
+        deadline: ContinuousClock.Instant
+    ) throws -> Self? {
+        try Self(
+            text: text,
+            range: range,
+            columns: columns,
+            narrow: nil,
+            han: source,
+            mixedHan: metrics,
+            deadline: deadline
+        )
+    }
+
     /// 业务作用：不同字体类型复用同一完整视觉行索引和有界稀疏锚点。
     /// 参数说明:
     /// - text: 当前固定的原正文。
@@ -210,6 +242,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - columns: 实际对应字体和容器的列数。
     /// - narrow: 可选的同源多字节窄字母证明。
     /// - han: 可选的同源全角字形证明。
+    /// - mixedHan: 存在窄字形及全角字形时采用的实际原生度量。
     /// - tabs: 可选的同源原始 ASCII 制表证明。
     /// - narrowTabs: 可选的包含独立窄字母的同源制表证明。
     /// - allowsPunctuation: 已请求逐页解释原生 ASCII 标点断行时为真。
@@ -221,6 +254,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         columns: Int,
         narrow: PlainNarrowUnicodeLine?,
         han: PlainHanLine?,
+        mixedHan: MixedHanWrapMetrics? = nil,
         tabs: ASCIITabColumns? = nil,
         narrowTabs: HanTabColumns? = nil,
         allowsPunctuation: Bool = false,
@@ -233,11 +267,18 @@ public struct ASCIIWordWrapIndex: Sendable {
         }
         let script: Script
         if let han {
-            // 只有整行字形都由同一个全角字体提供时，才可按固定视觉列计算断点。
-            guard han.range == range, han.matches(text), han.characterCount * 3 == range.count else {
+            guard han.range == range, han.matches(text) else {
                 return nil
             }
-            script = .han
+            if let mixedHan, han.characterCount * 3 != range.count {
+                script = .mixedHan(mixedHan)
+            }
+            else if mixedHan == nil, han.characterCount * 3 == range.count {
+                script = .han
+            }
+            else {
+                return nil
+            }
         }
         else if let narrow {
             guard narrow.range == range, narrow.matches(text) else {
@@ -286,10 +327,11 @@ public struct ASCIIWordWrapIndex: Sendable {
             punctuation = nil
         }
         var cursor = Cursor(text: text, range: range, script: script, punctuation: punctuation)
-        var anchors = [Anchor(row: 0, byte: range.lower)]
+        var anchors = [Anchor(row: 0, byte: range.lower, y: 0)]
         var row = 0
         var start = range.lower
         var widest = 0
+        var height = 0.0
         do {
             repeat {
                 // 全部逻辑行先完成并确认仍属同一次计算，才交给主线程用于远端导航。
@@ -300,10 +342,13 @@ public struct ASCIIWordWrapIndex: Sendable {
                     }
                 }
                 if start - anchors[anchors.count - 1].byte >= Self.anchorDistance {
-                    anchors.append(Anchor(row: row, byte: start))
+                    anchors.append(Anchor(row: row, byte: start, y: height))
                 }
                 let next = try cursor.nextRow(after: start, columns: columns)
                 widest = max(widest, next.cells)
+                if let mixedHan {
+                    height += try Self.height(of: ByteRange(start, next.end), in: text, metrics: mixedHan)
+                }
                 start = next.end
                 row += 1
             } while start < range.upper
@@ -330,6 +375,8 @@ public struct ASCIIWordWrapIndex: Sendable {
             han?.characterCount ?? narrow?.characterCount ?? narrowTabs?.characterCount ?? range.count
         narrowScalars = narrow?.scalars ?? narrowTabs?.narrowScalars ?? []
         usesFullWidthFont = script == .han
+        mixedHanMetrics = mixedHan
+        totalHeight = height
     }
 
     /// 业务作用：整个段落仅有一行时，原生布局允许最后的制表空白留在该行。
@@ -420,12 +467,92 @@ public struct ASCIIWordWrapIndex: Sendable {
         return output
     }
 
-    /// 业务作用：按字节或视觉行定位最近的已证明锚点，只读取当前需要的局部原文。
+    /// 业务作用：为混排文本的小窗口恢复完整逻辑行中的原生纵向偏移。
     /// 参数说明:
-    /// - target: 已验证的字节或视觉行。
-    /// - order: 采用真实字节或实际视觉行作为单调索引。
+    /// - row: 完整逻辑行内的视觉行号；末行之后可取得总高。
+    /// 返回：经当前字体组合确认的累计高度，固定行高或无效位置为空。
+    public func variableOffset(at row: Int) -> Double? {
+        guard let mixedHanMetrics, (0...rowCount).contains(row) else {
+            return nil
+        }
+        if row == rowCount {
+            return totalHeight
+        }
+        let anchor = anchor(at: row, by: \.row)
+        var cursor = Cursor(text: text, range: range, script: script, punctuation: nil)
+        var start = anchor.byte
+        var y = anchor.y
+        for _ in anchor.row..<row {
+            guard let next = try? cursor.nextRow(after: start, columns: columns),
+                let height = try? Self.height(
+                    of: ByteRange(start, next.end),
+                    in: text,
+                    metrics: mixedHanMetrics
+                )
+            else {
+                return nil
+            }
+            y += height
+            start = next.end
+        }
+        return y
+    }
+
+    /// 业务作用：字体高度不同的视觉行仍沿同一原始几何定位真实可见行。
+    /// 参数说明:
+    /// - y: 相对完整逻辑行顶部的实际纵向像素。
+    /// 返回：包含位置的视觉行；超过范围时定位到相应首尾行，非混排索引为空。
+    public func variableRow(at y: Double) -> Int? {
+        guard let mixedHanMetrics, y.isFinite else {
+            return nil
+        }
+        if y >= totalHeight {
+            return rowCount - 1
+        }
+        let anchor = anchor(at: max(0, y), by: \.y)
+        var cursor = Cursor(text: text, range: range, script: script, punctuation: nil)
+        var start = anchor.byte
+        var offset = anchor.y
+        for row in anchor.row..<rowCount {
+            guard let next = try? cursor.nextRow(after: start, columns: columns),
+                let height = try? Self.height(
+                    of: ByteRange(start, next.end),
+                    in: text,
+                    metrics: mixedHanMetrics
+                )
+            else {
+                return nil
+            }
+            if y < offset + height {
+                return row
+            }
+            offset += height
+            start = next.end
+        }
+        return rowCount - 1
+    }
+
+    /// 业务作用：每个已确认的混排范围按实际存在的较高字体取得真实行高。
+    /// 参数说明:
+    /// - row: 已完整确认的视觉行原字节范围。
+    /// - text: 原不可变正文。
+    /// - metrics: 同一容器和字体的真实度量。
+    /// 返回：纯 ASCII 或含全角字形的真实高度，原端点无效时终止。
+    private static func height(of row: ByteRange, in text: PieceTree, metrics: MixedHanWrapMetrics) throws
+        -> Double
+    {
+        guard let positions = text.nsRange(row) else {
+            throw Refusal.row
+        }
+        return positions.length == row.count ? metrics.asciiHeight : metrics.hanHeight
+    }
+
+    /// 业务作用：按字节、视觉行或纵坐标定位最近的已证明锚点，只读取当前需要的局部原文。
+    /// 参数说明:
+    /// - target: 已验证的字节、实际视觉行或原生纵坐标。
+    /// - order: 目标采用的单调索引字段。
     /// 返回：不超过目标的最后一个索引锚点。
-    private func anchor(at target: Int, by order: KeyPath<Anchor, Int>) -> Anchor {
+    private func anchor<Value: Comparable>(at target: Value, by order: KeyPath<Anchor, Value>) -> Anchor {
         var lower = 0
         var upper = anchors.count
         while lower + 1 < upper {

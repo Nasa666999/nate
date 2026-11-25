@@ -35,6 +35,9 @@ extension ASCIIWordWrapIndex {
             if script == .han {
                 return try nextHanRow(after: start, columns: columns)
             }
+            if case .mixedHan(let metrics) = script {
+                return try nextMixedHanRow(after: start, metrics: metrics)
+            }
             if case .tabbed(let width, let contentEnd, let narrowLetters) = script {
                 return try nextTabbedRow(
                     after: start,
@@ -254,6 +257,91 @@ extension ASCIIWordWrapIndex {
 
         private static let opens = Set("〈《「『【〔（［｛".utf16)
         private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
+
+        /// 业务作用：窄词和全角正文共享真实容器，遇到不适用的字形必须拒绝整个长行投影。
+        /// 参数说明:
+        /// - start: 当前视觉行起点的完整原字节边界。
+        /// - metrics: 当前已确认的两类字体步距及实际宽度。
+        /// 返回：原始断点与可覆盖已测宽度的横向列数。
+        private mutating func nextMixedHanRow(after start: Int, metrics: MixedHanWrapMetrics) throws -> (
+            end: Int, cells: Int
+        ) {
+            var hard = start
+            var ascii = 0
+            var han = 0
+            while hard < range.upper {
+                let glyph = try mixedHanGlyph(at: hard)
+                let narrow = glyph.wide ? ascii : ascii + 1
+                let wide = glyph.wide ? han + 1 : han
+                if hard > start, metrics.distance(ascii: narrow, han: wide) > metrics.width {
+                    break
+                }
+                ascii = narrow
+                han = wide
+                hard += glyph.wide ? 3 : 1
+            }
+            var end = hard
+            // 原生视觉行可以保留容器之外的水平空白，仍需保持完整字形及单行容量。
+            while end < range.upper {
+                let glyph = try mixedHanGlyph(at: end)
+                guard glyph.blank else {
+                    break
+                }
+                let size = glyph.wide ? 3 : 1
+                guard end - start <= ASCIIWordWrapIndex.maximumRowBytes - size else {
+                    throw Refusal.row
+                }
+                end += size
+            }
+            if end < range.upper, try allowsMixedHanBreak(at: end) == false {
+                while end > start {
+                    end -= byte(at: end - 1) < 128 ? 1 : 3
+                    if end > start, try allowsMixedHanBreak(at: end) {
+                        break
+                    }
+                }
+                if end == start {
+                    end = hard
+                }
+            }
+            let span = ByteRange(start, end)
+            guard let native = text.nsRange(span) else {
+                throw Refusal.row
+            }
+            let fullCount = (span.count - native.length) / 2
+            let pixels = metrics.distance(ascii: native.length - fullCount, han: fullCount)
+            return (end, Int((pixels / metrics.asciiAdvance).rounded(.up)))
+        }
+
+        /// 业务作用：只有经验证的基础字母、数字、基本汉字和两种水平空白可参与混排原生证据。
+        /// 参数说明:
+        /// - offset: 当前完整 UTF-8 标量的准确起点。
+        /// 返回：字形宽度类别与空白身份；其它字符终止混排准备。
+        private mutating func mixedHanGlyph(at offset: Int) throws -> (wide: Bool, blank: Bool) {
+            let first = byte(at: offset)
+            if first == 32 || PieceNode.isASCIIAlphanumeric(first) {
+                return (false, first == 32)
+            }
+            guard first >= 227 else {
+                throw Refusal.character
+            }
+            let scalar = hanScalar(at: offset)
+            guard scalar == 0x3000 || (0x4E00...0x9FFF).contains(scalar) else {
+                throw Refusal.character
+            }
+            return (true, scalar == 0x3000)
+        }
+
+        /// 业务作用：原生允许在基本汉字或完整空白段后断行，ASCII 词保持连续。
+        /// 参数说明:
+        /// - offset: 当前行内非首尾的完整字符端点。
+        /// 返回：两侧的实际字形类别保留合法的断行机会时为真。
+        private mutating func allowsMixedHanBreak(at offset: Int) throws -> Bool {
+            let next = try mixedHanGlyph(at: offset)
+            let previousSize = byte(at: offset - 1) < 128 ? 1 : 3
+            let previous = try mixedHanGlyph(at: offset - previousSize)
+            return !next.blank && (previous.blank || previous.wide || next.wide)
+        }
 
         /// 业务作用：保留全角行首和行尾标点约束，容器不足时按实际完整字形强制断行。
         /// 参数说明:
