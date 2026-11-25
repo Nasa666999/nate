@@ -1,19 +1,22 @@
 import CoreFoundation
 import Foundation
 
-struct ASCIILineBreaks: Sendable {
+struct MonospaceLineBreaks: Sendable {
     let range: ByteRange
     private let pageEnds: [Int]
     private static let pageBytes = 32_768
     private static let boundarySearchBytes = 8192
 
-    /// 业务作用：把超长可打印 ASCII 断行分成原生分词器可完整读取的页，页边不会切断数值或标点语境。
+    /// 业务作用：把等宽长行的标点断行交给原生分词器逐页解释，页边保留数值与标点语境。
     /// 参数说明:
     /// - text: 已提交的不可变正文。
-    /// - range: 由调用者确认只含可打印 ASCII 与真实 Tab 的同一物理行。
+    /// - range: 由调用者确认的同一等宽物理行，可包含 ASCII 及当前模式许可的字母或 Tab。
+    /// - allowsNarrowLetters: 正文已完整确认可含独立的两字节窄字母时为真。
     /// - deadline: 本次完整断行工作共享的截止。
     /// 返回：所有页边均已确认时提供索引，缺少可靠页边时不发布部分证据。
-    init?(text: PieceTree, range: ByteRange, deadline: ContinuousClock.Instant) throws {
+    init?(text: PieceTree, range: ByteRange, allowsNarrowLetters: Bool, deadline: ContinuousClock.Instant)
+        throws
+    {
         var ends: [Int] = []
         var lower = range.lower
         while lower < range.upper {
@@ -28,7 +31,8 @@ struct ASCIILineBreaks: Sendable {
             }
             let start = maximum - Self.boundarySearchBytes
             let sample = text.bytes(in: ByteRange(start, maximum + 1))
-            guard let relative = Self.stableBoundary(in: sample) else {
+            guard let relative = Self.stableBoundary(in: sample, allowsNarrowLetters: allowsNarrowLetters)
+            else {
                 return nil
             }
             lower = start + relative
@@ -40,22 +44,36 @@ struct ASCIILineBreaks: Sendable {
 
     /// 业务作用：只在普通字母数字之间的完整空白分隔后结束分词页，保留两侧原始断行语义。
     /// 参数说明:
-    /// - sample: 当前后段内含少量后继正文的可打印 ASCII 和真实 Tab。
+    /// - sample: 当前页后段与少量后继的原始字节。
+    /// - allowsNarrowLetters: 范围已由同一原文确认两字节窄字母时为真。
     /// 返回：从样本起点计的真实分页端点；缺少完整周边证据时为空。
-    private static func stableBoundary(in sample: [UInt8]) -> Int? {
+    private static func stableBoundary(in sample: [UInt8], allowsNarrowLetters: Bool) -> Int? {
         for current in stride(from: sample.count - 1, through: 2, by: -1)
         where (sample[current - 1] == 32 || sample[current - 1] == 9)
-            && PieceNode.isASCIIAlphanumeric(sample[current])
+            && isWordStart(sample[current], allowsNarrowLetters: allowsNarrowLetters)
         {
             var previous = current - 1
             while previous > 0, sample[previous] == 32 || sample[previous] == 9 {
                 previous -= 1
             }
-            if PieceNode.isASCIIAlphanumeric(sample[previous]) {
+            if allowsNarrowLetters, (128...191).contains(sample[previous]), previous > 0 {
+                // 样本可能从 UTF-8 中间开始，只有可见完整前驱才能证明分页端点。
+                previous -= 1
+            }
+            if isWordStart(sample[previous], allowsNarrowLetters: allowsNarrowLetters) {
                 return current
             }
         }
         return nil
+    }
+
+    /// 业务作用：分页仅在普通字母数字通道重启，避免上下文字符跨越页边改变断行。
+    /// 参数说明:
+    /// - byte: 已知在完整原文中带有效字符身份的候选首字节。
+    /// - allowsNarrowLetters: 窄字母原文已经预验时为真。
+    /// 返回：合法 ASCII 字母数字或同源两字节窄字母首字节为真。
+    private static func isWordStart(_ byte: UInt8, allowsNarrowLetters: Bool) -> Bool {
+        PieceNode.isASCIIAlphanumeric(byte) || allowsNarrowLetters && (194...223).contains(byte)
     }
 
     /// 业务作用：命中或导航仅载入给定字节所处的完整已证分页。
@@ -82,7 +100,7 @@ struct ASCIILineBreaks: Sendable {
     }
 
     struct Cursor {
-        private let source: ASCIILineBreaks
+        private let source: MonospaceLineBreaks
         private let text: PieceTree
         private var page: ByteRange?
         private var boundaries: [Int] = []
@@ -92,47 +110,60 @@ struct ASCIILineBreaks: Sendable {
         /// - source: 同一不可变正文已经确定的完整安全分页。
         /// - text: 产生分页的实际原文。
         /// 返回：可以按需复验扫描坐标的有限缓存。
-        init(source: ASCIILineBreaks, text: PieceTree) {
+        init(source: MonospaceLineBreaks, text: PieceTree) {
             self.source = source
             self.text = text
         }
 
         /// 业务作用：词间断行使用分词器确认的原始边界；实际容器不能容纳整词时由调用者强制断行。
         /// 参数说明:
-        /// - offset: 已确认的 ASCII 原字节位置。
+        /// - offset: 已确认的完整原字节端点。
         /// 返回：不越过该点的一个确定可断行边界；原生范围不一致时终止准备。
         mutating func boundary(atOrBefore offset: Int) throws -> Int {
             if let page, (page.lower...page.upper).contains(offset) {
                 return boundaryInPage(atOrBefore: offset)
             }
             guard let page = source.page(covering: offset) else {
-                throw NateError.message("超长 ASCII 标点断行缺少实际分页坐标。")
+                throw NateError.message("超长等宽标点断行缺少实际分页坐标。")
             }
             let raw = text.text(in: page)
+            let unitCount = raw.utf16.count
+            var byteOffsets: [Int] = []
+            if unitCount != page.count {
+                // 预验保证每字符只占一个 UTF-16 单元，分词器范围仍须还原为准确的 UTF-8 端点。
+                byteOffsets.reserveCapacity(unitCount + 1)
+                for (offset, byte) in raw.utf8.enumerated() where byte & 192 != 128 {
+                    byteOffsets.append(offset)
+                }
+                guard byteOffsets.count == unitCount else {
+                    throw NateError.message("等宽标点分页的原字符坐标不一致。")
+                }
+                byteOffsets.append(page.count)
+            }
             guard
                 let tokenizer = CFStringTokenizerCreate(
                     nil,
                     raw as CFString,
-                    CFRange(location: 0, length: page.count),
+                    CFRange(location: 0, length: unitCount),
                     CFOptionFlags(kCFStringTokenizerUnitLineBreak),
                     nil
                 )
             else {
-                throw NateError.message("当前系统无法提供 ASCII 标点的原生断行。")
+                throw NateError.message("当前系统无法提供等宽标点的原生断行。")
             }
             var accepted = [page.lower]
             var consumed = 0
             while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
                 let span = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-                guard span.location == consumed, span.length > 0, span.length <= page.count - consumed else {
-                    throw NateError.message("ASCII 标点断行的原生范围与源正文不一致。")
+                guard span.location == consumed, span.length > 0, span.length <= unitCount - consumed else {
+                    throw NateError.message("等宽标点断行的原生范围与源正文不一致。")
                 }
                 consumed += span.length
-                accepted.append(page.lower + consumed)
+                accepted.append(page.lower + (byteOffsets.isEmpty ? consumed : byteOffsets[consumed]))
             }
             // 原生分词结果必须完整覆盖一页，缺少后继边界不能当成页面原有的可断行位置。
-            guard consumed == page.count else {
-                throw NateError.message("ASCII 标点断行的原生分页不完整。")
+            guard consumed == unitCount else {
+                throw NateError.message("等宽标点断行的原生分页不完整。")
             }
             self.page = page
             boundaries = accepted

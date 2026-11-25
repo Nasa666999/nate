@@ -186,6 +186,22 @@ extension EditorView {
                         narrow: narrow,
                         deadline: deadline
                     )
+                    if index == nil, let narrow {
+                        let punctuation = try ASCIIWordWrapIndex.withNarrowPunctuation(
+                            text: snapshot.text,
+                            range: key.range,
+                            columns: wrappingColumns.narrow,
+                            narrow: narrow,
+                            deadline: deadline
+                        )
+                        return EditorWideTabLayout.Entry(
+                            columns: nil,
+                            han: nil,
+                            status: nil,
+                            wordWrap: punctuation,
+                            narrow: punctuation == nil ? nil : narrow
+                        )
+                    }
                     if index == nil, snapshot.text.isPrintableASCII(in: key.range) {
                         let punctuation = try ASCIIWordWrapIndex.withASCIIPunctuation(
                             text: snapshot.text,

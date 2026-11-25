@@ -28,7 +28,7 @@ public struct ASCIIWordWrapIndex: Sendable {
 
     private let text: PieceTree
     private let script: Script
-    private let punctuation: ASCIILineBreaks?
+    private let punctuation: MonospaceLineBreaks?
     private let anchors: [Anchor]
     private static let anchorDistance = 4096
     static let maximumRowBytes = 65_536
@@ -150,6 +150,32 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
+    /// 业务作用：等宽标点可与实际确认的窄字母混排，断行始终定位到完整 UTF-8 字符边界。
+    /// 参数说明:
+    /// - text: 当前已提交的不可变正文。
+    /// - range: 整个物理行排除实际换行后的原字节范围。
+    /// - columns: 当前等宽字体与容器确认的完整字形列数。
+    /// - narrow: 同一原文的独立窄字母集合和字节位置证明。
+    /// - deadline: 所有原生断行和坐标准备共用的截止。
+    /// 返回：原生分词页、均匀视觉列数与原字节完整对应时发布索引。
+    public static func withNarrowPunctuation(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        narrow: PlainNarrowUnicodeLine,
+        deadline: ContinuousClock.Instant
+    ) throws -> Self? {
+        try Self(
+            text: text,
+            range: range,
+            columns: columns,
+            narrow: narrow,
+            han: nil,
+            allowsPunctuation: true,
+            deadline: deadline
+        )
+    }
+
     /// 业务作用：不同字体类型复用同一完整视觉行索引和有界稀疏锚点。
     /// 参数说明:
     /// - text: 当前固定的原正文。
@@ -203,9 +229,16 @@ public struct ASCIIWordWrapIndex: Sendable {
             }
             script = .ascii
         }
-        let punctuation: ASCIILineBreaks?
+        let punctuation: MonospaceLineBreaks?
         if allowsPunctuation {
-            guard let pages = try ASCIILineBreaks(text: text, range: range, deadline: deadline) else {
+            guard
+                let pages = try MonospaceLineBreaks(
+                    text: text,
+                    range: range,
+                    allowsNarrowLetters: script == .narrow,
+                    deadline: deadline
+                )
+            else {
                 return nil
             }
             punctuation = pages

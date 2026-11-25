@@ -5,7 +5,7 @@ extension ASCIIWordWrapIndex {
         let text: PieceTree
         let range: ByteRange
         let script: Script
-        private var punctuation: ASCIILineBreaks.Cursor?
+        private var punctuation: MonospaceLineBreaks.Cursor?
         private var pageStart = 0
         private var page: [UInt8] = []
 
@@ -16,11 +16,11 @@ extension ASCIIWordWrapIndex {
         /// - script: 原文范围已确认的字形类别。
         /// - punctuation: 可用的完整原生标点分页。
         /// 返回：独立的有界读缓存。
-        init(text: PieceTree, range: ByteRange, script: Script, punctuation: ASCIILineBreaks?) {
+        init(text: PieceTree, range: ByteRange, script: Script, punctuation: MonospaceLineBreaks?) {
             self.text = text
             self.range = range
             self.script = script
-            self.punctuation = punctuation.map { ASCIILineBreaks.Cursor(source: $0, text: text) }
+            self.punctuation = punctuation.map { MonospaceLineBreaks.Cursor(source: $0, text: text) }
         }
 
         /// 业务作用：按实际等宽软换行规则分隔独立单词和尾随空格，过长单词按原字节边界分段。
@@ -86,14 +86,28 @@ extension ASCIIWordWrapIndex {
 
         /// 业务作用：按真实原生标点机会选择视觉行断点，保留实际可悬挂的空格及必要的强制分行。
         /// 参数说明:
-        /// - start: 当前视觉行首的实际 ASCII 字节偏移。
+        /// - start: 当前视觉行首的实际原字节偏移。
         /// - columns: 已由真实容器及等宽字体确认的普通列数。
         /// 返回：同一正文上的完整视觉行结束位置和宽度。
         private mutating func nextPunctuationRow(after start: Int, columns: Int) throws -> (
             end: Int, cells: Int
         ) {
-            let limit = min(start + columns, range.upper)
-            let trailing = try appendSpaces(after: limit, cells: limit - start, lineStart: start, tabs: nil)
+            var limit = min(start + columns, range.upper)
+            var width = limit - start
+            if script == .narrow {
+                // 混排字符各占一列，但可能有两个原字节，强制断行也必须走完整字符端点。
+                guard let first = text.utf16Offset(byte: start),
+                    let last = text.utf16Offset(byte: range.upper)
+                else {
+                    throw Refusal.row
+                }
+                width = min(columns, last - first)
+                guard let bound = text.byteOffset(utf16: first + width) else {
+                    throw Refusal.row
+                }
+                limit = bound
+            }
+            let trailing = try appendSpaces(after: limit, cells: width, lineStart: start, tabs: nil)
             if trailing.end == range.upper {
                 return trailing
             }
@@ -102,6 +116,12 @@ extension ASCIIWordWrapIndex {
             }
             let word = try punctuation?.boundary(atOrBefore: limit) ?? limit
             let end = word > start ? word : limit
+            if script == .narrow {
+                guard let first = text.utf16Offset(byte: start), let last = text.utf16Offset(byte: end) else {
+                    throw Refusal.row
+                }
+                return (end, last - first)
+            }
             return (end, end - start)
         }
 
