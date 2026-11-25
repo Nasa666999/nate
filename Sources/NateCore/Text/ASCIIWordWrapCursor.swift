@@ -35,12 +35,13 @@ extension ASCIIWordWrapIndex {
             if script == .han {
                 return try nextHanRow(after: start, columns: columns)
             }
-            if case .tabbed(let width, let contentEnd) = script {
+            if case .tabbed(let width, let contentEnd, let narrowLetters) = script {
                 return try nextTabbedRow(
                     after: start,
                     columns: columns,
                     tabWidth: width,
-                    contentEnd: contentEnd
+                    contentEnd: contentEnd,
+                    narrowLetters: narrowLetters
                 )
             }
             if punctuation != nil {
@@ -131,12 +132,14 @@ extension ASCIIWordWrapIndex {
         /// - columns: 当前容器在该字体下的普通列数。
         /// - tabWidth: 当前语言原制表宽度。
         /// - contentEnd: 完整段落最后一个非空白之后的端点。
+        /// - narrowLetters: 原位置已经证明可包含完整两字节窄字母时为真。
         /// 返回：视觉行原字节终点及从该行行首得出的实际像素列数。
         private mutating func nextTabbedRow(
             after start: Int,
             columns: Int,
             tabWidth: Int,
-            contentEnd: Int
+            contentEnd: Int,
+            narrowLetters: Bool
         ) throws -> (end: Int, cells: Int) {
             var position = start
             var cells = 0
@@ -190,7 +193,8 @@ extension ASCIIWordWrapIndex {
                     if cells >= columns {
                         return lastBreak ?? (position, cells)
                     }
-                    position += 1
+                    // 经原字符集验证的窄字母只占一列，断点不可落在 UTF-8 后续字节上。
+                    position += narrowLetters && (194...223).contains(current) ? 2 : 1
                     cells += 1
                     if punctuation != nil, try acceptsBreak(at: position) {
                         lastBreak = (position, cells)

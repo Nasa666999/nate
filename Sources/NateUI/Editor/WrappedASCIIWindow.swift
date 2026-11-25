@@ -182,7 +182,8 @@ final class WrappedASCIIWindow: LongLineProjection {
                 advance: advance,
                 expected: expected,
                 indexedRows: indexedRows,
-                tabWidth: wordIndex?.tabWidth
+                tabWidth: wordIndex?.tabWidth,
+                narrowLetters: wordIndex?.narrowScalars.isEmpty == false
             )
         else {
             return nil
@@ -479,7 +480,8 @@ final class WrappedASCIIWindow: LongLineProjection {
                 advance: advance,
                 expected: metrics,
                 indexedRows: indexedRows,
-                tabWidth: wordIndex?.tabWidth
+                tabWidth: wordIndex?.tabWidth,
+                narrowLetters: wordIndex?.narrowScalars.isEmpty == false
             ) != nil
         else {
             unavailableReason = "超长软换行的原生断行位置无法确认，已暂停当前呈现。"

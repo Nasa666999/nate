@@ -100,11 +100,18 @@ extension EditorView {
                     return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil)
                 }
                 let hanColumns = wideHanWrappingColumns(snapshot: snapshot, range: range, font: actual)
+                let tabMetrics = NativeMonospaceGeometry.uniformAdvance(
+                    actual,
+                    appearance: effectiveAppearance
+                )
+                .flatMap {
+                    HanTabColumns.Metrics(asciiAdvance: $0, hanAdvance: $0, tabWidth: tabSettings.width)
+                }
                 prepareWideLine(
                     snapshot: snapshot,
                     key: key,
                     width: tabSettings.width,
-                    wrappingColumns: (grid.columns, hanColumns)
+                    wrappingColumns: (grid.columns, hanColumns, tabMetrics)
                 )
             }
             else {
@@ -133,13 +140,13 @@ extension EditorView {
     /// - snapshot: 当前逻辑行所属的不可变正文。
     /// - key: 测量开始时固定的视图布局来源。
     /// - width: 当前真实 Tab 宽度。
-    /// - wrappingColumns: 自动换行时实测的窄字形及可用的全角列数。
+    /// - wrappingColumns: 自动换行时实测的窄字形列数、可用的全角列数和真实制表度量。
     /// 返回：同一来源内替换暂未排版窗口，迟到、取消或超量时保留原文和选择。
     private func prepareWideLine(
         snapshot: DocumentSnapshot,
         key: EditorWideTabLayout.Key,
         width: Int,
-        wrappingColumns: (narrow: Int, fullWidth: Int?)? = nil
+        wrappingColumns: (narrow: Int, fullWidth: Int?, tabMetrics: HanTabColumns.Metrics?)? = nil
     ) {
         wideTabLayout.task = Task { [weak self] in
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
@@ -265,6 +272,30 @@ extension EditorView {
                             han: nil,
                             status: nil,
                             wordWrap: tabbed
+                        )
+                    }
+                    if index == nil, let metrics = wrappingColumns.tabMetrics,
+                        let tabs = try HanTabColumns(
+                            text: snapshot.text,
+                            range: key.range,
+                            metrics: metrics,
+                            permitsFullWidthCharacters: false,
+                            deadline: deadline
+                        ),
+                        let wrapped = try ASCIIWordWrapIndex.withNarrowTabs(
+                            text: snapshot.text,
+                            range: key.range,
+                            columns: wrappingColumns.narrow,
+                            tabs: tabs,
+                            deadline: deadline
+                        )
+                    {
+                        return EditorWideTabLayout.Entry(
+                            columns: nil,
+                            han: nil,
+                            hanTabs: tabs,
+                            status: nil,
+                            wordWrap: wrapped
                         )
                     }
                     return EditorWideTabLayout.Entry(

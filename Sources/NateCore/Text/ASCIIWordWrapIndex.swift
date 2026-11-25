@@ -23,7 +23,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         case ascii
         case narrow
         case han
-        case tabbed(width: Int, contentEnd: Int)
+        case tabbed(width: Int, contentEnd: Int, narrowLetters: Bool)
     }
 
     private let text: PieceTree
@@ -37,7 +37,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// 参数说明: 无。
     /// 返回：原制表宽度；其它字形范围为空。
     public var tabWidth: Int? {
-        if case .tabbed(let width, _) = script {
+        if case .tabbed(let width, _, _) = script {
             return width
         }
         return nil
@@ -176,6 +176,33 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
+    /// 业务作用：窄字母、ASCII 标点与真实 Tab 混排时保留各视觉行的制表原点及原文断点。
+    /// 参数说明:
+    /// - text: 当前已提交的不可变正文。
+    /// - range: 排除换行符后的完整原字节范围。
+    /// - columns: 实际容器与等宽字体测得的完整列数。
+    /// - tabs: 同一原文的混排制表证据，范围必须只有独立窄字形。
+    /// - deadline: 原字节、断行与制表索引共享的截止。
+    /// 返回：全部视觉行确认后发布；包含全角字符或来源不一致时不建立索引。
+    public static func withNarrowTabs(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        tabs: HanTabColumns,
+        deadline: ContinuousClock.Instant
+    ) throws -> Self? {
+        try Self(
+            text: text,
+            range: range,
+            columns: columns,
+            narrow: nil,
+            han: nil,
+            narrowTabs: tabs,
+            allowsPunctuation: true,
+            deadline: deadline
+        )
+    }
+
     /// 业务作用：不同字体类型复用同一完整视觉行索引和有界稀疏锚点。
     /// 参数说明:
     /// - text: 当前固定的原正文。
@@ -184,6 +211,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - narrow: 可选的同源多字节窄字母证明。
     /// - han: 可选的同源全角字形证明。
     /// - tabs: 可选的同源原始 ASCII 制表证明。
+    /// - narrowTabs: 可选的包含独立窄字母的同源制表证明。
     /// - allowsPunctuation: 已请求逐页解释原生 ASCII 标点断行时为真。
     /// - deadline: 准备任务的共同截止。
     /// 返回：字体类别和所有边界已经核对的完整索引，超量或非法字符时拒绝。
@@ -194,6 +222,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         narrow: PlainNarrowUnicodeLine?,
         han: PlainHanLine?,
         tabs: ASCIITabColumns? = nil,
+        narrowTabs: HanTabColumns? = nil,
         allowsPunctuation: Bool = false,
         deadline: ContinuousClock.Instant
     ) throws {
@@ -221,7 +250,17 @@ public struct ASCIIWordWrapIndex: Sendable {
                 return nil
             }
             let end = try Self.finalContentEnd(in: text, range: range, deadline: deadline)
-            script = .tabbed(width: tabs.tabWidth, contentEnd: end)
+            script = .tabbed(width: tabs.tabWidth, contentEnd: end, narrowLetters: false)
+        }
+        else if let narrowTabs {
+            let width = narrowTabs.metrics.tabWidth
+            guard narrowTabs.range == range, narrowTabs.matches(text, tabWidth: width),
+                !narrowTabs.hasFullWidthCharacters, !narrowTabs.narrowScalars.isEmpty
+            else {
+                return nil
+            }
+            let end = try Self.finalContentEnd(in: text, range: range, deadline: deadline)
+            script = .tabbed(width: width, contentEnd: end, narrowLetters: true)
         }
         else {
             guard text.isPrintableASCII(in: range) else {
@@ -235,7 +274,7 @@ public struct ASCIIWordWrapIndex: Sendable {
                 let pages = try MonospaceLineBreaks(
                     text: text,
                     range: range,
-                    allowsNarrowLetters: script == .narrow,
+                    allowsNarrowLetters: narrow != nil || narrowTabs != nil,
                     deadline: deadline
                 )
             else {
@@ -287,8 +326,9 @@ public struct ASCIIWordWrapIndex: Sendable {
         self.anchors = anchors
         rowCount = row
         maximumRowLength = widest
-        characterCount = han?.characterCount ?? narrow?.characterCount ?? range.count
-        narrowScalars = narrow?.scalars ?? []
+        characterCount =
+            han?.characterCount ?? narrow?.characterCount ?? narrowTabs?.characterCount ?? range.count
+        narrowScalars = narrow?.scalars ?? narrowTabs?.narrowScalars ?? []
         usesFullWidthFont = script == .han
     }
 

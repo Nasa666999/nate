@@ -16,7 +16,7 @@ final class LineLayout {
     private(set) var unavailableReason: String?
     private(set) var nativeLines: [NativeLineGeometry] = []
     private(set) var orderedPositions = true
-    private var orderedHeights = true
+    private(set) var orderedHeights = true
     private let virtualFont: NSFont
     private let appearance: NSAppearance
     private var foregroundVariant: LineForegroundVariant?
@@ -329,76 +329,6 @@ final class LineLayout {
         // 尾随空格的真实插入点可能超过原生容器，保留已证明的边缘以免重绘收回可见光标。
         width = max(width, result.maxX)
         return result
-    }
-
-    /// 业务作用：每个原生视口都确认同一软换行步距和完整顺序，只有证明一致才可沿纵向平移。
-    /// 参数说明:
-    /// - advance: 当前字体单个 ASCII 字形已确认的横向间距。
-    /// - expected: 首个原生段落固定的列数、纵向步距及行底。
-    /// - indexedRows: 已独立确认的实际断行，连续单词可采用已确认的列数。
-    /// - tabWidth: 原生制表视觉行使用的列宽；其它字形每个 UTF-16 单元独立占一列。
-    /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
-    func uniformWrapping(
-        advance: CGFloat,
-        expected: WrappedASCIIGeometry? = nil,
-        indexedRows: [ByteRange]? = nil,
-        tabWidth: Int? = nil
-    ) -> WrappedASCIIGeometry? {
-        guard unavailableReason == nil, orderedPositions, orderedHeights, let first = nativeLines.first else {
-            return nil
-        }
-        let columns = expected?.columns ?? first.upper
-        let pitch = expected?.pitch ?? ((nativeLines.dropFirst().first?.bounds.minY ?? 0) - first.bounds.minY)
-        let top = expected?.firstTop ?? first.bounds.minY
-        let bottom = expected?.firstBottom ?? first.bounds.maxY
-        guard columns > 0, pitch.isFinite, pitch > 0, bottom > top, characterCount > 0,
-            nativeLines.count == (indexedRows?.count ?? (characterCount - 1) / columns + 1)
-        else {
-            return nil
-        }
-        for (index, row) in nativeLines.enumerated() {
-            let indexed = indexedRows?[index]
-            let lower: Int
-            let count: Int
-            if let indexed {
-                guard let start = content.snapshot.text.utf16Offset(byte: indexed.lower),
-                    let end = content.snapshot.text.utf16Offset(byte: indexed.upper)
-                else {
-                    return nil
-                }
-                lower = start - originUTF16
-                count = end - start
-            }
-            else {
-                lower = index * columns
-                count = min(columns, characterCount - lower)
-            }
-            let cells: Int
-            if let indexed, let tabWidth {
-                guard
-                    let measured = ASCIITabColumns.visualColumnCount(
-                        in: content.snapshot.text.bytes(in: indexed),
-                        tabWidth: tabWidth
-                    )
-                else {
-                    return nil
-                }
-                cells = measured
-            }
-            else {
-                cells = count
-            }
-            let originY = CGFloat(index) * pitch
-            guard row.lower == lower, row.upper == lower + count,
-                abs(row.bounds.minY - (top + originY)) < 0.04,
-                abs(row.bounds.maxY - (bottom + originY)) < 0.04,
-                abs(row.caret(at: lower).minX) < 0.02,
-                abs(row.caret(at: row.upper).minX - CGFloat(cells) * advance) < 0.04
-            else {
-                return nil
-            }
-        }
-        return WrappedASCIIGeometry(columns: columns, pitch: pitch, firstTop: top, firstBottom: bottom)
     }
 
     /// 业务作用：原生视觉行一次建立索引，只有实际范围与高度均有序时才允许二分查询。
