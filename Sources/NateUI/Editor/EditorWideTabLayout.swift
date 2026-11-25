@@ -177,6 +177,28 @@ extension EditorView {
                             wordWrap: full
                         )
                     }
+                    if index == nil, narrow == nil, !snapshot.text.isPrintableASCII(in: key.range),
+                        let tabs = try ASCIITabColumns(
+                            text: snapshot.text,
+                            range: key.range,
+                            tabWidth: width,
+                            deadline: deadline
+                        )
+                    {
+                        let tabbed = try ASCIIWordWrapIndex(
+                            text: snapshot.text,
+                            range: key.range,
+                            columns: wrappingColumns.narrow,
+                            tabs: tabs,
+                            deadline: deadline
+                        )
+                        return EditorWideTabLayout.Entry(
+                            columns: tabbed == nil ? nil : tabs,
+                            han: nil,
+                            status: nil,
+                            wordWrap: tabbed
+                        )
+                    }
                     return EditorWideTabLayout.Entry(
                         columns: nil,
                         han: nil,

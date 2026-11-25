@@ -117,6 +117,7 @@ final class LineLayout {
                 theme: theme,
                 language: language,
                 fontZoomAdjustment: fontZoomAdjustment,
+                tabWidth: tabWidth,
                 wordIndex: wideTabs?.wordWrap,
                 ideographs: wideTabs?.han
             )
@@ -334,11 +335,13 @@ final class LineLayout {
     /// - advance: 当前字体单个 ASCII 字形已确认的横向间距。
     /// - expected: 首个原生段落固定的列数、纵向步距及行底。
     /// - indexedRows: 已独立确认的实际断行，连续单词可采用已确认的列数。
+    /// - tabWidth: 原生制表视觉行使用的列宽；其它字形每个 UTF-16 单元独立占一列。
     /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
     func uniformWrapping(
         advance: CGFloat,
         expected: WrappedASCIIGeometry? = nil,
-        indexedRows: [ByteRange]? = nil
+        indexedRows: [ByteRange]? = nil,
+        tabWidth: Int? = nil
     ) -> WrappedASCIIGeometry? {
         guard unavailableReason == nil, orderedPositions, orderedHeights, let first = nativeLines.first else {
             return nil
@@ -369,12 +372,27 @@ final class LineLayout {
                 lower = index * columns
                 count = min(columns, characterCount - lower)
             }
+            let cells: Int
+            if let indexed, let tabWidth {
+                guard
+                    let measured = ASCIITabColumns.visualColumnCount(
+                        in: content.snapshot.text.bytes(in: indexed),
+                        tabWidth: tabWidth
+                    )
+                else {
+                    return nil
+                }
+                cells = measured
+            }
+            else {
+                cells = count
+            }
             let originY = CGFloat(index) * pitch
             guard row.lower == lower, row.upper == lower + count,
                 abs(row.bounds.minY - (top + originY)) < 0.04,
                 abs(row.bounds.maxY - (bottom + originY)) < 0.04,
                 abs(row.caret(at: lower).minX) < 0.02,
-                abs(row.caret(at: row.upper).minX - CGFloat(count) * advance) < 0.04
+                abs(row.caret(at: row.upper).minX - CGFloat(cells) * advance) < 0.04
             else {
                 return nil
             }

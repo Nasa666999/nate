@@ -19,10 +19,11 @@ public struct ASCIIWordWrapIndex: Sendable {
         case row
     }
 
-    private enum Script {
+    private enum Script: Equatable, Sendable {
         case ascii
         case narrow
         case han
+        case tabbed(width: Int, contentEnd: Int)
     }
 
     private let text: PieceTree
@@ -30,6 +31,16 @@ public struct ASCIIWordWrapIndex: Sendable {
     private let anchors: [Anchor]
     private static let anchorDistance = 4096
     private static let maximumRowBytes = 65_536
+
+    /// 业务作用：实际制表视觉行沿同一语言设置取得原生像素网格。
+    /// 参数说明: 无。
+    /// 返回：原制表宽度；其它字形范围为空。
+    public var tabWidth: Int? {
+        if case .tabbed(let width, _) = script {
+            return width
+        }
+        return nil
+    }
 
     /// 业务作用：固定等宽 ASCII 文本的真实字间断行，在接近视口的位置保留完整的原字节起点。
     /// 参数说明:
@@ -85,6 +96,32 @@ public struct ASCIIWordWrapIndex: Sendable {
         try self.init(text: text, range: range, columns: columns, narrow: nil, han: han, deadline: deadline)
     }
 
+    /// 业务作用：为 ASCII 字母数字和真正的 Tab 保留每个视觉行的完整原始断点。
+    /// 参数说明:
+    /// - text: 当前提交的不可变正文。
+    /// - range: 排除实际结束符后的完整逻辑行。
+    /// - columns: 当前真实容器及原生字体提供的普通列数。
+    /// - tabs: 已确认同一原文及当前语言制表宽度的索引。
+    /// - deadline: 制表与视觉断行准备共用的截止。
+    /// 返回：完整的视觉行字节坐标；出现其它字符、源失配或超限时拒绝。
+    public init?(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        tabs: ASCIITabColumns,
+        deadline: ContinuousClock.Instant
+    ) throws {
+        try self.init(
+            text: text,
+            range: range,
+            columns: columns,
+            narrow: nil,
+            han: nil,
+            tabs: tabs,
+            deadline: deadline
+        )
+    }
+
     /// 业务作用：不同字体类型复用同一完整视觉行索引和有界稀疏锚点。
     /// 参数说明:
     /// - text: 当前固定的原正文。
@@ -92,6 +129,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - columns: 实际对应字体和容器的列数。
     /// - narrow: 可选的同源多字节窄字母证明。
     /// - han: 可选的同源全角字形证明。
+    /// - tabs: 可选的同源原始 ASCII 制表证明。
     /// - deadline: 准备任务的共同截止。
     /// 返回：字体类别和所有边界已经核对的完整索引，超量或非法字符时拒绝。
     private init?(
@@ -100,6 +138,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         columns: Int,
         narrow: PlainNarrowUnicodeLine?,
         han: PlainHanLine?,
+        tabs: ASCIITabColumns? = nil,
         deadline: ContinuousClock.Instant
     ) throws {
         guard range.lower >= 0, range.upper > range.lower, range.upper <= text.byteCount,
@@ -120,6 +159,13 @@ public struct ASCIIWordWrapIndex: Sendable {
                 return nil
             }
             script = .narrow
+        }
+        else if let tabs {
+            guard tabs.range == range, tabs.matches(text, width: tabs.tabWidth) else {
+                return nil
+            }
+            let end = try Self.finalContentEnd(in: text, range: range, deadline: deadline)
+            script = .tabbed(width: tabs.tabWidth, contentEnd: end)
         }
         else {
             guard text.isPrintableASCII(in: range) else {
@@ -170,6 +216,35 @@ public struct ASCIIWordWrapIndex: Sendable {
         characterCount = han?.characterCount ?? narrow?.characterCount ?? range.count
         narrowScalars = narrow?.scalars ?? []
         usesFullWidthFont = script == .han
+    }
+
+    /// 业务作用：整个段落仅有一行时，原生布局允许最后的制表空白留在该行。
+    /// 参数说明:
+    /// - text: 当前真实制表索引所属的原文。
+    /// - range: 完整物理行原字节范围。
+    /// - deadline: 当前断行准备的共同截止。
+    /// 返回：最后一个非空白字节之后的端点；全部为空白时返回行首。
+    private static func finalContentEnd(
+        in text: PieceTree,
+        range: ByteRange,
+        deadline: ContinuousClock.Instant
+    ) throws -> Int {
+        var end = range.upper
+        while end > range.lower {
+            try Task.checkCancellation()
+            guard ContinuousClock.now < deadline else {
+                throw NateError.message("超长自动换行的尾随制表超过共同截止。")
+            }
+            let start = max(range.lower, end - 8192)
+            let bytes = text.bytes(in: ByteRange(start, end))
+            if let last = bytes.lastIndex(where: {
+                $0 != 9 && $0 != 32
+            }) {
+                return start + last + 1
+            }
+            end = start
+        }
+        return range.lower
     }
 
     /// 业务作用：不同修订、排版宽度或正文根不能使用另一份视觉行范围。
@@ -284,6 +359,14 @@ extension ASCIIWordWrapIndex {
             if script == .han {
                 return try nextHanRow(after: start, columns: columns)
             }
+            if case .tabbed(let width, let contentEnd) = script {
+                return try nextTabbedRow(
+                    after: start,
+                    columns: columns,
+                    tabWidth: width,
+                    contentEnd: contentEnd
+                )
+            }
             var position = start
             var cells = 0
             var lastSpace: (end: Int, cells: Int)?
@@ -320,6 +403,96 @@ extension ASCIIWordWrapIndex {
                 cells += 1
             } while position < range.upper && byte(at: position) == 32
             return (position, cells)
+        }
+
+        /// 业务作用：真实 Tab 以视觉行首为列原点，越过容器时只在实际字节边界断行。
+        /// 参数说明:
+        /// - start: 新视觉行的实际原字节起点。
+        /// - columns: 当前容器在该字体下的普通列数。
+        /// - tabWidth: 当前语言原制表宽度。
+        /// - contentEnd: 完整段落最后一个非空白之后的端点。
+        /// 返回：视觉行原字节终点及从该行行首得出的实际像素列数。
+        private mutating func nextTabbedRow(
+            after start: Int,
+            columns: Int,
+            tabWidth: Int,
+            contentEnd: Int
+        ) throws -> (end: Int, cells: Int) {
+            var position = start
+            var cells = 0
+            var lastBreak: (end: Int, cells: Int)?
+            while position < range.upper {
+                if start == range.lower, position >= contentEnd {
+                    return try appendSpaces(after: position, cells: cells, lineStart: start, tabs: tabWidth)
+                }
+                let current = byte(at: position)
+                if current == 9 {
+                    let stop = cells + ASCIITabColumns.advance(for: current, from: cells, tabWidth: tabWidth)
+                    if stop > columns {
+                        if position == start {
+                            // 制表比整行还宽时仍保留完整字节，下一视觉行重新从本行的原点排版。
+                            return try appendSpaces(
+                                after: position + 1,
+                                cells: stop,
+                                lineStart: start,
+                                tabs: nil
+                            )
+                        }
+                        return (position, cells)
+                    }
+                    position += 1
+                    cells = stop
+                    lastBreak = (position, cells)
+                }
+                else if current == 32 {
+                    if cells >= columns {
+                        return try appendSpaces(after: position, cells: cells, lineStart: start, tabs: nil)
+                    }
+                    position += 1
+                    cells += 1
+                    lastBreak = (position, cells)
+                }
+                else {
+                    guard PieceNode.isASCIIAlphanumeric(current) else {
+                        throw Refusal.character
+                    }
+                    if cells >= columns {
+                        return lastBreak ?? (position, cells)
+                    }
+                    position += 1
+                    cells += 1
+                }
+            }
+            return (position, cells)
+        }
+
+        /// 业务作用：尾随空格及整段末尾符合条件的制表留在实际视觉行中，原字节容量保持有界。
+        /// 参数说明:
+        /// - position: 当前尚未消费的实际原字节。
+        /// - cells: 视觉行当前已占用的普通列数。
+        /// - lineStart: 该视觉行用来确认字节容量的真实起点。
+        /// - tabs: 允许追加制表时的完整原宽度；仅允许普通空格时为空。
+        /// 返回：可追加的原字节及真实列数，容量不足时拒绝发布。
+        private mutating func appendSpaces(
+            after position: Int,
+            cells: Int,
+            lineStart: Int,
+            tabs: Int?
+        ) throws -> (end: Int, cells: Int) {
+            var end = position
+            var width = cells
+            while end < range.upper {
+                let value = byte(at: end)
+                if value != 32, value != 9 || tabs == nil {
+                    break
+                }
+                guard end - lineStart < ASCIIWordWrapIndex.maximumRowBytes else {
+                    throw Refusal.row
+                }
+                width += ASCIITabColumns.advance(for: value, from: width, tabWidth: tabs ?? 1)
+                end += 1
+            }
+            return (end, width)
         }
 
         private static let opens = Set("〈《「『【〔（［｛".utf16)

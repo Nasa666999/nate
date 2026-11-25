@@ -61,6 +61,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - theme: 当前编辑器的完整主题。
     /// - language: 当前绑定的原语言。
     /// - fontZoomAdjustment: 当前视图实际缩放差值。
+    /// - tabWidth: 当前语言实际确认的制表宽度。
     /// - wordIndex: 含空格的同一原文及实际宽度已得到的完整断行索引。
     /// - ideographs: 确认整个原行只由基本统一汉字及所支持全角标点组成的证据。
     /// 返回：具备完整原生断行证据的初始窗口；不支持的内容、字体或宽度交回普通段落门禁。
@@ -73,6 +74,7 @@ final class WrappedASCIIWindow: LongLineProjection {
         theme: EditorThemeDefinition?,
         language: String?,
         fontZoomAdjustment: CGFloat,
+        tabWidth: Int = 4,
         wordIndex: ASCIIWordWrapIndex? = nil,
         ideographs: PlainHanLine? = nil
     ) {
@@ -116,6 +118,18 @@ final class WrappedASCIIWindow: LongLineProjection {
         let expected: WrappedASCIIGeometry?
         let indexedRows: [ByteRange]?
         if let wordIndex {
+            if let width = wordIndex.tabWidth {
+                guard width == tabWidth,
+                    NativeMonospaceGeometry.provesTabStops(
+                        actual,
+                        width: width,
+                        advance: advance,
+                        appearance: appearance
+                    )
+                else {
+                    return nil
+                }
+            }
             if !wordIndex.narrowScalars.isEmpty,
                 !NativeNarrowUnicodeFont.proves(
                     wordIndex.narrowScalars,
@@ -160,13 +174,15 @@ final class WrappedASCIIWindow: LongLineProjection {
             theme: theme,
             language: language,
             fontZoomAdjustment: fontZoomAdjustment,
-            hanFont: han
+            hanFont: han,
+            tabWidth: wordIndex?.tabWidth ?? 4
         )
         guard
             let metrics = native.uniformWrapping(
                 advance: advance,
                 expected: expected,
-                indexedRows: indexedRows
+                indexedRows: indexedRows,
+                tabWidth: wordIndex?.tabWidth
             )
         else {
             return nil
@@ -454,10 +470,17 @@ final class WrappedASCIIWindow: LongLineProjection {
             theme: theme,
             language: language,
             fontZoomAdjustment: fontZoomAdjustment,
-            hanFont: hanFont
+            hanFont: hanFont,
+            tabWidth: wordIndex?.tabWidth ?? 4
         )
         // 不同片段都必须重现原来的断行端点和像素几何，失配时不会发布旧窗口之外的坐标。
-        guard candidate.uniformWrapping(advance: advance, expected: metrics, indexedRows: indexedRows) != nil
+        guard
+            candidate.uniformWrapping(
+                advance: advance,
+                expected: metrics,
+                indexedRows: indexedRows,
+                tabWidth: wordIndex?.tabWidth
+            ) != nil
         else {
             unavailableReason = "超长软换行的原生断行位置无法确认，已暂停当前呈现。"
             return
@@ -478,6 +501,7 @@ final class WrappedASCIIWindow: LongLineProjection {
     /// - language: 当前语言。
     /// - fontZoomAdjustment: 所属视图真实缩放差值。
     /// - hanFont: 纯基本统一汉字采用的已确认字体。
+    /// - tabWidth: 该段落使用的完整原生制表设置。
     /// 返回：绑定原字节的真实 TextKit 软换行段落。
     private static func layout(
         snapshot: DocumentSnapshot,
@@ -488,7 +512,8 @@ final class WrappedASCIIWindow: LongLineProjection {
         theme: EditorThemeDefinition?,
         language: String?,
         fontZoomAdjustment: CGFloat,
-        hanFont: NativeHanLineFont? = nil
+        hanFont: NativeHanLineFont? = nil,
+        tabWidth: Int = 4
     ) -> LineLayout {
         LineLayout(
             snapshot: snapshot,
@@ -501,6 +526,7 @@ final class WrappedASCIIWindow: LongLineProjection {
             appearance: appearance,
             nativeASCII: true,
             nativeHanFont: hanFont,
+            tabWidth: tabWidth,
             theme: theme,
             language: language
         )

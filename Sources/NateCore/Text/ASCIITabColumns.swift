@@ -142,8 +142,27 @@ public struct ASCIITabColumns: Sendable {
     /// - column: 当前实测前缀列数。
     /// - tabWidth: 本轮固定的语言 Tab 宽度。
     /// 返回：当前字节覆盖的视觉列数。
-    private static func advance(for byte: UInt8, from column: Int, tabWidth: Int) -> Int {
+    static func advance(for byte: UInt8, from column: Int, tabWidth: Int) -> Int {
         byte == 9 ? tabWidth - column % tabWidth : 1
+    }
+
+    /// 业务作用：原生软换行的每个视觉行从首列重新取得制表停靠宽度。
+    /// 参数说明:
+    /// - bytes: 同一固定正文已经确认的单个视觉行字节。
+    /// - tabWidth: 当前语言实际制表列数。
+    /// 返回：行内独立的最终视觉列数；非法配置或非 ASCII 数据返回空。
+    public static func visualColumnCount(in bytes: [UInt8], tabWidth: Int) -> Int? {
+        guard (1...32).contains(tabWidth), bytes.count <= 65_536 else {
+            return nil
+        }
+        var column = 0
+        for byte in bytes {
+            guard byte == 9 || (32...126).contains(byte) else {
+                return nil
+            }
+            column += advance(for: byte, from: column, tabWidth: tabWidth)
+        }
+        return column
     }
 
     /// 业务作用：只在仍有完整测量时间及资格时读取下一分块，过期索引不行使排版授权。
