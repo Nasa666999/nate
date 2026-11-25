@@ -257,6 +257,8 @@ extension ASCIIWordWrapIndex {
 
         private static let opens = Set("〈《「『【〔（［｛".utf16)
         private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
+        private static let asciiSentencePunctuation = Set("!?.,:;".utf8)
+        private static let asciiNumericSeparators = Set(".,:;".utf8)
 
         /// 业务作用：窄词和全角正文共享真实容器，按已有原生分词证据处理标点并保护完整长行坐标。
         /// 参数说明:
@@ -325,6 +327,12 @@ extension ASCIIWordWrapIndex {
             if first == 32 || PieceNode.isASCIIAlphanumeric(first) {
                 return (false, first == 32)
             }
+            if first < 128, Self.asciiSentencePunctuation.contains(first) {
+                guard punctuation != nil else {
+                    throw Refusal.sentencePunctuation
+                }
+                return (false, false)
+            }
             guard first >= 227 else {
                 throw Refusal.character
             }
@@ -347,6 +355,13 @@ extension ASCIIWordWrapIndex {
         private mutating func mixedHanPunctuationEnd(after start: Int, hard: Int, trailing: Int) throws -> Int
         {
             guard let boundary = try punctuation?.boundary(atOrBefore: trailing) else {
+                throw Refusal.character
+            }
+            // 空格后的窄数字分隔符可能在完整段落中与前文连排。切片能接受该断点时也不能据此发布坐标。
+            if boundary > start, boundary + 1 < range.upper, byte(at: boundary - 1) == 32,
+                Self.asciiNumericSeparators.contains(byte(at: boundary)),
+                (48...57).contains(byte(at: boundary + 1))
+            {
                 throw Refusal.character
             }
             if boundary > hard {

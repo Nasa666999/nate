@@ -231,44 +231,47 @@ extension EditorView {
                             wordWrap: punctuation
                         )
                     }
-                    if index == nil, let fullWidth = wrappingColumns.fullWidth,
-                        let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline),
-                        han.characterCount * 3 == key.range.count
+                    if index == nil, wrappingColumns.fullWidth != nil || wrappingColumns.mixedHan != nil,
+                        let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline)
                     {
-                        if han.containsOnlyUnifiedIdeographs {
-                            return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil)
+                        // 纯全角和混排行共享同一次原字节资格检查，给原生断行保留共同预算。
+                        if let fullWidth = wrappingColumns.fullWidth,
+                            han.characterCount * 3 == key.range.count
+                        {
+                            if han.containsOnlyUnifiedIdeographs {
+                                return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil)
+                            }
+                            let full = try ASCIIWordWrapIndex(
+                                text: snapshot.text,
+                                range: key.range,
+                                columns: fullWidth,
+                                fullWidth: han,
+                                deadline: deadline
+                            )
+                            return EditorWideTabLayout.Entry(
+                                columns: nil,
+                                han: full == nil ? nil : han,
+                                status: nil,
+                                wordWrap: full
+                            )
                         }
-                        let full = try ASCIIWordWrapIndex(
-                            text: snapshot.text,
-                            range: key.range,
-                            columns: fullWidth,
-                            fullWidth: han,
-                            deadline: deadline
-                        )
-                        return EditorWideTabLayout.Entry(
-                            columns: nil,
-                            han: full == nil ? nil : han,
-                            status: nil,
-                            wordWrap: full
-                        )
-                    }
-                    if index == nil, narrow == nil, let metrics = wrappingColumns.mixedHan,
-                        let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline),
-                        let wrapped = try ASCIIWordWrapIndex.withMixedHan(
-                            text: snapshot.text,
-                            range: key.range,
-                            columns: wrappingColumns.narrow,
-                            source: han,
-                            metrics: metrics,
-                            deadline: deadline
-                        )
-                    {
-                        return EditorWideTabLayout.Entry(
-                            columns: nil,
-                            han: han,
-                            status: nil,
-                            wordWrap: wrapped
-                        )
+                        if let metrics = wrappingColumns.mixedHan,
+                            let wrapped = try ASCIIWordWrapIndex.withMixedHan(
+                                text: snapshot.text,
+                                range: key.range,
+                                columns: wrappingColumns.narrow,
+                                source: han,
+                                metrics: metrics,
+                                deadline: deadline
+                            )
+                        {
+                            return EditorWideTabLayout.Entry(
+                                columns: nil,
+                                han: han,
+                                status: nil,
+                                wordWrap: wrapped
+                            )
+                        }
                     }
                     if index == nil, narrow == nil, !snapshot.text.isPrintableASCII(in: key.range),
                         let tabs = try ASCIITabColumns(

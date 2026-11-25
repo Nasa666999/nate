@@ -20,6 +20,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     enum Refusal: Error {
         case character
         case row
+        case sentencePunctuation
     }
 
     enum Script: Equatable, Sendable {
@@ -207,7 +208,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
-    /// 业务作用：基本汉字、全角标点和 ASCII 词共用真实容器，每个视觉行按自身字体组成确认高度。
+    /// 业务作用：基本汉字、已支持标点和 ASCII 词共用真实容器，每个视觉行按自身字体组成确认高度。
     /// 参数说明:
     /// - text: 当前不可变正文。
     /// - range: 排除实际换行符后的完整物理行范围。
@@ -224,15 +225,30 @@ public struct ASCIIWordWrapIndex: Sendable {
         metrics: MixedHanWrapMetrics,
         deadline: ContinuousClock.Instant
     ) throws -> Self? {
-        try Self(
-            text: text,
-            range: range,
-            columns: columns,
-            narrow: nil,
-            han: source,
-            mixedHan: metrics,
-            deadline: deadline
-        )
+        do {
+            return try Self(
+                text: text,
+                range: range,
+                columns: columns,
+                narrow: nil,
+                han: source,
+                mixedHan: metrics,
+                deadline: deadline
+            )
+        }
+        catch Refusal.sentencePunctuation {
+            // 原文字形已获确认，遇到窄标点后用同一截止重新解释整个段落，避免混用两次断行的坐标。
+            return try Self(
+                text: text,
+                range: range,
+                columns: columns,
+                narrow: nil,
+                han: source,
+                mixedHan: metrics,
+                allowsPunctuation: true,
+                deadline: deadline
+            )
+        }
     }
 
     /// 业务作用：不同字体类型复用同一完整视觉行索引和有界稀疏锚点。
@@ -245,7 +261,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - mixedHan: 存在窄字形及全角字形时采用的实际原生度量。
     /// - tabs: 可选的同源原始 ASCII 制表证明。
     /// - narrowTabs: 可选的包含独立窄字母的同源制表证明。
-    /// - allowsPunctuation: 已请求逐页解释原生 ASCII 标点断行时为真。
+    /// - allowsPunctuation: 已请求逐页解释原生可用标点断行时为真。
     /// - deadline: 准备任务的共同截止。
     /// 返回：字体类别和所有边界已经核对的完整索引，超量或非法字符时拒绝。
     private init?(
@@ -317,7 +333,7 @@ public struct ASCIIWordWrapIndex: Sendable {
                     text: text,
                     range: range,
                     allowsNarrowLetters: narrow != nil || narrowTabs != nil,
-                    allowsFullwidth: fullwidthPunctuation,
+                    allowsFullwidth: mixedHan != nil,
                     deadline: deadline
                 )
             else {
