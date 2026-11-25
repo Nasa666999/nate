@@ -128,12 +128,14 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - text: 当前已提交的不可变正文。
     /// - range: 完整物理行排除真实换行后的原始字节范围。
     /// - columns: 由当前容器与实际等宽字体共同确认的视觉列数。
+    /// - tabs: 含真实制表时提供同一原文及当前语言制表宽度的完整索引。
     /// - deadline: 本次完整断行准备的共享截止。
     /// 返回：全部真实原字节断点及就近查询索引，无法得到完整原生分页时为空。
     public static func withASCIIPunctuation(
         text: PieceTree,
         range: ByteRange,
         columns: Int,
+        tabs: ASCIITabColumns? = nil,
         deadline: ContinuousClock.Instant
     ) throws -> Self? {
         try Self(
@@ -142,6 +144,7 @@ public struct ASCIIWordWrapIndex: Sendable {
             columns: columns,
             narrow: nil,
             han: nil,
+            tabs: tabs,
             allowsPunctuation: true,
             deadline: deadline
         )

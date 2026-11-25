@@ -32,9 +32,6 @@ extension ASCIIWordWrapIndex {
             guard start < range.upper else {
                 throw Refusal.row
             }
-            if punctuation != nil {
-                return try nextPunctuationRow(after: start, columns: columns)
-            }
             if script == .han {
                 return try nextHanRow(after: start, columns: columns)
             }
@@ -45,6 +42,9 @@ extension ASCIIWordWrapIndex {
                     tabWidth: width,
                     contentEnd: contentEnd
                 )
+            }
+            if punctuation != nil {
+                return try nextPunctuationRow(after: start, columns: columns)
             }
             var position = start
             var cells = 0
@@ -131,29 +131,40 @@ extension ASCIIWordWrapIndex {
                     if stop > columns {
                         if position == start {
                             // 制表比整行还宽时仍保留完整字节，下一视觉行重新从本行的原点排版。
-                            return try appendSpaces(
+                            let trailing = try appendSpaces(
                                 after: position + 1,
                                 cells: stop,
                                 lineStart: start,
                                 tabs: nil
                             )
+                            return try acceptsSpaces(at: trailing.end) ? trailing : (position + 1, stop)
                         }
                         return (position, cells)
                     }
                     position += 1
                     cells = stop
-                    lastBreak = (position, cells)
+                    if try acceptsBreak(at: position) {
+                        lastBreak = (position, cells)
+                    }
                 }
                 else if current == 32 {
                     if cells >= columns {
-                        return try appendSpaces(after: position, cells: cells, lineStart: start, tabs: nil)
+                        let trailing = try appendSpaces(
+                            after: position,
+                            cells: cells,
+                            lineStart: start,
+                            tabs: nil
+                        )
+                        return try acceptsSpaces(at: trailing.end) ? trailing : lastBreak ?? (position, cells)
                     }
                     position += 1
                     cells += 1
-                    lastBreak = (position, cells)
+                    if try acceptsBreak(at: position) {
+                        lastBreak = (position, cells)
+                    }
                 }
                 else {
-                    guard PieceNode.isASCIIAlphanumeric(current) else {
+                    guard punctuation != nil || PieceNode.isASCIIAlphanumeric(current) else {
                         throw Refusal.character
                     }
                     if cells >= columns {
@@ -161,9 +172,31 @@ extension ASCIIWordWrapIndex {
                     }
                     position += 1
                     cells += 1
+                    if punctuation != nil, try acceptsBreak(at: position) {
+                        lastBreak = (position, cells)
+                    }
                 }
             }
             return (position, cells)
+        }
+
+        /// 业务作用：标点存在时由原生断行确认当前候选，简单字母数字和空白可直接使用已知规则。
+        /// 参数说明:
+        /// - offset: 完整原制表或普通字节之后的实际位置。
+        /// 返回：能在当前原始边界结束视觉行为真。
+        private mutating func acceptsBreak(at offset: Int) throws -> Bool {
+            (try punctuation?.boundary(atOrBefore: offset) ?? offset) == offset
+        }
+
+        /// 业务作用：溢出空格只留在原生允许的行尾；后续真实 Tab 自己重新计算停靠。
+        /// 参数说明:
+        /// - end: 紧邻空格后的原始端点。
+        /// 返回：空白确实应归于当前视觉行时为真。
+        private mutating func acceptsSpaces(at end: Int) throws -> Bool {
+            if end == range.upper || byte(at: end) == 9 {
+                return true
+            }
+            return try acceptsBreak(at: end)
         }
 
         /// 业务作用：尾随空格及整段末尾符合条件的制表留在实际视觉行中，原字节容量保持有界。

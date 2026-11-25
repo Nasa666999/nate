@@ -10,7 +10,7 @@ struct ASCIILineBreaks: Sendable {
     /// 业务作用：把超长可打印 ASCII 断行分成原生分词器可完整读取的页，页边不会切断数值或标点语境。
     /// 参数说明:
     /// - text: 已提交的不可变正文。
-    /// - range: 由调用者确认完全属于可打印 ASCII 的同一物理行。
+    /// - range: 由调用者确认只含可打印 ASCII 与真实 Tab 的同一物理行。
     /// - deadline: 本次完整断行工作共享的截止。
     /// 返回：所有页边均已确认时提供索引，缺少可靠页边时不发布部分证据。
     init?(text: PieceTree, range: ByteRange, deadline: ContinuousClock.Instant) throws {
@@ -38,15 +38,17 @@ struct ASCIILineBreaks: Sendable {
         pageEnds = ends
     }
 
-    /// 业务作用：只在字母数字、普通空格及下一字母数字之间结束分词页，保留两侧原始断行语义。
+    /// 业务作用：只在普通字母数字之间的完整空白分隔后结束分词页，保留两侧原始断行语义。
     /// 参数说明:
-    /// - sample: 当前后段内含少量后继正文的可打印 ASCII 字节。
+    /// - sample: 当前后段内含少量后继正文的可打印 ASCII 和真实 Tab。
     /// 返回：从样本起点计的真实分页端点；缺少完整周边证据时为空。
     private static func stableBoundary(in sample: [UInt8]) -> Int? {
         for current in stride(from: sample.count - 1, through: 2, by: -1)
-        where sample[current - 1] == 32 && PieceNode.isASCIIAlphanumeric(sample[current]) {
+        where (sample[current - 1] == 32 || sample[current - 1] == 9)
+            && PieceNode.isASCIIAlphanumeric(sample[current])
+        {
             var previous = current - 1
-            while previous > 0, sample[previous] == 32 {
+            while previous > 0, sample[previous] == 32 || sample[previous] == 9 {
                 previous -= 1
             }
             if PieceNode.isASCIIAlphanumeric(sample[previous]) {

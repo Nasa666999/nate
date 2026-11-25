@@ -229,13 +229,21 @@ extension EditorView {
                             deadline: deadline
                         )
                     {
-                        let tabbed = try ASCIIWordWrapIndex(
-                            text: snapshot.text,
-                            range: key.range,
-                            columns: wrappingColumns.narrow,
-                            tabs: tabs,
-                            deadline: deadline
-                        )
+                        let tabbed =
+                            try ASCIIWordWrapIndex(
+                                text: snapshot.text,
+                                range: key.range,
+                                columns: wrappingColumns.narrow,
+                                tabs: tabs,
+                                deadline: deadline
+                            )
+                            ?? ASCIIWordWrapIndex.withASCIIPunctuation(
+                                text: snapshot.text,
+                                range: key.range,
+                                columns: wrappingColumns.narrow,
+                                tabs: tabs,
+                                deadline: deadline
+                            )
                         return EditorWideTabLayout.Entry(
                             columns: tabbed == nil ? nil : tabs,
                             han: nil,
