@@ -107,7 +107,8 @@ final class LineLayout {
         horizontallyOrderedASCII = !rtl && snapshot.text.isPrintableASCII(in: range)
         let origin = snapshot.text.utf16Offset(byte: range.lower) ?? 0
         originUTF16 = origin
-        if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil, softWrapping {
+        let mustWrap = softWrapping && wideTabs?.singleVisualLine != true
+        if !nativeASCII, !rtl, tokens.isEmpty, viewport != nil, mustWrap {
             wideLine = WrappedASCIIWindow(
                 snapshot: snapshot,
                 range: range,

@@ -17,6 +17,8 @@ final class PieceNode: Sendable {
     let printableASCII: Bool
     let alphanumericASCII: Bool
     let unifiedIdeographs: Bool
+    let horizontalASCIIWhitespace: Bool
+    let onlyASCIITabs: Bool
 
     /// 业务作用：缓存叶片的坐标与行索引，限制每次局部扫描的规模。
     /// 参数说明:
@@ -51,6 +53,8 @@ final class PieceNode: Sendable {
         self.printableASCII = printableASCII
         self.alphanumericASCII = alphanumericASCII
         unifiedIdeographs = utf16Count == count / 3 && Self.onlyUnifiedIdeographs(bytes[...])
+        horizontalASCIIWhitespace = bytes.allSatisfy { $0 == 9 || $0 == 32 }
+        onlyASCIITabs = horizontalASCIIWhitespace && bytes.allSatisfy { $0 == 9 }
     }
 
     /// 业务作用：聚合子树索引，跨节点 CRLF 只计一行。
@@ -73,6 +77,8 @@ final class PieceNode: Sendable {
         printableASCII = left.printableASCII && right.printableASCII
         alphanumericASCII = left.alphanumericASCII && right.alphanumericASCII
         unifiedIdeographs = left.unifiedIdeographs && right.unifiedIdeographs
+        horizontalASCIIWhitespace = left.horizontalASCIIWhitespace && right.horizontalASCIIWhitespace
+        onlyASCIITabs = left.onlyASCIITabs && right.onlyASCIITabs
     }
 
     /// 业务作用：为每个共享正文节点确定是否可按固定三字节宽度投影基本统一汉字。

@@ -21,6 +21,26 @@ extension PieceTree {
         }
     }
 
+    /// 业务作用：为只有水平空白的尾部复用共享正文证据，不逐字读取不影响断行的超长后缀。
+    /// 参数说明:
+    /// - range: 同一不可变正文的完整 UTF-8 原字节范围。
+    /// 返回：范围只包含 ASCII 空格或真实 Tab 时为真。
+    func isHorizontalASCIIWhitespace(in range: ByteRange) -> Bool {
+        containsOnly(in: range, cached: \.horizontalASCIIWhitespace) { bytes in
+            bytes.allSatisfy { $0 == 9 || $0 == 32 }
+        }
+    }
+
+    /// 业务作用：只含真实 Tab 的逻辑行按固定列宽定位，不分配逐块停靠记录。
+    /// 参数说明:
+    /// - range: 同一不可变正文中排除实际行尾的原字节范围。
+    /// 返回：完整范围只包含真实 Tab 时为真。
+    func containsOnlyASCIITabs(in range: ByteRange) -> Bool {
+        containsOnly(in: range, cached: \.onlyASCIITabs) { bytes in
+            bytes.allSatisfy { $0 == 9 }
+        }
+    }
+
     /// 业务作用：纯基本统一汉字的有界窗口可用已确认子树取得完整固定字节宽度。
     /// 参数说明:
     /// - range: 同一正文上落在完整 UTF-8 标量边缘的范围。

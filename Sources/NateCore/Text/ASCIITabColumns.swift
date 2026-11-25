@@ -9,6 +9,7 @@ public struct ASCIITabColumns: Sendable {
     private let sourceIdentity: UUID
     private let text: PieceTree
     private let checkpoints: [Int]
+    private let constantTabStops: Bool
     private static let checkpointBytes = 1024
 
     private enum SourceError: Error {
@@ -34,6 +35,18 @@ public struct ASCIITabColumns: Sendable {
             return nil
         }
         let slice = try source.slicing(range)
+        if source.containsOnlyASCIITabs(in: range) {
+            // 纯制表行的每个字节覆盖一个完整停靠区间，共享子树允许直接取得全行坐标。
+            try Self.check(deadline)
+            self.range = range
+            self.tabWidth = tabWidth
+            columnCount = range.count * tabWidth
+            sourceIdentity = source.root.identity
+            text = slice
+            checkpoints = []
+            constantTabStops = true
+            return
+        }
         var position = 0
         var column = 0
         var nextCheckpoint = Self.checkpointBytes
@@ -77,6 +90,7 @@ public struct ASCIITabColumns: Sendable {
         sourceIdentity = source.root.identity
         text = slice
         checkpoints = columns
+        constantTabStops = false
     }
 
     /// 业务作用：编辑仅能复用同一不可变正文根和制表宽度的列证据，修订后的内容必须重新确认。
@@ -96,6 +110,9 @@ public struct ASCIITabColumns: Sendable {
         guard (0...range.count).contains(offset) else {
             return nil
         }
+        if constantTabStops {
+            return offset * tabWidth
+        }
         let checkpoint = offset / Self.checkpointBytes
         let bytes = text.bytes(in: ByteRange(checkpoint * Self.checkpointBytes, offset))
         return bytes.reduce(checkpoints[checkpoint]) { column, byte in
@@ -110,6 +127,9 @@ public struct ASCIITabColumns: Sendable {
     public func offset(atOrBefore column: Int) -> Int? {
         guard (0...columnCount).contains(column) else {
             return nil
+        }
+        if constantTabStops {
+            return column / tabWidth
         }
         var lower = 0
         var upper = checkpoints.count
@@ -163,6 +183,39 @@ public struct ASCIITabColumns: Sendable {
             column += advance(for: byte, from: column, tabWidth: tabWidth)
         }
         return column
+    }
+
+    /// 业务作用：整个非空白前缀能在原生容器内排完时，超长尾随水平空白属于同一个视觉行。
+    /// 参数说明:
+    /// - source: 当前已提交的完整不可变正文。
+    /// - range: 当前物理行排除实际结束符的原字节范围。
+    /// - columns: 当前可用宽度实测的普通等宽字形数。
+    /// - tabWidth: 当前语言实际制表列数。
+    /// 返回：原文只是适合当前容器的 ASCII 前缀和可证明尾随空白时为真。
+    public static func contentFitsBeforeTrailingWhitespace(
+        in source: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        tabWidth: Int
+    ) -> Bool {
+        guard (1...8192).contains(columns), (1...32).contains(tabWidth), range.lower >= 0,
+            range.upper >= range.lower, range.upper <= source.byteCount
+        else {
+            return false
+        }
+        let end = min(range.upper, range.lower + columns)
+        guard source.isHorizontalASCIIWhitespace(in: ByteRange(end, range.upper)),
+            source.isBoundary(range.lower)
+        else {
+            return false
+        }
+        let prefix = source.bytes(in: ByteRange(range.lower, end))
+        let last = prefix.lastIndex { $0 != 9 && $0 != 32 }
+        let count = last.map { $0 + 1 } ?? 0
+        guard let width = visualColumnCount(in: Array(prefix.prefix(count)), tabWidth: tabWidth) else {
+            return false
+        }
+        return width <= columns
     }
 
     /// 业务作用：只在仍有完整测量时间及资格时读取下一分块，过期索引不行使排版授权。

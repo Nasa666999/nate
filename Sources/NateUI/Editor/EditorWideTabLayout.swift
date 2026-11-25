@@ -18,6 +18,7 @@ final class EditorWideTabLayout {
         let status: String?
         var wordWrap: ASCIIWordWrapIndex? = nil
         var narrow: PlainNarrowUnicodeLine? = nil
+        var singleVisualLine = false
 
         /// 业务作用：编辑与当前实际显示共用已经确认的长行原始字节证据。
         /// 参数说明: 无。
@@ -144,6 +145,35 @@ extension EditorView {
             let deadline = ContinuousClock.now.advanced(by: .seconds(5))
             let worker = Task.detached(priority: .userInitiated) {
                 if let wrappingColumns {
+                    if ASCIITabColumns.contentFitsBeforeTrailingWhitespace(
+                        in: snapshot.text,
+                        range: key.range,
+                        columns: wrappingColumns.narrow,
+                        tabWidth: width
+                    ) {
+                        // 原生段落的非空白部分已经适合一行，只按完整原制表网格投影后续空白。
+                        if snapshot.text.isPrintableASCII(in: key.range) {
+                            return EditorWideTabLayout.Entry(
+                                columns: nil,
+                                han: nil,
+                                status: nil,
+                                singleVisualLine: true
+                            )
+                        }
+                        if let tabs = try ASCIITabColumns(
+                            text: snapshot.text,
+                            range: key.range,
+                            tabWidth: width,
+                            deadline: deadline
+                        ) {
+                            return EditorWideTabLayout.Entry(
+                                columns: tabs,
+                                han: nil,
+                                status: nil,
+                                singleVisualLine: true
+                            )
+                        }
+                    }
                     let narrow = try PlainNarrowUnicodeLine(
                         text: snapshot.text,
                         range: key.range,
@@ -280,7 +310,7 @@ extension EditorView {
             self.wideTabLayout.pendingReveal = nil
             // 后台完成只恢复原本等待的光标定位，用户后来滚动、换焦或修改选区都优先。
             if entry.columns != nil || entry.han != nil || entry.hanTabs != nil || entry.wordWrap != nil
-                || entry.narrow != nil,
+                || entry.narrow != nil || entry.singleVisualLine,
                 self.selectionGeneration == request.selection, self.focusGeneration == request.focus,
                 self.visibleRect.origin == request.viewport,
                 self.layoutLine(snapshot.text.lineNumber(at: key.range.lower)).unavailableReason == nil
