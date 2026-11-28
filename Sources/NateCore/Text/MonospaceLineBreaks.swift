@@ -52,11 +52,11 @@ struct MonospaceLineBreaks: Sendable {
         pageEnds = ends
     }
 
-    /// 业务作用：只在词间完整空白或相邻基本统一汉字之间分开分词页，保留两侧原始断行语义。
+    /// 业务作用：词间完整空白及基本汉字与普通词的交界可作为分词页端点，保留两侧原始断行语义。
     /// 参数说明:
     /// - sample: 当前页后段与少量后继的原始字节。
     /// - allowsNarrowLetters: 范围已由同一原文确认两字节窄字母时为真。
-    /// - allowsFullwidth: 范围允许确实成对相邻的基本统一汉字作为页边时为真。
+    /// - allowsFullwidth: 原文已确定允许基本统一汉字和普通 ASCII 词共同确定页边时为真。
     /// 返回：从样本起点计的真实分页端点；缺少完整周边证据时为空。
     private static func stableBoundary(
         in sample: [UInt8],
@@ -64,11 +64,17 @@ struct MonospaceLineBreaks: Sendable {
         allowsFullwidth: Bool
     ) -> Int? {
         for current in stride(from: sample.count - 1, through: 2, by: -1) {
-            if allowsFullwidth, current >= 3, current + 1 < sample.count,
-                isUnifiedIdeograph(sample[current - 3], second: sample[current - 2]),
-                isUnifiedIdeograph(sample[current], second: sample[current + 1])
-            {
-                return current
+            if allowsFullwidth {
+                let previousIsHan =
+                    current >= 3 && isUnifiedIdeograph(sample[current - 3], second: sample[current - 2])
+                let followingIsHan =
+                    current + 1 < sample.count
+                    && isUnifiedIdeograph(sample[current], second: sample[current + 1])
+                if previousIsHan && (followingIsHan || PieceNode.isASCIIAlphanumeric(sample[current]))
+                    || followingIsHan && PieceNode.isASCIIAlphanumeric(sample[current - 1])
+                {
+                    return current
+                }
             }
             guard (sample[current - 1] == 32 || sample[current - 1] == 9),
                 isWordStart(sample[current], allowsNarrowLetters: allowsNarrowLetters)
