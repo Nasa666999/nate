@@ -36,9 +36,11 @@ extension ASCIIWordWrapIndex {
                 return try nextHanRow(after: start, columns: columns)
             }
             if case .mixedHan(let metrics) = script {
+                try requireMixedHanRowStart(at: start)
                 return try nextMixedHanRow(after: start, metrics: metrics)
             }
             if case .mixedHanTabs(let metrics, let grid, let contentEnd, _) = script {
+                try requireMixedHanRowStart(at: start)
                 return try nextMixedHanTabbedRow(
                     after: start,
                     metrics: metrics,
@@ -267,6 +269,19 @@ extension ASCIIWordWrapIndex {
         private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
         private static let asciiMixedPunctuation = Set("!?.,:;()[]{}#@&=/".utf8)
         private static let asciiNumericSeparators = Set(".,:;".utf8)
+
+        /// 业务作用：保留数字间斜杠在完整原生段落中的断行语境。
+        /// 参数说明:
+        /// - start: 下一视觉行拟使用的原字节起点。
+        /// 返回：可以独立定位时继续；斜杠承接上一视觉行的数字时终止索引。
+        private mutating func requireMixedHanRowStart(at start: Int) throws {
+            // TextKit 可能让承前的斜杠占一整行；从斜杠重新分词会遗漏原段落的数字语境。
+            if start > range.lower, start + 1 < range.upper, byte(at: start) == 47,
+                (48...57).contains(byte(at: start - 1)), (48...57).contains(byte(at: start + 1))
+            {
+                throw Refusal.character
+            }
+        }
 
         /// 业务作用：窄词和全角正文共享真实容器，按已有原生分词证据处理标点并保护完整长行坐标。
         /// 参数说明:
