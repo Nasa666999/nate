@@ -17,6 +17,7 @@ final class LineLayout {
     private(set) var nativeLines: [NativeLineGeometry] = []
     private(set) var orderedPositions = true
     private(set) var orderedHeights = true
+    private(set) var horizontalShift: CGFloat = 0
     private let virtualFont: NSFont
     private let appearance: NSAppearance
     private var foregroundVariant: LineForegroundVariant?
@@ -49,6 +50,7 @@ final class LineLayout {
     /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
     /// - viewport: 真实可见正文矩形，省略时保留完整原生段落流程。
     /// - softWrapping: 当前视图使用真实软换行时为真。
+    /// - unwrappedRightEdge: 关闭软换行时右到左段落使用的可见正文右边缘，独立原生测量可省略。
     /// - nativeASCII: 已确认完整字形边界的有界内部段落，关闭上下文连字与字距调整。
     /// - nativeHanFont: 仅安全汉字窗口采用的已确认级联字体。
     /// - tabWidth: 当前语言的合法 Tab 停靠间距。
@@ -70,6 +72,7 @@ final class LineLayout {
         appearance: NSAppearance,
         viewport: NSRect? = nil,
         softWrapping: Bool = false,
+        unwrappedRightEdge: CGFloat? = nil,
         nativeASCII: Bool = false,
         nativeHanFont: NativeHanLineFont? = nil,
         tabWidth: Int = 4,
@@ -266,11 +269,31 @@ final class LineLayout {
             ) {
                 fragment in
                 self.fragments.append(fragment)
-                self.indexLines(in: fragment)
                 self.height = max(self.height, fragment.layoutFragmentFrame.maxY)
                 self.width = max(self.width, fragment.layoutFragmentFrame.maxX)
                 return false
             }
+        }
+        if rtl, !softWrapping, let unwrappedRightEdge, unwrappedRightEdge.isFinite, unwrappedRightEdge > 0 {
+            if value.length == 0, fragments.isEmpty {
+                horizontalShift = unwrappedRightEdge
+                self.width = unwrappedRightEdge
+            }
+            else if fragments.count == 1, let fragment = fragments.first,
+                fragment.textLineFragments.count == 1, let visual = fragment.textLineFragments.first
+            {
+                let bounds = visual.typographicBounds
+                let right = fragment.layoutFragmentFrame.minX + bounds.maxX
+                if right.isFinite, bounds.width.isFinite, bounds.width >= 0 {
+                    // 原生容器只负责容纳无换行正文。真实视图右缘与整段字形宽度共同决定平移量，鼠标与绘制共用该坐标。
+                    let edge = max(unwrappedRightEdge, bounds.width)
+                    horizontalShift = edge - right
+                    self.width = max(edge, self.width + horizontalShift)
+                }
+            }
+        }
+        for fragment in fragments {
+            indexLines(in: fragment)
         }
     }
 
@@ -326,7 +349,7 @@ final class LineLayout {
             nativeVisualRow(containing: local, downstream: downstream).map {
                 nativeLines[$0].caret(at: local)
             }
-            ?? NSRect(x: 0, y: 0, width: 1.5, height: height)
+            ?? NSRect(x: horizontalShift, y: 0, width: 1.5, height: height)
         // 尾随空格的真实插入点可能超过原生容器，保留已证明的边缘以免重绘收回可见光标。
         width = max(width, result.maxX)
         return result
@@ -337,11 +360,13 @@ final class LineLayout {
     /// - fragment: 已完成排版的当前逻辑段落片段。
     /// 返回：保留原生顺序及坐标；异常范围整体暂停呈现，不发布部分索引。
     private func indexLines(in fragment: NSTextLayoutFragment) {
+        let frame = fragment.layoutFragmentFrame
+        let origin = NSPoint(x: frame.minX + horizontalShift, y: frame.minY)
         for line in fragment.textLineFragments {
             guard
                 let item = NativeLineGeometry(
                     line: line,
-                    origin: fragment.layoutFragmentFrame.origin,
+                    origin: origin,
                     sourceLength: content.rendered.length
                 )
             else {
@@ -441,7 +466,7 @@ final class LineLayout {
             rect,
             _,
             _ in
-            result.append(rect)
+            result.append(rect.offsetBy(dx: horizontalShift, dy: 0))
             return true
         }
         return result
@@ -494,7 +519,7 @@ final class LineLayout {
             context.saveGState()
             fragment.draw(
                 at: NSPoint(
-                    x: origin.x + fragment.layoutFragmentFrame.minX,
+                    x: origin.x + fragment.layoutFragmentFrame.minX + horizontalShift,
                     y: origin.y + fragment.layoutFragmentFrame.minY
                 ),
                 in: context
@@ -525,6 +550,6 @@ final class LineLayout {
                 appearance: appearance
             )
         }
-        foregroundVariant?.draw(at: origin, in: context)
+        foregroundVariant?.draw(at: NSPoint(x: origin.x + horizontalShift, y: origin.y), in: context)
     }
 }

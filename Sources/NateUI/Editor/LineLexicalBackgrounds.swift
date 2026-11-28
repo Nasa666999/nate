@@ -56,7 +56,7 @@ extension LineLayout {
                 var complete = true
                 manager.enumerateTextSegments(in: selected, type: .selection, options: [.rangeNotRequired]) {
                     _,
-                    rectangle,
+                    nativeRectangle,
                     _,
                     _ in
                     guard budget > 0 else {
@@ -64,6 +64,7 @@ extension LineLayout {
                         return false
                     }
                     budget -= 1
+                    let rectangle = nativeRectangle.offsetBy(dx: horizontalShift, dy: 0)
                     if rectangle.intersects(clip)
                         || background.fillsLineEnd && rectangle.maxY > clip.minY && rectangle.minY < clip.maxY
                     {

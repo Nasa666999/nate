@@ -414,6 +414,7 @@ public final class EditorView: NSView, @preconcurrency NSTextInputClient {
             appearance: effectiveAppearance,
             viewport: viewport,
             softWrapping: wrapLines,
+            unwrappedRightEdge: rtl && !wrapLines ? nativeBodyViewportWidth : nil,
             tabWidth: tabSettings.width,
             showSequences: showSymbols,
             theme: editorTheme?.definition,

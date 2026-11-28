@@ -7,9 +7,13 @@ extension EditorView {
     /// 参数说明: 无。
     /// 返回：来源已确认的宽度或当前真实视口宽度；不换行时采用固定有界容器。
     var nativeBodyLayoutWidth: CGFloat {
-        guard wrapLines else {
-            return 1_000_000
-        }
+        wrapLines ? nativeBodyViewportWidth : 1_000_000
+    }
+
+    /// 业务作用：软换行及右到左段落采用同一个真实正文视口，独立几何视图可以继续使用来源宽度。
+    /// 参数说明: 无。
+    /// 返回：扣除行号栏和右侧余量的有效正文宽度。
+    var nativeBodyViewportWidth: CGFloat {
         if let width = geometryLayoutWidth, width.isFinite, (80...1_000_000).contains(width) {
             return width
         }
