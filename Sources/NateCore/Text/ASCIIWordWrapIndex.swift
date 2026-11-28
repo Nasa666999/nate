@@ -380,7 +380,7 @@ public struct ASCIIWordWrapIndex: Sendable {
             }
             if let mixedHan {
                 let grid = narrowTabs.metrics
-                guard narrowTabs.hasFullWidthCharacters, narrowTabs.narrowScalars.isEmpty,
+                guard narrowTabs.hasFullWidthCharacters,
                     grid.asciiAdvance == mixedHan.asciiAdvance, grid.hanAdvance == mixedHan.hanAdvance
                 else {
                     return nil
@@ -432,6 +432,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         var start = range.lower
         var widest = 0
         var height = 0.0
+        let narrowScalars = narrow?.scalars ?? narrowTabs?.narrowScalars ?? []
         do {
             repeat {
                 // 全部逻辑行先完成并确认仍属同一次计算，才交给主线程用于远端导航。
@@ -447,7 +448,12 @@ public struct ASCIIWordWrapIndex: Sendable {
                 let next = try cursor.nextRow(after: start, columns: columns)
                 widest = max(widest, next.cells)
                 if let mixedHan {
-                    height += try Self.height(of: ByteRange(start, next.end), in: text, metrics: mixedHan)
+                    height += try Self.height(
+                        of: ByteRange(start, next.end),
+                        in: text,
+                        metrics: mixedHan,
+                        containsNarrowLetters: !narrowScalars.isEmpty
+                    )
                 }
                 start = next.end
                 row += 1
@@ -473,7 +479,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         maximumRowLength = widest
         characterCount =
             han?.characterCount ?? narrow?.characterCount ?? narrowTabs?.characterCount ?? range.count
-        narrowScalars = narrow?.scalars ?? narrowTabs?.narrowScalars ?? []
+        self.narrowScalars = narrowScalars
         usesFullWidthFont = script == .han
         mixedHanMetrics = mixedHan
         totalHeight = height
@@ -604,7 +610,8 @@ public struct ASCIIWordWrapIndex: Sendable {
                 let height = try? Self.height(
                     of: ByteRange(start, next.end),
                     in: text,
-                    metrics: mixedHanMetrics
+                    metrics: mixedHanMetrics,
+                    containsNarrowLetters: !narrowScalars.isEmpty
                 )
             else {
                 return nil
@@ -635,7 +642,8 @@ public struct ASCIIWordWrapIndex: Sendable {
                 let height = try? Self.height(
                     of: ByteRange(start, next.end),
                     in: text,
-                    metrics: mixedHanMetrics
+                    metrics: mixedHanMetrics,
+                    containsNarrowLetters: !narrowScalars.isEmpty
                 )
             else {
                 return nil
@@ -654,14 +662,23 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - row: 已完整确认的视觉行原字节范围。
     /// - text: 原不可变正文。
     /// - metrics: 同一容器和字体的真实度量。
-    /// 返回：纯 ASCII 或含全角字形的真实高度，原端点无效时终止。
-    private static func height(of row: ByteRange, in text: PieceTree, metrics: MixedHanWrapMetrics) throws
-        -> Double
-    {
+    /// - containsNarrowLetters: 完整逻辑行可包含独立的双字节窄字母时为真。
+    /// 返回：全为窄字形或含全角字形的真实行高，原端点无效时终止。
+    private static func height(
+        of row: ByteRange,
+        in text: PieceTree,
+        metrics: MixedHanWrapMetrics,
+        containsNarrowLetters: Bool
+    ) throws -> Double {
         guard let positions = text.nsRange(row) else {
             throw Refusal.row
         }
-        return positions.length == row.count ? metrics.asciiHeight : metrics.hanHeight
+        guard positions.length != row.count else {
+            return metrics.asciiHeight
+        }
+        // 双字节字母仍使用窄字形行高，只有经同源验证的三字节全角字形会抬高当前行。
+        let hasHan = !containsNarrowLetters || text.bytes(in: row).contains { $0 >= 227 }
+        return hasHan ? metrics.hanHeight : metrics.asciiHeight
     }
 
     /// 业务作用：按字节、视觉行或纵坐标定位最近的已证明锚点，只读取当前需要的局部原文。

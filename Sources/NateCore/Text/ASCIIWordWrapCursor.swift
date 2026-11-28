@@ -448,6 +448,10 @@ extension ASCIIWordWrapIndex {
             if first == 32 || PieceNode.isASCIIAlphanumeric(first) {
                 return (false, first == 32)
             }
+            if (194...223).contains(first), case .mixedHanTabs = script {
+                // 制表索引已确认这类字母由两个原字节组成，先保持一个窄字形，再按完整原标量推进。
+                return (false, false)
+            }
             if first < 128, Self.asciiSentencePunctuation.contains(first) {
                 guard punctuation != nil else {
                     throw Refusal.punctuation

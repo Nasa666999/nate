@@ -8,7 +8,7 @@ extension LineLayout {
     /// - expected: 首个原生段落固定的列数、纵向步距及行底。
     /// - indexedRows: 已独立确认的实际断行，连续单词可采用已确认的列数。
     /// - tabWidth: 原生制表视觉行从自己的起点计算停靠的实际列宽。
-    /// - narrowLetters: 同一原文及字体已确认的独立窄字母可参与制表时为真。
+    /// - narrowLetters: 同一原文及字体已确认的独立双字节窄字母可参与制表时为真。
     /// - mixedHan: 同一容器中原生验证的两类字形步距与视觉行高度。
     /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
     func uniformWrapping(
@@ -97,20 +97,25 @@ extension LineLayout {
             let rowBottom: CGFloat
             let rowWidth: CGFloat
             if let mixedHan, let indexed {
-                let han = (indexed.count - count) / 2
+                let hasHan: Bool
                 originY = variableTop
-                variableTop += CGFloat(han == 0 ? mixedHan.asciiHeight : mixedHan.hanHeight)
-                rowBottom = variableTop
                 if let mixedGrid {
                     let units = content.snapshot.text.text(in: indexed).utf16
                     guard let distance = mixedGrid.visualWidth(of: units) else {
                         return nil
                     }
+                    hasHan =
+                        narrowLetters
+                        ? units.contains(where: PlainHanLine.usesHanFont) : indexed.count != count
                     rowWidth = CGFloat(distance)
                 }
                 else {
+                    let han = (indexed.count - count) / 2
+                    hasHan = han != 0
                     rowWidth = CGFloat(count - han) * advance + CGFloat(han) * CGFloat(mixedHan.hanAdvance)
                 }
+                variableTop += CGFloat(hasHan ? mixedHan.hanHeight : mixedHan.asciiHeight)
+                rowBottom = variableTop
             }
             else {
                 originY = CGFloat(index) * pitch

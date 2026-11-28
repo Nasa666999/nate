@@ -40,8 +40,11 @@ public struct HanTabColumns: Sendable {
             }
             var cursor = Cursor()
             for unit in units {
-                if unit == 9 || (32...126).contains(unit) {
-                    cursor.advance(UInt8(unit), using: self)
+                if unit == 9 {
+                    cursor.advance(9, using: self)
+                }
+                else if (32...126).contains(unit) || PlainNarrowUnicodeLine.contains(unit) {
+                    cursor.addASCII(1)
                 }
                 else if PlainHanLine.usesHanFont(unit) {
                     cursor.addHan()
