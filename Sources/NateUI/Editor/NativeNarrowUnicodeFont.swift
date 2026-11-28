@@ -48,22 +48,37 @@ enum NativeNarrowUnicodeFont {
     /// - font: 当前主题和缩放后的实际基础字体。
     /// - advance: 实际 ASCII 字形的单列步距。
     /// - appearance: 当前原生窗口外观。
-    /// 返回：受支持组合与相邻字母分别占一列、簇内位置也与 TextKit 一致时为真。
+    /// - tabWidth: 含真实 Tab 的原文采用的列宽，无 Tab 时为空。
+    /// 返回：组合字形、簇内位置和制表停靠与实际 TextKit 一致时为真。
     static func provesCombining(
         _ pairs: [UInt32],
         font: NSFont,
         advance: CGFloat,
-        appearance: NSAppearance
+        appearance: NSAppearance,
+        tabWidth: Int? = nil
     ) -> Bool {
         var units: [UInt16] = []
         var columns = [0]
-        for (index, pair) in pairs.enumerated() {
-            let column = index * 3
+        var column = 0
+        for pair in pairs {
             units += [65, UInt16(pair >> 16), UInt16(truncatingIfNeeded: pair), 97]
             columns += [column + 1, column + 2, column + 2, column + 3]
+            column += 3
+            if let tabWidth {
+                units.append(9)
+                column += tabWidth - column % tabWidth
+                columns.append(column)
+            }
         }
         return !pairs.isEmpty
-            && aligns(units, columns: columns, font: font, advance: advance, appearance: appearance)
+            && aligns(
+                units,
+                columns: columns,
+                font: font,
+                advance: advance,
+                appearance: appearance,
+                tabWidth: tabWidth ?? 4
+            )
     }
 
     /// 业务作用：只在样本文字的每个真实插入点都落在预期网格时授予长行前缀坐标。
@@ -73,24 +88,27 @@ enum NativeNarrowUnicodeFont {
     /// - font: 当前使用的原生基础字体。
     /// - advance: 实际单列步距。
     /// - appearance: 当前原生窗口外观。
+    /// - tabWidth: 样本采用的实际制表间隔。
     /// 返回：完整段落等距且高度一致时为真。
     private static func aligns(
         _ units: [UInt16],
         columns: [Int],
         font: NSFont,
         advance: CGFloat,
-        appearance: NSAppearance
+        appearance: NSAppearance,
+        tabWidth: Int = 4
     ) -> Bool {
         let text = PieceTree(String(decoding: units, as: UTF16.self))
         let layout = LineLayout(
             snapshot: DocumentSnapshot(id: UUID(), revision: 0, text: text),
             range: ByteRange(0, text.byteCount),
             font: font,
-            width: CGFloat(units.count) * advance + 64,
+            width: CGFloat(columns.last ?? units.count) * advance + 64,
             tokens: [],
             rtl: false,
             appearance: appearance,
-            nativeASCII: true
+            nativeASCII: true,
+            tabWidth: tabWidth
         )
         let start = layout.caret(at: 0)
         return layout.isSingleVisualLine && layout.characterCount == units.count

@@ -90,7 +90,8 @@ final class LongLineWindow: LongLineProjection {
                     && narrowLine?.range == range && narrowLine?.matches(snapshot.text) == true),
             combiningLine == nil
                 || (tabs == nil && hanLine == nil && hanTabLine == nil && narrowLine == nil
-                    && combiningLine?.range == range && combiningLine?.matches(snapshot.text) == true),
+                    && combiningLine?.range == range
+                    && combiningLine?.matches(snapshot.text, tabWidth: tabWidth) == true),
             tabs != nil || hanLine != nil || hanTabLine != nil || narrowLine != nil || combiningLine != nil
                 || snapshot.text.isPrintableASCII(in: range),
             let advance = NativeMonospaceGeometry.uniformAdvance(actualFont, appearance: appearance)
@@ -125,7 +126,8 @@ final class LongLineWindow: LongLineProjection {
                     combiningLine.combiningPairs,
                     font: actualFont,
                     advance: advance,
-                    appearance: appearance
+                    appearance: appearance,
+                    tabWidth: combiningLine.tabWidth
                 ),
                 combiningLine.independentScalars.isEmpty
                     || NativeNarrowUnicodeFont.proves(
@@ -212,7 +214,7 @@ final class LongLineWindow: LongLineProjection {
             theme: theme,
             language: language,
             fontZoomAdjustment: fontZoomAdjustment,
-            tabWidth: tabs?.tabWidth ?? han?.tabWidth ?? 4,
+            tabWidth: tabs?.tabWidth ?? han?.tabWidth ?? combiningLine?.tabWidth ?? 4,
             hanFont: han?.font
         )
         // 只有真实原生段落与已确认字体度量一致，才允许沿正文前缀平移后续窗口。
@@ -275,10 +277,8 @@ final class LongLineWindow: LongLineProjection {
     /// 返回：最接近位置的原生插入点；等距时选前一个真实端点。
     private func nearestInsertion(to x: CGFloat, around approximate: Int) -> Int {
         let following: Int
-        if let combining, let cell = combining.cell(at: approximate),
-            let boundary = combining.character(atCell: min(combining.cellCount, cell + 1))
-        {
-            following = boundary
+        if let combining {
+            following = combining.boundary(atOrAfter: min(characterCount, approximate + 1)) ?? approximate
         }
         else {
             following = min(characterCount, approximate + 1)
@@ -429,7 +429,9 @@ final class LongLineWindow: LongLineProjection {
         }
         let beginning = han?.geometry(at: lower)
         let startX = beginning?.distance ?? distance(through: lower)
-        let phase = beginning?.phase ?? 0
+        // 裁剪片段沿完整行的制表格起排，即使其首字形位于两个停靠列之间。
+        let combiningPhase = combining?.tabWidth.map { CGFloat(self.column(for: lower) % $0) * advance } ?? 0
+        let phase = beginning?.phase ?? combiningPhase
         let endX = distance(through: upper)
         let windowWidth = endX - startX
         let candidate = Self.project(
@@ -441,7 +443,7 @@ final class LongLineWindow: LongLineProjection {
             theme: theme,
             language: language,
             fontZoomAdjustment: fontZoomAdjustment,
-            tabWidth: tabs?.tabWidth ?? han?.tabWidth ?? 4,
+            tabWidth: tabs?.tabWidth ?? han?.tabWidth ?? combining?.tabWidth ?? 4,
             hanFont: han?.font,
             tabPhase: phase
         )

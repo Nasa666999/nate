@@ -6,6 +6,7 @@ public struct PlainCombiningLine: Sendable {
     public let cellCount: Int
     public let independentScalars: [UInt16]
     public let combiningPairs: [UInt32]
+    public let tabWidth: Int?
 
     private struct Position: Sendable {
         var byte = 0
@@ -42,12 +43,18 @@ public struct PlainCombiningLine: Sendable {
     /// 参数说明:
     /// - source: 当前视图的固定原文。
     /// - range: 不含物理结束符的完整逻辑行。
+    /// - tabWidth: 当前语言采用的实际制表间隔。
     /// - deadline: 此行原文及其它排版资格检查共用的截止。
-    /// 返回：全部单元可定位且确实含组合字形时交付索引。未知组合、制表或方向控制不取得资格。
-    public init?(text source: PieceTree, range: ByteRange, deadline: ContinuousClock.Instant) throws {
+    /// 返回：全部单元可定位且确实含组合字形时交付索引。未知组合或方向控制不取得资格。
+    public init?(
+        text source: PieceTree,
+        range: ByteRange,
+        tabWidth: Int = 4,
+        deadline: ContinuousClock.Instant
+    ) throws {
         guard range.lower >= 0, range.upper > range.lower, range.upper <= source.byteCount,
             range.count <= ASCIITabColumns.maximumBytes, source.isBoundary(range.lower),
-            source.isBoundary(range.upper)
+            source.isBoundary(range.upper), (1...32).contains(tabWidth)
         else {
             return nil
         }
@@ -60,6 +67,8 @@ public struct PlainCombiningLine: Sendable {
         var independent: Set<UInt16> = []
         var combinations: Set<UInt32> = []
         var precedingASCII: UInt8?
+        var glyphs = 0
+        var containsTab = false
         do {
             try text.forEachChunk(maximumBytes: 65_536) { chunk in
                 try Self.check(deadline)
@@ -68,8 +77,9 @@ public struct PlainCombiningLine: Sendable {
                 while offset < bytes.count {
                     let leading = bytes[offset]
                     let ascii = (32...126).contains(leading)
-                    let size = ascii ? 1 : 2
-                    if !ascii, (!(194...223).contains(leading) || offset + 1 >= bytes.count) {
+                    let tab = leading == 9
+                    let size = ascii || tab ? 1 : 2
+                    if size == 2, (!(194...223).contains(leading) || offset + 1 >= bytes.count) {
                         throw Qualification.unsupported
                     }
                     if leading == 204 {
@@ -85,17 +95,23 @@ public struct PlainCombiningLine: Sendable {
                         combinations.insert(pair)
                     }
                     else {
-                        if !ascii {
+                        if size == 2 {
                             let scalar = UInt16(leading & 31) << 6 | UInt16(bytes[offset + 1] & 63)
                             guard PlainNarrowUnicodeLine.contains(scalar) else {
                                 throw Qualification.unsupported
                             }
                             independent.insert(scalar)
                         }
-                        if position.cell > 0, position.cell.isMultiple(of: Self.interval) {
+                        if glyphs > 0, glyphs.isMultiple(of: Self.interval) {
                             checkpoints.append(position)
                         }
-                        position.cell += 1
+                        containsTab = containsTab || tab
+                        position.cell += ASCIITabColumns.advance(
+                            for: leading,
+                            from: position.cell,
+                            tabWidth: tabWidth
+                        )
+                        glyphs += 1
                     }
                     precedingASCII = ascii ? leading : nil
                     offset += size
@@ -119,21 +135,23 @@ public struct PlainCombiningLine: Sendable {
         cellCount = position.cell
         independentScalars = independent.sorted()
         combiningPairs = combinations.sorted()
+        self.tabWidth = containsTab ? tabWidth : nil
         self.checkpoints = checkpoints
     }
 
-    /// 业务作用：排版与编辑只接受由同一原文根取得的组合字形证据。
+    /// 业务作用：排版与编辑只接受同一原文根及实际制表网格的组合字形证据。
     /// 参数说明:
     /// - source: 当前视图或编辑请求使用的完整正文。
-    /// 返回：正文根与索引属于同一不可变来源时为真。
-    public func matches(_ source: PieceTree) -> Bool {
-        sourceIdentity == source.sourceIdentity
+    /// - width: 当前语言采用的真实制表列数。
+    /// 返回：原文及实际使用的制表网格一致时为真。
+    public func matches(_ source: PieceTree, tabWidth width: Int = 4) -> Bool {
+        sourceIdentity == source.sourceIdentity && (tabWidth == nil || tabWidth == width)
     }
 
     /// 业务作用：由实际视觉列取得完整组合字形端点，窗口裁剪不分离字母及附标。
     /// 参数说明:
     /// - cell: 相对逻辑行首的可见字形列。
-    /// 返回：同一行相对 UTF-16 端点；列越界时为空。
+    /// 返回：不越过目标列的相对 UTF-16 边界，Tab 内部返回该 Tab 的左端。
     public func character(atCell cell: Int) -> Int? {
         guard (0...cellCount).contains(cell) else {
             return nil
@@ -141,7 +159,7 @@ public struct PlainCombiningLine: Sendable {
         if cell == cellCount {
             return characterCount
         }
-        return seek(from: cell / Self.interval) { $0.cell <= cell }.character
+        return seek(from: checkpoint(atOrBefore: cell, using: \.cell)) { $0.cell <= cell }.character
     }
 
     /// 业务作用：窗口的 UTF-16 裁剪范围向前收束到实际组合字形边界。
@@ -198,18 +216,27 @@ public struct PlainCombiningLine: Sendable {
         guard (0...characterCount).contains(character) else {
             return nil
         }
+        return seek(from: checkpoint(atOrBefore: character, using: \.character)) { $0.character <= character }
+    }
+
+    /// 业务作用：按实际字形列或 UTF-16 端点查找同一个原字节检查点区间。
+    /// 参数说明:
+    /// - value: 已收束到完整原行的目标坐标。
+    /// - coordinate: 本次采用的单调检查点坐标。
+    /// 返回：目标位置之前最近的合法检查点编号。
+    private func checkpoint(atOrBefore value: Int, using coordinate: KeyPath<Position, Int>) -> Int {
         var lower = 0
         var upper = checkpoints.count
         while lower + 1 < upper {
             let middle = (lower + upper) / 2
-            if checkpoints[middle].character <= character {
+            if checkpoints[middle][keyPath: coordinate] <= value {
                 lower = middle
             }
             else {
                 upper = middle
             }
         }
-        return seek(from: lower) { $0.character <= character }
+        return lower
     }
 
     /// 业务作用：在已确认且不截断组合字形的检查点区间内解码原字节。
@@ -232,7 +259,8 @@ public struct PlainCombiningLine: Sendable {
             let next = Position(
                 byte: position.byte + (combining ? 3 : ascii ? 1 : 2),
                 character: position.character + (combining ? 2 : 1),
-                cell: position.cell + 1
+                cell: position.cell
+                    + ASCIITabColumns.advance(for: bytes[local], from: position.cell, tabWidth: tabWidth ?? 4)
             )
             guard fits(next) else {
                 break

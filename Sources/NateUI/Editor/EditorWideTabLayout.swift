@@ -380,7 +380,12 @@ extension EditorView {
                 let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline)
                 let combining =
                     han == nil
-                    ? try PlainCombiningLine(text: snapshot.text, range: key.range, deadline: deadline) : nil
+                    ? try PlainCombiningLine(
+                        text: snapshot.text,
+                        range: key.range,
+                        tabWidth: width,
+                        deadline: deadline
+                    ) : nil
                 return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil, combining: combining)
             }
             let entry: EditorWideTabLayout.Entry?

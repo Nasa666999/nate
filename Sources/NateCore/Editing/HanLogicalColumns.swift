@@ -28,7 +28,7 @@ public enum HanLogicalColumns: Sendable {
         case .plain(let value): value.matches(text)
         case .tabbed(let value): value.matches(text, tabWidth: width)
         case .narrow(let value): value.matches(text)
-        case .combining(let value): value.matches(text)
+        case .combining(let value): value.matches(text, tabWidth: width)
         }
     }
 
