@@ -263,9 +263,9 @@ extension ASCIIWordWrapIndex {
             return (end, width)
         }
 
-        private static let opens = Set("〈《「『【〔（［｛".utf16)
+        private static let opens = Set("〈《「『【〔（［｛([{".utf16)
         private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
-        private static let asciiSentencePunctuation = Set("!?.,:;".utf8)
+        private static let asciiMixedPunctuation = Set("!?.,:;()[]{}".utf8)
         private static let asciiNumericSeparators = Set(".,:;".utf8)
 
         /// 业务作用：窄词和全角正文共享真实容器，按已有原生分词证据处理标点并保护完整长行坐标。
@@ -439,7 +439,7 @@ extension ASCIIWordWrapIndex {
             }
         }
 
-        /// 业务作用：只接纳已确认的两类字形度量；存在全角标点时还要有同一原文的分词证据。
+        /// 业务作用：只接纳已确认的两类字形度量；ASCII 或全角标点还需要同一原文的分词证据。
         /// 参数说明:
         /// - offset: 当前完整 UTF-8 标量的准确起点。
         /// 返回：字形宽度类别与空白身份；其它字符终止混排准备。
@@ -452,7 +452,7 @@ extension ASCIIWordWrapIndex {
                 // 制表索引已确认这类字母由两个原字节组成，先保持一个窄字形，再按完整原标量推进。
                 return (false, false)
             }
-            if first < 128, Self.asciiSentencePunctuation.contains(first) {
+            if Self.asciiMixedPunctuation.contains(first) {
                 guard punctuation != nil else {
                     throw Refusal.punctuation
                 }
@@ -474,7 +474,7 @@ extension ASCIIWordWrapIndex {
             return (true, false)
         }
 
-        /// 业务作用：按原生分词确定全角标点的断点，并保留 ASCII 空格与全角空格间的实际字形边界。
+        /// 业务作用：按原生分词确定标点断点，并保留 ASCII 空格与全角空格间的实际字形边界。
         /// 参数说明:
         /// - start: 当前真实视觉行首。
         /// - hard: 该行能够完整容纳的最后一个原字节端点。
