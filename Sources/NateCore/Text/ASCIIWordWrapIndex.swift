@@ -20,7 +20,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     enum Refusal: Error {
         case character
         case row
-        case sentencePunctuation
+        case punctuation
     }
 
     enum Script: Equatable, Sendable {
@@ -229,30 +229,15 @@ public struct ASCIIWordWrapIndex: Sendable {
         metrics: MixedHanWrapMetrics,
         deadline: ContinuousClock.Instant
     ) throws -> Self? {
-        do {
-            return try Self(
-                text: text,
-                range: range,
-                columns: columns,
-                narrow: nil,
-                han: source,
-                mixedHan: metrics,
-                deadline: deadline
-            )
-        }
-        catch Refusal.sentencePunctuation {
-            // 原文字形已获确认，遇到窄标点后用同一截止重新解释整个段落，避免混用两次断行的坐标。
-            return try Self(
-                text: text,
-                range: range,
-                columns: columns,
-                narrow: nil,
-                han: source,
-                mixedHan: metrics,
-                allowsPunctuation: true,
-                deadline: deadline
-            )
-        }
+        try mixedHanIndex(
+            text: text,
+            range: range,
+            columns: columns,
+            han: source,
+            tabs: nil,
+            metrics: metrics,
+            deadline: deadline
+        )
     }
 
     /// 业务作用：在已确认的中英文原字节上把真实 Tab 按每条视觉行自己的原点重新定位。
@@ -263,12 +248,42 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - source: 同一正文和实际语言制表间隔已证明的字符与逻辑列。
     /// - metrics: 当前真实容器的两种字体步距及行高。
     /// - deadline: 同一测量请求的完整截止。
-    /// 返回：原生制表及两类字体均能确认时提供完整断点，标点或缺少字形证据时为空。
+    /// 返回：制表、标点断点及两类字体均能确认时提供完整索引，缺少原生证据时为空。
     public static func withMixedHanTabs(
         text: PieceTree,
         range: ByteRange,
         columns: Int,
         source: HanTabColumns,
+        metrics: MixedHanWrapMetrics,
+        deadline: ContinuousClock.Instant
+    ) throws -> Self? {
+        try mixedHanIndex(
+            text: text,
+            range: range,
+            columns: columns,
+            han: nil,
+            tabs: source,
+            metrics: metrics,
+            deadline: deadline
+        )
+    }
+
+    /// 业务作用：有无真实制表的混排行共享标点分词与整行发布条件。
+    /// 参数说明:
+    /// - text: 固定的完整原正文。
+    /// - range: 当前逻辑行正文的原字节范围。
+    /// - columns: 当前基础字体实际列数。
+    /// - han: 无制表行的完整字形证据。
+    /// - tabs: 含制表行的完整字形及逻辑列证据。
+    /// - metrics: 当前两种实际字体及容器度量。
+    /// - deadline: 两次原生断行尝试共同遵守的截止。
+    /// 返回：原位置和度量确认为同一段时提供完整索引；缺少断点或字形证据时为空。
+    private static func mixedHanIndex(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        han: PlainHanLine?,
+        tabs: HanTabColumns?,
         metrics: MixedHanWrapMetrics,
         deadline: ContinuousClock.Instant
     ) throws -> Self? {
@@ -278,14 +293,25 @@ public struct ASCIIWordWrapIndex: Sendable {
                 range: range,
                 columns: columns,
                 narrow: nil,
-                han: nil,
+                han: han,
                 mixedHan: metrics,
-                narrowTabs: source,
+                narrowTabs: tabs,
                 deadline: deadline
             )
         }
-        catch Refusal.sentencePunctuation {
-            return nil
+        catch Refusal.punctuation {
+            // 确认标点后须在同一截止内重算整个逻辑行，前后断点才能使用同一份分词证据。
+            return try Self(
+                text: text,
+                range: range,
+                columns: columns,
+                narrow: nil,
+                han: han,
+                mixedHan: metrics,
+                narrowTabs: tabs,
+                allowsPunctuation: true,
+                deadline: deadline
+            )
         }
     }
 

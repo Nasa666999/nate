@@ -355,14 +355,13 @@ extension ASCIIWordWrapIndex {
                     if leading == 9 {
                         if position == start {
                             // 容器窄于一次制表停靠时，首个 Tab 仍占真实距离，后续视觉行重新起算。
-                            cursor = following
-                            try appendMixedHanWhitespace(to: &cursor, lineStart: start, grid: grid)
+                            cursor = try mixedHanTabWhitespace(after: start, fitted: following, grid: grid)
                         }
                         break
                     }
                     if position > start {
-                        if glyph.blank {
-                            try appendMixedHanWhitespace(to: &cursor, lineStart: start, grid: grid)
+                        if glyph.blank || punctuation != nil {
+                            cursor = try mixedHanTabWhitespace(after: start, fitted: cursor, grid: grid)
                         }
                         else if let lastBreak {
                             cursor = lastBreak
@@ -372,7 +371,7 @@ extension ASCIIWordWrapIndex {
                 }
                 cursor = following
                 let offset = start + cursor.byte
-                if offset < range.upper, byte(at: offset) != 9 {
+                if punctuation == nil, offset < range.upper, byte(at: offset) != 9 {
                     let next = try mixedHanGlyph(at: offset)
                     if !next.blank, glyph.blank || glyph.wide || next.wide {
                         lastBreak = cursor
@@ -381,6 +380,36 @@ extension ASCIIWordWrapIndex {
             }
             let columns = (cursor.distance(using: grid) / metrics.asciiAdvance).rounded(.up)
             return (start + cursor.byte, Int(columns))
+        }
+
+        /// 业务作用：可悬挂的空白仍服从原生标点断点，重新测量时按该视觉行实际的制表起点恢复宽度。
+        /// 参数说明:
+        /// - start: 当前真实视觉行首。
+        /// - fitted: 容器已接纳的字形；首个 Tab 大于容器时也包含其实际宽度。
+        /// - grid: 该视觉行采用的实际制表停靠距离。
+        /// 返回：原生断点及同一段落上的完整像素前缀，缺少可靠断点时终止整行投影。
+        private mutating func mixedHanTabWhitespace(
+            after start: Int,
+            fitted: HanTabColumns.Cursor,
+            grid: HanTabColumns.Metrics
+        ) throws -> HanTabColumns.Cursor {
+            var trailing = fitted
+            try appendMixedHanWhitespace(to: &trailing, lineStart: start, grid: grid)
+            let end = start + trailing.byte
+            guard punctuation != nil, end < range.upper, byte(at: end) != 9 else {
+                return trailing
+            }
+            let hard = start + fitted.byte
+            let boundary = try mixedHanPunctuationEnd(after: start, hard: hard, trailing: end)
+            if boundary == end {
+                return trailing
+            }
+            // 回退到词间断点时，不能沿用其后的真实制表距离；从本行原点重放到最后已确认端点。
+            var result = boundary < hard ? HanTabColumns.Cursor() : fitted
+            while start + result.byte < boundary {
+                result.advance(byte(at: start + result.byte), using: grid)
+            }
+            return result
         }
 
         /// 业务作用：将可留在视觉行末的空白计入实际横向距离并保留原字节容量门禁。
@@ -421,7 +450,7 @@ extension ASCIIWordWrapIndex {
             }
             if first < 128, Self.asciiSentencePunctuation.contains(first) {
                 guard punctuation != nil else {
-                    throw Refusal.sentencePunctuation
+                    throw Refusal.punctuation
                 }
                 return (false, false)
             }
@@ -429,13 +458,16 @@ extension ASCIIWordWrapIndex {
                 throw Refusal.character
             }
             let scalar = hanScalar(at: offset)
-            guard
-                scalar == 0x3000 || (0x4E00...0x9FFF).contains(scalar)
-                    || punctuation != nil && PlainHanLine.usesHanFont(scalar)
-            else {
+            if scalar == 0x3000 || (0x4E00...0x9FFF).contains(scalar) {
+                return (true, scalar == 0x3000)
+            }
+            guard PlainHanLine.usesHanFont(scalar) else {
                 throw Refusal.character
             }
-            return (true, scalar == 0x3000)
+            guard punctuation != nil else {
+                throw Refusal.punctuation
+            }
+            return (true, false)
         }
 
         /// 业务作用：按原生分词确定全角标点的断点，并保留 ASCII 空格与全角空格间的实际字形边界。
