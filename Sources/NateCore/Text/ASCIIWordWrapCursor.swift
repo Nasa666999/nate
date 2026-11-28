@@ -267,16 +267,21 @@ extension ASCIIWordWrapIndex {
 
         private static let opens = Set("〈《「『【〔（［｛([{".utf16)
         private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
-        private static let asciiMixedPunctuation = Set("!?.,:;()[]{}#@&=/".utf8)
         private static let asciiNumericSeparators = Set(".,:;".utf8)
+        private static let asciiContextPrefixes = Set("$%+\\".utf8)
 
-        /// 业务作用：保留数字间斜杠在完整原生段落中的断行语境。
+        /// 业务作用：保留依赖上一视觉行语境的连字符和数字间斜杠。
         /// 参数说明:
         /// - start: 下一视觉行拟使用的原字节起点。
-        /// 返回：可以独立定位时继续；斜杠承接上一视觉行的数字时终止索引。
+        /// 返回：可以独立定位时继续；行首标点的归属依赖完整段落时终止索引。
         private mutating func requireMixedHanRowStart(at start: Int) throws {
+            let first = byte(at: start)
+            // 连字符之后是否允许断行取决于同一原生段落；从它开始的局部窗口可能改变下一处断点。
+            if first == 45 {
+                throw Refusal.character
+            }
             // TextKit 可能让承前的斜杠占一整行；从斜杠重新分词会遗漏原段落的数字语境。
-            if start > range.lower, start + 1 < range.upper, byte(at: start) == 47,
+            if first == 47, start > range.lower, start + 1 < range.upper,
                 (48...57).contains(byte(at: start - 1)), (48...57).contains(byte(at: start + 1))
             {
                 throw Refusal.character
@@ -467,7 +472,7 @@ extension ASCIIWordWrapIndex {
                 // 制表索引已确认这类字母由两个原字节组成，先保持一个窄字形，再按完整原标量推进。
                 return (false, false)
             }
-            if Self.asciiMixedPunctuation.contains(first) {
+            if (33...126).contains(first) {
                 guard punctuation != nil else {
                     throw Refusal.punctuation
                 }
@@ -498,6 +503,19 @@ extension ASCIIWordWrapIndex {
         private mutating func mixedHanPunctuationEnd(after start: Int, hard: Int, trailing: Int) throws -> Int
         {
             guard let boundary = try punctuation?.boundary(atOrBefore: trailing) else {
+                throw Refusal.character
+            }
+            // 符号后紧接开括号时，原生排版可能选择分词器未保留的宽度断点。
+            if boundary < hard,
+                (hard > start && hasSymbolBeforeOpener(at: hard - 1))
+                    || (boundary > start && hasSymbolBeforeOpener(at: boundary))
+            {
+                throw Refusal.character
+            }
+            // 缺少词间断点时，这些符号附近的紧急断行需要完整段落的标点语境。
+            if boundary <= start,
+                (start..<hard).contains(where: { Self.asciiContextPrefixes.contains(byte(at: $0)) })
+            {
                 throw Refusal.character
             }
             // 空格后的窄数字分隔符可能在完整段落中与前文连排。切片能接受该断点时也不能据此发布坐标。
@@ -537,6 +555,19 @@ extension ASCIIWordWrapIndex {
                 }
             }
             return fallback
+        }
+
+        /// 业务作用：识别会把后继开括号纳入同一段落断行语境的窄符号。
+        /// 参数说明:
+        /// - offset: 拟探查的原字节位置，下一字节仍属于当前逻辑行。
+        /// 返回：指定符号紧邻已支持的开括号时为真。
+        private mutating func hasSymbolBeforeOpener(at offset: Int) -> Bool {
+            guard Self.asciiContextPrefixes.contains(byte(at: offset)) else {
+                return false
+            }
+            let next = byte(at: offset + 1)
+            return next < 128 && Self.opens.contains(UInt16(next))
+                || next >= 227 && Self.opens.contains(hanScalar(at: offset + 1))
         }
 
         /// 业务作用：原生允许在基本汉字或完整空白段后断行，ASCII 词保持连续。
