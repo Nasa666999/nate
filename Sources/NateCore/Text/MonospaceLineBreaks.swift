@@ -56,7 +56,7 @@ struct MonospaceLineBreaks: Sendable {
     /// 参数说明:
     /// - sample: 当前页后段与少量后继的原始字节。
     /// - allowsNarrowLetters: 范围已由同一原文确认两字节窄字母时为真。
-    /// - allowsFullwidth: 原文已确定允许基本统一汉字和普通 ASCII 词共同确定页边时为真。
+    /// - allowsFullwidth: 原文已确认基本统一汉字可以和受支持的窄字形共同确定页边时为真。
     /// 返回：从样本起点计的真实分页端点；缺少完整周边证据时为空。
     private static func stableBoundary(
         in sample: [UInt8],
@@ -70,10 +70,21 @@ struct MonospaceLineBreaks: Sendable {
                 let followingIsHan =
                     current + 1 < sample.count
                     && isUnifiedIdeograph(sample[current], second: sample[current + 1])
-                if previousIsHan && (followingIsHan || PieceNode.isASCIIAlphanumeric(sample[current]))
-                    || followingIsHan && PieceNode.isASCIIAlphanumeric(sample[current - 1])
+                if previousIsHan
+                    && (followingIsHan
+                        || isWordStart(sample[current], allowsNarrowLetters: allowsNarrowLetters))
                 {
                     return current
+                }
+                if followingIsHan {
+                    let last = sample[current - 1]
+                    // 已校验的两字节窄字母可接在页尾，但样本开头可能落在三字节字形内部。
+                    let followsNarrowLetter =
+                        allowsNarrowLetters && (128...191).contains(last)
+                        && (194...223).contains(sample[current - 2])
+                    if PieceNode.isASCIIAlphanumeric(last) || followsNarrowLetter {
+                        return current
+                    }
                 }
             }
             guard (sample[current - 1] == 32 || sample[current - 1] == 9),
