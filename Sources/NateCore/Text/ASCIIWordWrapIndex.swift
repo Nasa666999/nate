@@ -217,14 +217,14 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
-    /// 业务作用：拉丁组合字形与独立窄字母在真实容器内按完整字形断行，制表以各视觉行首为起点。
+    /// 业务作用：保留拉丁组合、窄字母与可用原生标点的字形边界，制表以各视觉行首为起点。
     /// 参数说明:
     /// - text: 当前已提交的不可变正文。
     /// - range: 排除物理换行的完整原字节范围。
     /// - columns: 实际字体和容器测得的列数。
     /// - source: 同一正文中已经确认的组合字形、独立字母及制表网格。
     /// - deadline: 本次资格检查和断行共用的截止。
-    /// 返回：所有视觉行均可定位时提供索引。含标点或不能复用该来源时为空。
+    /// 返回：所有视觉行均可定位时提供索引。存在无法解释的原生断点或不能复用原文时为空。
     public static func withCombiningWords(
         text: PieceTree,
         range: ByteRange,
@@ -239,6 +239,7 @@ public struct ASCIIWordWrapIndex: Sendable {
             narrow: nil,
             han: nil,
             combining: source,
+            allowsPunctuation: source.containsASCIIPunctuation,
             deadline: deadline
         )
     }
@@ -400,9 +401,7 @@ public struct ASCIIWordWrapIndex: Sendable {
             script = .narrow
         }
         else if let combining {
-            guard combining.range == range, combining.matches(text, tabWidth: combining.tabWidth ?? 4),
-                !combining.containsASCIIPunctuation
-            else {
+            guard combining.range == range, combining.matches(text, tabWidth: combining.tabWidth ?? 4) else {
                 return nil
             }
             let end = try Self.finalContentEnd(in: text, range: range, deadline: deadline)
@@ -456,7 +455,7 @@ public struct ASCIIWordWrapIndex: Sendable {
                 let pages = try MonospaceLineBreaks(
                     text: text,
                     range: range,
-                    allowsNarrowLetters: narrow != nil || narrowTabs != nil,
+                    allowsNarrowLetters: narrow != nil || narrowTabs != nil || combining != nil,
                     allowsFullwidth: mixedHan != nil,
                     deadline: deadline
                 )
