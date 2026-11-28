@@ -96,6 +96,14 @@
     "author": "Markus Heidelberg",
     "implementation": "Intel HEX、Motorola S-record 与 Tektronix extended HEX 字段及校验和词法和 Intel 地址段折叠的 Swift 适配"
   },
+  "spiceLexing": {
+    "project": "Lexilla",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexSpice.cxx",
+    "license": "License for Lexilla, Scintilla, and SciTE",
+    "licenseFile": "Lexilla-LICENSE.txt",
+    "copyright": "Copyright 2006 by Fabien Proriol",
+    "implementation": "SPICE 行注释、数字、分隔符和三类独立词表的 Swift 适配"
+  },
   "texLexing": {
     "project": "Lexilla",
     "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9/lexilla/lexers/LexTeX.cxx",

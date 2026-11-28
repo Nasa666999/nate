@@ -339,7 +339,8 @@ extension SyntaxScanner {
                 state: &state
             )
         }
-        if ["ini", "props", "diff", "makefile", "ihex", "srec", "tehex", "tex"].contains(language.id) {
+        if ["ini", "props", "diff", "makefile", "ihex", "srec", "tehex", "tex", "spice"].contains(language.id)
+        {
             let mode: LineLexicalMode =
                 language.id == "makefile"
                 ? .makefile : (LineLexicalMode(rawValue: language.id) ?? .properties)
@@ -350,6 +351,7 @@ extension SyntaxScanner {
                 styles: language.lexicalStyles,
                 mode: mode,
                 directives: language.id == "makefile" ? language.keywords : [],
+                spice: spiceRules,
                 deadline: deadline,
                 state: &state
             )

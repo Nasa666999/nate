@@ -159,6 +159,7 @@ public struct SyntaxScanner: Sendable {
     let pascalRules: PascalRules?
     let nncrontabRules: NncronRules?
     let asmRules: ASMRules?
+    let spiceRules: SpiceRules?
     let fortranRules: FortranRules?
     let adaRules: AdaRules?
     let asn1Rules: ASN1Rules?
@@ -202,6 +203,7 @@ public struct SyntaxScanner: Sendable {
         nncrontabRules =
             language.id == "nncrontab" ? NncronRules(language: language, deadline: self.deadline) : nil
         asmRules = language.id == "asm" ? ASMRules(language: language, deadline: self.deadline) : nil
+        spiceRules = language.id == "spice" ? SpiceRules(language: language, deadline: self.deadline) : nil
         fortranRules =
             ["fortran", "fortran77"].contains(language.id)
             ? FortranRules(language: language, deadline: self.deadline) : nil
@@ -220,7 +222,7 @@ public struct SyntaxScanner: Sendable {
                 "python", "escseq", "errorlist", "ini", "props", "diff", "makefile", "registry", "ihex",
                 "srec", "tehex", "tex", "latex", "lisp", "scheme", "c", "cpp", "rust", "yaml", "powershell",
                 "objc", "r", "lua", "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab",
-                "asm", "fortran", "fortran77", "ada", "asn1", "autoit", "bash", "ruby",
+                "asm", "fortran", "fortran77", "ada", "asn1", "autoit", "bash", "ruby", "spice",
             ].contains(
                 language.id
             ) || language.usesSharedCLexer
@@ -228,7 +230,7 @@ public struct SyntaxScanner: Sendable {
         if [
             "makefile", "rust", "yaml", "powershell", "objc", "r", "lua", "javascript.js", "typescript",
             "mssql", "sql", "css", "batch", "toml", "cmake", "pascal", "nncrontab", "asm", "fortran",
-            "fortran77", "ada", "asn1", "autoit", "bash", "ruby",
+            "fortran77", "ada", "asn1", "autoit", "bash", "ruby", "spice",
         ]
         .contains(language.id) {
             // 独立扫描器已经有界复验有效词表，不能再为未使用的聚合字段建立额外集合。

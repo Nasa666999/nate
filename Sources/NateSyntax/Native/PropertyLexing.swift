@@ -18,6 +18,7 @@ struct PropertyLexing {
     /// - styles: 随当前语言定义固定的词法样式。
     /// - mode: 当前语言采用的独立逐行规则。
     /// - directives: 按原始字节及顺序保留的 Makefile 指令名称，空词表不猜测额外关键字。
+    /// - spice: 当前 SPICE 命令、函数及参数使用的完整规则，缺失时拒绝该模式。
     /// - deadline: 本次完整语法任务的共同截止。
     /// - state: 当前任务状态，失败只设置诊断。
     /// 返回：完整确认后裁回当前片段的有限词元；来源、容量、取消或截止不满足时整体拒绝。
@@ -28,6 +29,7 @@ struct PropertyLexing {
         styles: [String: LanguageTokenStyle]?,
         mode: LineLexicalMode = .properties,
         directives: [String] = [],
+        spice: SpiceRules? = nil,
         deadline: ContinuousClock.Instant,
         state: inout SyntaxState
     ) -> [SyntaxToken] {
@@ -54,7 +56,8 @@ struct PropertyLexing {
                     directiveBytes += directive.utf8.count
                 }
             }
-            guard text.utf8.count <= 1_048_576, base >= 0, base <= Int.max - text.utf8.count,
+            guard mode != .spice || spice != nil,
+                text.utf8.count <= 1_048_576, base >= 0, base <= Int.max - text.utf8.count,
                 let styles, styles.count <= 256,
                 mode.requiredStyles.allSatisfy({
                     styles[String($0)] != nil
@@ -120,6 +123,9 @@ struct PropertyLexing {
                 }
                 else if mode == .tex {
                     try scanner.texLine(start, end)
+                }
+                else if mode == .spice, let spice {
+                    try scanner.spiceLine(start, end, rules: spice)
                 }
                 else {
                     try scanner.line(start, end)
