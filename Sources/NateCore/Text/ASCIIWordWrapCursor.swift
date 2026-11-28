@@ -265,7 +265,7 @@ extension ASCIIWordWrapIndex {
 
         private static let opens = Set("〈《「『【〔（［｛([{".utf16)
         private static let cannotStart = Set("、。〉》」』】〕！），：；？］｝　".utf16)
-        private static let asciiMixedPunctuation = Set("!?.,:;()[]{}".utf8)
+        private static let asciiMixedPunctuation = Set("!?.,:;()[]{}#@&=/".utf8)
         private static let asciiNumericSeparators = Set(".,:;".utf8)
 
         /// 业务作用：窄词和全角正文共享真实容器，按已有原生分词证据处理标点并保护完整长行坐标。
