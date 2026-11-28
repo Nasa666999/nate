@@ -147,6 +147,7 @@ public struct HanTabColumns: Sendable {
     public let logicalColumnCount: Int
     public let width: Double
     public let hasFullWidthCharacters: Bool
+    public let containsTab: Bool
     public let narrowScalars: [UInt16]
     private let sourceIdentity: UUID
     private let text: PieceTree
@@ -179,12 +180,13 @@ public struct HanTabColumns: Sendable {
         )
     }
 
-    /// 业务作用：视图只有确认全角字体后才允许原文中的全角字形参与制表估算。
+    /// 业务作用：在确认全角字体后为混排行建立原字节、逻辑列与原生宽度证据。
     /// 参数说明:
     /// - source: 当前完整不可变正文。
     /// - range: 已确认的完整逻辑行范围，排除结束符。
     /// - metrics: 此视图实际测得的字体及当前语言 Tab 设置。
     /// - permitsFullWidthCharacters: 当前字体已确认可用的全角步距时为真。
+    /// - permitsTablessMixedText: 软换行可为同时含全角与预组窄字母的无 Tab 原文使用同一组字体度量。
     /// - deadline: 所有前置尝试与本次测量共用的截止。
     /// 返回：原文、逻辑列、实际宽度及原字符集的完整证据，任一条件缺失时返回空或终止。
     public init?(
@@ -192,6 +194,7 @@ public struct HanTabColumns: Sendable {
         range: ByteRange,
         metrics: Metrics,
         permitsFullWidthCharacters: Bool,
+        permitsTablessMixedText: Bool = false,
         deadline: ContinuousClock.Instant
     ) throws {
         guard range.lower >= 0, range.lower < range.upper, range.count <= ASCIITabColumns.maximumBytes,
@@ -269,7 +272,10 @@ public struct HanTabColumns: Sendable {
             return nil
         }
         try Self.requireTime(until: deadline)
-        guard foundHan || !narrow.isEmpty, foundTab else {
+        // 无 Tab 时仅接纳需要两种字体步距的预组字母混排；其它文本保留原有索引入口。
+        guard foundHan || !narrow.isEmpty,
+            foundTab || (permitsTablessMixedText && foundHan && !narrow.isEmpty)
+        else {
             return nil
         }
         self.range = range
@@ -278,6 +284,7 @@ public struct HanTabColumns: Sendable {
         logicalColumnCount = cursor.logical
         width = cursor.distance(using: metrics)
         hasFullWidthCharacters = foundHan
+        containsTab = foundTab
         narrowScalars = narrow.sorted()
         sourceIdentity = source.root.identity
         text = slice

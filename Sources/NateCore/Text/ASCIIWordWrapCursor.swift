@@ -38,7 +38,7 @@ extension ASCIIWordWrapIndex {
             if case .mixedHan(let metrics) = script {
                 return try nextMixedHanRow(after: start, metrics: metrics)
             }
-            if case .mixedHanTabs(let metrics, let grid, let contentEnd) = script {
+            if case .mixedHanTabs(let metrics, let grid, let contentEnd, _) = script {
                 return try nextMixedHanTabbedRow(
                     after: start,
                     metrics: metrics,
@@ -326,7 +326,7 @@ extension ASCIIWordWrapIndex {
             return (end, Int((pixels / metrics.asciiAdvance).rounded(.up)))
         }
 
-        /// 业务作用：真实 Tab 从本条视觉行的原点重新停靠，窄字与全角字形保留各自的实测距离。
+        /// 业务作用：窄字和全角字形保留各自的实测距离，真实 Tab 按每条视觉行的原点停靠。
         /// 参数说明:
         /// - start: 当前视觉行实际原字节起点。
         /// - metrics: 当前容器宽度及两种字体实测步距。
@@ -507,6 +507,12 @@ extension ASCIIWordWrapIndex {
             if asciiTail > hard, asciiTail < trailing {
                 var previous = hard
                 while previous > start {
+                    // 窄字母只能结束空白回查。从它前面误读全角标点会改变同一原生断点的空白归属。
+                    if previous - start >= 2, (194...223).contains(byte(at: previous - 2)),
+                        byte(at: previous - 1) >= 128
+                    {
+                        return asciiTail
+                    }
                     let wide = byte(at: previous - 1) >= 128
                     previous -= wide ? 3 : 1
                     let scalar = wide ? hanScalar(at: previous) : UInt16(byte(at: previous))

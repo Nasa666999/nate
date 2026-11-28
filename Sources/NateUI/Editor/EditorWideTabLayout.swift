@@ -316,6 +316,7 @@ extension EditorView {
                             range: key.range,
                             metrics: grid,
                             permitsFullWidthCharacters: mixedTabGrid != nil,
+                            permitsTablessMixedText: true,
                             deadline: deadline
                         )
                     {

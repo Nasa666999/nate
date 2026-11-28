@@ -28,7 +28,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         case narrow
         case han
         case mixedHan(MixedHanWrapMetrics)
-        case mixedHanTabs(MixedHanWrapMetrics, HanTabColumns.Metrics, contentEnd: Int)
+        case mixedHanTabs(MixedHanWrapMetrics, HanTabColumns.Metrics, contentEnd: Int, containsTab: Bool)
         case tabbed(width: Int, contentEnd: Int, narrowLetters: Bool)
     }
 
@@ -46,7 +46,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         if case .tabbed(let width, _, _) = script {
             return width
         }
-        if case .mixedHanTabs(_, let metrics, _) = script {
+        if case .mixedHanTabs(_, let metrics, _, true) = script {
             return metrics.tabWidth
         }
         return nil
@@ -240,15 +240,15 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
-    /// 业务作用：在已确认的中英文原字节上把真实 Tab 按每条视觉行自己的原点重新定位。
+    /// 业务作用：以同一组全角和窄字形步距建立混排断点，存在真实 Tab 时从各视觉行首计算停靠。
     /// 参数说明:
     /// - text: 当前不可变正文。
     /// - range: 排除物理行尾的完整逻辑行。
     /// - columns: 当前容器采用的基础字体列数。
-    /// - source: 同一正文和实际语言制表间隔已证明的字符与逻辑列。
+    /// - source: 同一正文中已确认的全角字符、窄字母及可选真实 Tab 的原字节和逻辑列证据。
     /// - metrics: 当前真实容器的两种字体步距及行高。
     /// - deadline: 同一测量请求的完整截止。
-    /// 返回：制表、标点断点及两类字体均能确认时提供完整索引，缺少原生证据时为空。
+    /// 返回：确认行宽、标点断点及两类字体后提供完整索引，缺少原生证据时为空。
     public static func withMixedHanTabs(
         text: PieceTree,
         range: ByteRange,
@@ -274,7 +274,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - range: 当前逻辑行正文的原字节范围。
     /// - columns: 当前基础字体实际列数。
     /// - han: 无制表行的完整字形证据。
-    /// - tabs: 含制表行的完整字形及逻辑列证据。
+    /// - tabs: 含预组窄字母或真实 Tab 的混排行字形及逻辑列证据。
     /// - metrics: 当前两种实际字体及容器度量。
     /// - deadline: 两次原生断行尝试共同遵守的截止。
     /// 返回：原位置和度量确认为同一段时提供完整索引；缺少断点或字形证据时为空。
@@ -391,7 +391,7 @@ public struct ASCIIWordWrapIndex: Sendable {
                     includesFullwidthSpace: true,
                     deadline: deadline
                 )
-                script = .mixedHanTabs(mixedHan, grid, contentEnd: end)
+                script = .mixedHanTabs(mixedHan, grid, contentEnd: end, containsTab: narrowTabs.containsTab)
             }
             else {
                 guard !narrowTabs.hasFullWidthCharacters, !narrowTabs.narrowScalars.isEmpty else {

@@ -8,7 +8,7 @@ extension LineLayout {
     /// - expected: 首个原生段落固定的列数、纵向步距及行底。
     /// - indexedRows: 已独立确认的实际断行，连续单词可采用已确认的列数。
     /// - tabWidth: 原生制表视觉行从自己的起点计算停靠的实际列宽。
-    /// - narrowLetters: 同一原文及字体已确认的独立双字节窄字母可参与制表时为真。
+    /// - narrowLetters: 同一原文及字体已确认的独立窄字母需要按标量定位宽度时为真。
     /// - mixedHan: 同一容器中原生验证的两类字形步距与视觉行高度。
     /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
     func uniformWrapping(
@@ -34,12 +34,13 @@ extension LineLayout {
             return nil
         }
         let mixedGrid: HanTabColumns.Metrics?
-        if let mixedHan, let tabWidth {
+        if let mixedHan, tabWidth != nil || narrowLetters {
+            // 预组窄字母和全角字形的 UTF-8 长度不同，混排行须按标量确认字体。无 Tab 时网格不参与宽度。
             guard
                 let grid = HanTabColumns.Metrics(
                     asciiAdvance: mixedHan.asciiAdvance,
                     hanAdvance: mixedHan.hanAdvance,
-                    tabWidth: tabWidth
+                    tabWidth: tabWidth ?? 4
                 )
             else {
                 return nil
@@ -101,7 +102,9 @@ extension LineLayout {
                 originY = variableTop
                 if let mixedGrid {
                     let units = content.snapshot.text.text(in: indexed).utf16
-                    guard let distance = mixedGrid.visualWidth(of: units) else {
+                    guard tabWidth != nil || !units.contains(9),
+                        let distance = mixedGrid.visualWidth(of: units)
+                    else {
                         return nil
                     }
                     hasHan =
