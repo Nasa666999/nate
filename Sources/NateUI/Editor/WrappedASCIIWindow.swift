@@ -161,6 +161,17 @@ final class WrappedASCIIWindow: LongLineProjection {
             {
                 return nil
             }
+            if !wordIndex.combiningPairs.isEmpty,
+                !NativeNarrowUnicodeFont.provesCombining(
+                    wordIndex.combiningPairs,
+                    font: actual,
+                    advance: advance,
+                    appearance: appearance,
+                    tabWidth: wordIndex.tabWidth
+                )
+            {
+                return nil
+            }
             guard
                 let grid = Self.referenceGeometry(
                     font: actual,
@@ -205,6 +216,7 @@ final class WrappedASCIIWindow: LongLineProjection {
                 indexedRows: indexedRows,
                 tabWidth: wordIndex?.tabWidth,
                 narrowLetters: wordIndex?.narrowScalars.isEmpty == false,
+                combiningLetters: wordIndex?.combiningPairs.isEmpty == false,
                 mixedHan: mixed
             )
         else {
@@ -507,6 +519,7 @@ final class WrappedASCIIWindow: LongLineProjection {
                 indexedRows: indexedRows,
                 tabWidth: wordIndex?.tabWidth,
                 narrowLetters: wordIndex?.narrowScalars.isEmpty == false,
+                combiningLetters: wordIndex?.combiningPairs.isEmpty == false,
                 mixedHan: wordIndex?.mixedHanMetrics
             ) != nil
         else {

@@ -7,6 +7,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     public let maximumRowLength: Int
     public let characterCount: Int
     public let narrowScalars: [UInt16]
+    public let combiningPairs: [UInt32]
     public let usesFullWidthFont: Bool
     public let mixedHanMetrics: MixedHanWrapMetrics?
     private let totalHeight: Double
@@ -30,6 +31,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         case mixedHan(MixedHanWrapMetrics)
         case mixedHanTabs(MixedHanWrapMetrics, HanTabColumns.Metrics, contentEnd: Int, containsTab: Bool)
         case tabbed(width: Int, contentEnd: Int, narrowLetters: Bool)
+        case combining(width: Int?, contentEnd: Int)
     }
 
     private let text: PieceTree
@@ -48,6 +50,9 @@ public struct ASCIIWordWrapIndex: Sendable {
         }
         if case .mixedHanTabs(_, let metrics, _, true) = script {
             return metrics.tabWidth
+        }
+        if case .combining(let width, _) = script {
+            return width
         }
         return nil
     }
@@ -212,6 +217,32 @@ public struct ASCIIWordWrapIndex: Sendable {
         )
     }
 
+    /// 业务作用：拉丁组合字形与独立窄字母在真实容器内按完整字形断行，制表以各视觉行首为起点。
+    /// 参数说明:
+    /// - text: 当前已提交的不可变正文。
+    /// - range: 排除物理换行的完整原字节范围。
+    /// - columns: 实际字体和容器测得的列数。
+    /// - source: 同一正文中已经确认的组合字形、独立字母及制表网格。
+    /// - deadline: 本次资格检查和断行共用的截止。
+    /// 返回：所有视觉行均可定位时提供索引。含标点或不能复用该来源时为空。
+    public static func withCombiningWords(
+        text: PieceTree,
+        range: ByteRange,
+        columns: Int,
+        source: PlainCombiningLine,
+        deadline: ContinuousClock.Instant
+    ) throws -> Self? {
+        try Self(
+            text: text,
+            range: range,
+            columns: columns,
+            narrow: nil,
+            han: nil,
+            combining: source,
+            deadline: deadline
+        )
+    }
+
     /// 业务作用：基本汉字、已支持标点和 ASCII 词共用真实容器，每个视觉行按自身字体组成确认高度。
     /// 参数说明:
     /// - text: 当前不可变正文。
@@ -325,6 +356,7 @@ public struct ASCIIWordWrapIndex: Sendable {
     /// - mixedHan: 存在窄字形及全角字形时采用的实际原生度量。
     /// - tabs: 可选的同源原始 ASCII 制表证明。
     /// - narrowTabs: 可选的已确认包含独立窄字母或全角字形的同源制表证明。
+    /// - combining: 可选的同源组合字形边界及制表网格。
     /// - allowsPunctuation: 已请求逐页解释原生可用标点断行时为真。
     /// - deadline: 准备任务的共同截止。
     /// 返回：字体类别和所有边界已经核对的完整索引，超量或非法字符时拒绝。
@@ -337,6 +369,7 @@ public struct ASCIIWordWrapIndex: Sendable {
         mixedHan: MixedHanWrapMetrics? = nil,
         tabs: ASCIITabColumns? = nil,
         narrowTabs: HanTabColumns? = nil,
+        combining: PlainCombiningLine? = nil,
         allowsPunctuation: Bool = false,
         deadline: ContinuousClock.Instant
     ) throws {
@@ -365,6 +398,15 @@ public struct ASCIIWordWrapIndex: Sendable {
                 return nil
             }
             script = .narrow
+        }
+        else if let combining {
+            guard combining.range == range, combining.matches(text, tabWidth: combining.tabWidth ?? 4),
+                !combining.containsASCIIPunctuation
+            else {
+                return nil
+            }
+            let end = try Self.finalContentEnd(in: text, range: range, deadline: deadline)
+            script = .combining(width: combining.tabWidth, contentEnd: end)
         }
         else if let tabs {
             guard tabs.range == range, tabs.matches(text, width: tabs.tabWidth) else {
@@ -432,7 +474,8 @@ public struct ASCIIWordWrapIndex: Sendable {
         var start = range.lower
         var widest = 0
         var height = 0.0
-        let narrowScalars = narrow?.scalars ?? narrowTabs?.narrowScalars ?? []
+        let narrowScalars =
+            narrow?.scalars ?? narrowTabs?.narrowScalars ?? combining?.independentScalars ?? []
         do {
             repeat {
                 // 全部逻辑行先完成并确认仍属同一次计算，才交给主线程用于远端导航。
@@ -478,8 +521,10 @@ public struct ASCIIWordWrapIndex: Sendable {
         rowCount = row
         maximumRowLength = widest
         characterCount =
-            han?.characterCount ?? narrow?.characterCount ?? narrowTabs?.characterCount ?? range.count
+            han?.characterCount ?? narrow?.characterCount ?? narrowTabs?.characterCount
+            ?? combining?.characterCount ?? range.count
         self.narrowScalars = narrowScalars
+        combiningPairs = combining?.combiningPairs ?? []
         usesFullWidthFont = script == .han
         mixedHanMetrics = mixedHan
         totalHeight = height

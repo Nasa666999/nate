@@ -7,6 +7,7 @@ public struct PlainCombiningLine: Sendable {
     public let independentScalars: [UInt16]
     public let combiningPairs: [UInt32]
     public let tabWidth: Int?
+    let containsASCIIPunctuation: Bool
 
     private struct Position: Sendable {
         var byte = 0
@@ -69,6 +70,7 @@ public struct PlainCombiningLine: Sendable {
         var precedingASCII: UInt8?
         var glyphs = 0
         var containsTab = false
+        var hasPunctuation = false
         do {
             try text.forEachChunk(maximumBytes: 65_536) { chunk in
                 try Self.check(deadline)
@@ -106,6 +108,9 @@ public struct PlainCombiningLine: Sendable {
                             checkpoints.append(position)
                         }
                         containsTab = containsTab || tab
+                        if ascii, leading != 32, !PieceNode.isASCIIAlphanumeric(leading) {
+                            hasPunctuation = true
+                        }
                         position.cell += ASCIITabColumns.advance(
                             for: leading,
                             from: position.cell,
@@ -136,6 +141,7 @@ public struct PlainCombiningLine: Sendable {
         independentScalars = independent.sorted()
         combiningPairs = combinations.sorted()
         self.tabWidth = containsTab ? tabWidth : nil
+        containsASCIIPunctuation = hasPunctuation
         self.checkpoints = checkpoints
     }
 

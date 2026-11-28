@@ -354,6 +354,29 @@ extension EditorView {
                             )
                         }
                     }
+                    if index == nil,
+                        let combining = try PlainCombiningLine(
+                            text: snapshot.text,
+                            range: key.range,
+                            tabWidth: width,
+                            deadline: deadline
+                        ),
+                        let wrapped = try ASCIIWordWrapIndex.withCombiningWords(
+                            text: snapshot.text,
+                            range: key.range,
+                            columns: wrappingColumns.narrow,
+                            source: combining,
+                            deadline: deadline
+                        )
+                    {
+                        return EditorWideTabLayout.Entry(
+                            columns: nil,
+                            han: nil,
+                            status: nil,
+                            wordWrap: wrapped,
+                            combining: combining
+                        )
+                    }
                     return EditorWideTabLayout.Entry(
                         columns: nil,
                         han: nil,

@@ -57,6 +57,16 @@ extension ASCIIWordWrapIndex {
                     narrowLetters: narrowLetters
                 )
             }
+            if case .combining(let width, let contentEnd) = script {
+                return try nextTabbedRow(
+                    after: start,
+                    columns: columns,
+                    tabWidth: width ?? 4,
+                    contentEnd: contentEnd,
+                    narrowLetters: true,
+                    combinesMarks: true
+                )
+            }
             if punctuation != nil {
                 return try nextPunctuationRow(after: start, columns: columns)
             }
@@ -146,13 +156,15 @@ extension ASCIIWordWrapIndex {
         /// - tabWidth: 当前语言原制表宽度。
         /// - contentEnd: 完整段落最后一个非空白之后的端点。
         /// - narrowLetters: 原位置已经证明可包含完整两字节窄字母时为真。
+        /// - combinesMarks: 同一正文已验证 ASCII 字母与单个附标可共享一列时为真。
         /// 返回：视觉行原字节终点及从该行行首得出的实际像素列数。
         private mutating func nextTabbedRow(
             after start: Int,
             columns: Int,
             tabWidth: Int,
             contentEnd: Int,
-            narrowLetters: Bool
+            narrowLetters: Bool,
+            combinesMarks: Bool = false
         ) throws -> (end: Int, cells: Int) {
             var position = start
             var cells = 0
@@ -200,14 +212,18 @@ extension ASCIIWordWrapIndex {
                     }
                 }
                 else {
-                    guard punctuation != nil || PieceNode.isASCIIAlphanumeric(current) else {
+                    let narrow = narrowLetters && (194...223).contains(current)
+                    guard punctuation != nil || narrow || PieceNode.isASCIIAlphanumeric(current) else {
                         throw Refusal.character
                     }
                     if cells >= columns {
                         return lastBreak ?? (position, cells)
                     }
-                    // 经原字符集验证的窄字母只占一列，断点不可落在 UTF-8 后续字节上。
-                    position += narrowLetters && (194...223).contains(current) ? 2 : 1
+                    // 允许附标的原文已经证明 U+0300 段字节跟随合法字母，逻辑断点必须越过完整组合。
+                    let attached =
+                        combinesMarks && !narrow && position + 1 < range.upper
+                        && byte(at: position + 1) == 204
+                    position += attached ? 3 : narrow ? 2 : 1
                     cells += 1
                     if punctuation != nil, try acceptsBreak(at: position) {
                         lastBreak = (position, cells)

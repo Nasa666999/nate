@@ -9,6 +9,7 @@ extension LineLayout {
     /// - indexedRows: 已独立确认的实际断行，连续单词可采用已确认的列数。
     /// - tabWidth: 原生制表视觉行从自己的起点计算停靠的实际列宽。
     /// - narrowLetters: 同一原文及字体已确认的独立窄字母需要按标量定位宽度时为真。
+    /// - combiningLetters: 已确认受支持的组合簇与单字母等宽，按完整字形而非 UTF-16 单元计列时为真。
     /// - mixedHan: 同一容器中原生验证的两类字形步距与视觉行高度。
     /// 返回：真实等宽软换行证据；存在未解释换行或坐标差异时为空。
     func uniformWrapping(
@@ -17,6 +18,7 @@ extension LineLayout {
         indexedRows: [ByteRange]? = nil,
         tabWidth: Int? = nil,
         narrowLetters: Bool = false,
+        combiningLetters: Bool = false,
         mixedHan: MixedHanWrapMetrics? = nil
     ) -> WrappedASCIIGeometry? {
         guard unavailableReason == nil, orderedPositions, orderedHeights, let first = nativeLines.first,
@@ -69,7 +71,13 @@ extension LineLayout {
                 count = min(columns, characterCount - lower)
             }
             let cells: Int
-            if let indexed, let tabWidth, mixedHan == nil {
+            if let indexed, combiningLetters {
+                let stride = tabWidth ?? 4
+                cells = content.snapshot.text.text(in: indexed).reduce(0) { current, character in
+                    character == "\t" ? current + stride - current % stride : current + 1
+                }
+            }
+            else if let indexed, let tabWidth, mixedHan == nil {
                 guard (1...32).contains(tabWidth) else {
                     return nil
                 }
