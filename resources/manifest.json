@@ -562,7 +562,7 @@
     },
     {
       "path" : "languages\/registry.json",
-      "sha256" : "193c32aebebb9c9464b13c363e786c5905131bc2047ae3e3af20ff51e8a4606e"
+      "sha256" : "6000facab4687729bafb82e5497fa7f1b97978e26634611041e76e25e82d5099"
     },
     {
       "path" : "licenses\/ASM-NOTICE.txt",
@@ -682,7 +682,7 @@
     },
     {
       "path" : "licenses\/sources.json",
-      "sha256" : "5632307cedfdb9e2804c48838024753b0c40b01501ccf2b2d7b249f7c3d8ff34"
+      "sha256" : "60ef8f5c00c99a0db95ce04daeb12aed5bb511f9e5fe87e4fa844cd634a9149f"
     },
     {
       "path" : "themes\/dark.json",
