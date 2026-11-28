@@ -33,6 +33,54 @@ enum NativeNarrowUnicodeFont {
         }
         // 独立字形度量仍需经 TextKit 的实际字体选择和字符位置复验，才能使用完整行前缀距离。
         let units = scalars.flatMap { [UInt16(65), $0, UInt16(97)] }
+        return aligns(
+            units,
+            columns: Array(0...units.count),
+            font: font,
+            advance: advance,
+            appearance: appearance
+        )
+    }
+
+    /// 业务作用：用实际原文组合复验字形的占列及簇内插入点，裁剪后仍按同一字形宽度平移。
+    /// 参数说明:
+    /// - pairs: 同一长行中已确认为完整组合的基本字母与附标。
+    /// - font: 当前主题和缩放后的实际基础字体。
+    /// - advance: 实际 ASCII 字形的单列步距。
+    /// - appearance: 当前原生窗口外观。
+    /// 返回：受支持组合与相邻字母分别占一列、簇内位置也与 TextKit 一致时为真。
+    static func provesCombining(
+        _ pairs: [UInt32],
+        font: NSFont,
+        advance: CGFloat,
+        appearance: NSAppearance
+    ) -> Bool {
+        var units: [UInt16] = []
+        var columns = [0]
+        for (index, pair) in pairs.enumerated() {
+            let column = index * 3
+            units += [65, UInt16(pair >> 16), UInt16(truncatingIfNeeded: pair), 97]
+            columns += [column + 1, column + 2, column + 2, column + 3]
+        }
+        return !pairs.isEmpty
+            && aligns(units, columns: columns, font: font, advance: advance, appearance: appearance)
+    }
+
+    /// 业务作用：只在样本文字的每个真实插入点都落在预期网格时授予长行前缀坐标。
+    /// 参数说明:
+    /// - units: 样本的原始 UTF-16 正文。
+    /// - columns: 每个 UTF-16 端点对应的实际预期字形列。
+    /// - font: 当前使用的原生基础字体。
+    /// - advance: 实际单列步距。
+    /// - appearance: 当前原生窗口外观。
+    /// 返回：完整段落等距且高度一致时为真。
+    private static func aligns(
+        _ units: [UInt16],
+        columns: [Int],
+        font: NSFont,
+        advance: CGFloat,
+        appearance: NSAppearance
+    ) -> Bool {
         let text = PieceTree(String(decoding: units, as: UTF16.self))
         let layout = LineLayout(
             snapshot: DocumentSnapshot(id: UUID(), revision: 0, text: text),
@@ -46,9 +94,9 @@ enum NativeNarrowUnicodeFont {
         )
         let start = layout.caret(at: 0)
         return layout.isSingleVisualLine && layout.characterCount == units.count
-            && (0...units.count).allSatisfy { index in
+            && columns.enumerated().allSatisfy { index, column in
                 let point = layout.caret(at: index)
-                return abs(point.minX - start.minX - CGFloat(index) * advance) < 0.02
+                return abs(point.minX - start.minX - CGFloat(column) * advance) < 0.02
                     && abs(point.minY - start.minY) < 0.01
             }
     }

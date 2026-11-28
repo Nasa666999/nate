@@ -18,17 +18,21 @@ final class EditorWideTabLayout {
         let status: String?
         var wordWrap: ASCIIWordWrapIndex? = nil
         var narrow: PlainNarrowUnicodeLine? = nil
+        var combining: PlainCombiningLine? = nil
         var singleVisualLine = false
 
         /// 业务作用：编辑与当前实际显示共用已经确认的长行原始字节证据。
         /// 参数说明: 无。
-        /// 返回：可安全处理真实 Tab、独立汉字或其它已证明字母的逻辑列来源。
+        /// 返回：可安全处理真实 Tab、独立字形与已确认组合字形的逻辑列来源。
         var logicalHan: HanLogicalColumns? {
             if let hanTabs {
                 return .tabbed(hanTabs)
             }
             if let narrow {
                 return .narrow(narrow)
+            }
+            if let combining {
+                return .combining(combining)
             }
             return han.map(HanLogicalColumns.plain)
         }
@@ -374,7 +378,10 @@ extension EditorView {
                     return EditorWideTabLayout.Entry(columns: nil, han: nil, status: nil, narrow: narrow)
                 }
                 let han = try PlainHanLine(text: snapshot.text, range: key.range, deadline: deadline)
-                return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil)
+                let combining =
+                    han == nil
+                    ? try PlainCombiningLine(text: snapshot.text, range: key.range, deadline: deadline) : nil
+                return EditorWideTabLayout.Entry(columns: nil, han: han, status: nil, combining: combining)
             }
             let entry: EditorWideTabLayout.Entry?
             do {
@@ -384,7 +391,7 @@ extension EditorView {
                 )
                 try Task.checkCancellation()
                 if wrappingColumns == nil, measured.columns == nil, measured.han == nil,
-                    measured.narrow == nil,
+                    measured.narrow == nil, measured.combining == nil,
                     let self, self.wideTabKey(key.range) == key,
                     let grid = self.wideHanTabMetrics(width: width)
                 {
@@ -431,7 +438,7 @@ extension EditorView {
             self.wideTabLayout.pendingReveal = nil
             // 后台完成只恢复原本等待的光标定位，用户后来滚动、换焦或修改选区都优先。
             if entry.columns != nil || entry.han != nil || entry.hanTabs != nil || entry.wordWrap != nil
-                || entry.narrow != nil || entry.singleVisualLine,
+                || entry.narrow != nil || entry.combining != nil || entry.singleVisualLine,
                 self.selectionGeneration == request.selection, self.focusGeneration == request.focus,
                 self.visibleRect.origin == request.viewport,
                 self.layoutLine(snapshot.text.lineNumber(at: key.range.lower)).unavailableReason == nil

@@ -4,6 +4,7 @@ public enum HanLogicalColumns: Sendable {
     case plain(PlainHanLine)
     case tabbed(HanTabColumns)
     case narrow(PlainNarrowUnicodeLine)
+    case combining(PlainCombiningLine)
 
     /// 业务作用：逻辑列索引只绑定真实物理行的正文区间。
     /// 参数说明: 无。
@@ -13,6 +14,7 @@ public enum HanLogicalColumns: Sendable {
         case .plain(let value): value.range
         case .tabbed(let value): value.range
         case .narrow(let value): value.range
+        case .combining(let value): value.range
         }
     }
 
@@ -26,6 +28,7 @@ public enum HanLogicalColumns: Sendable {
         case .plain(let value): value.matches(text)
         case .tabbed(let value): value.matches(text, tabWidth: width)
         case .narrow(let value): value.matches(text)
+        case .combining(let value): value.matches(text)
         }
     }
 
@@ -44,6 +47,8 @@ public enum HanLogicalColumns: Sendable {
             return value.column(at: offset)
         case .narrow(let value):
             return value.character(atByte: value.range.lower + offset)
+        case .combining(let value):
+            return value.cell(atByte: value.range.lower + offset)
         }
     }
 
@@ -59,6 +64,10 @@ public enum HanLogicalColumns: Sendable {
             return value.offset(atOrBefore: column)
         case .narrow(let value):
             return value.byte(at: column).map { $0 - value.range.lower }
+        case .combining(let value):
+            return value.character(atCell: column).flatMap { value.byte(at: $0) }.map {
+                $0 - value.range.lower
+            }
         }
     }
 }

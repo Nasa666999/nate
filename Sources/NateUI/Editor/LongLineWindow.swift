@@ -15,6 +15,7 @@ final class LongLineWindow: LongLineProjection {
     private let tabs: ASCIITabColumns?
     private let han: NativeHanProjection?
     private let narrow: PlainNarrowUnicodeLine?
+    private let combining: PlainCombiningLine?
     private(set) var unavailableReason: String?
     private(set) var renderedRange: ByteRange
     private var renderedCharacters: Range<Int>
@@ -51,6 +52,7 @@ final class LongLineWindow: LongLineProjection {
     /// - hanLine: 完整原文为基本汉字与可打印 ASCII 时使用的不可变行索引。
     /// - hanTabLine: 含真实 Tab 且已绑定原文、字体及制表网格的证据。
     /// - narrowLine: 当前原文中使用同一基础字体的独立 Unicode 字母证据。
+    /// - combiningLine: 同一原文中经实际基础字体复验的拉丁组合字形坐标。
     /// 返回：符合安全条件时保留有界原生窗口，否则不授予安全坐标资格。
     init?(
         snapshot: DocumentSnapshot,
@@ -64,7 +66,8 @@ final class LongLineWindow: LongLineProjection {
         tabs: ASCIITabColumns? = nil,
         hanLine: PlainHanLine? = nil,
         hanTabLine: HanTabColumns? = nil,
-        narrowLine: PlainNarrowUnicodeLine? = nil
+        narrowLine: PlainNarrowUnicodeLine? = nil,
+        combiningLine: PlainCombiningLine? = nil
     ) {
         let actualFont = EditorThemePresentation.baseFont(
             font,
@@ -85,7 +88,10 @@ final class LongLineWindow: LongLineProjection {
             narrowLine == nil
                 || (tabs == nil && hanLine == nil && hanTabLine == nil
                     && narrowLine?.range == range && narrowLine?.matches(snapshot.text) == true),
-            tabs != nil || hanLine != nil || hanTabLine != nil || narrowLine != nil
+            combiningLine == nil
+                || (tabs == nil && hanLine == nil && hanTabLine == nil && narrowLine == nil
+                    && combiningLine?.range == range && combiningLine?.matches(snapshot.text) == true),
+            tabs != nil || hanLine != nil || hanTabLine != nil || narrowLine != nil || combiningLine != nil
                 || snapshot.text.isPrintableASCII(in: range),
             let advance = NativeMonospaceGeometry.uniformAdvance(actualFont, appearance: appearance)
         else {
@@ -111,6 +117,26 @@ final class LongLineWindow: LongLineProjection {
             )
         {
             return nil
+        }
+        if let combiningLine {
+            // 组合字体度量只对当前原样本成立，字体替换后必须复验实际插入点才能采用远端坐标。
+            guard
+                NativeNarrowUnicodeFont.provesCombining(
+                    combiningLine.combiningPairs,
+                    font: actualFont,
+                    advance: advance,
+                    appearance: appearance
+                ),
+                combiningLine.independentScalars.isEmpty
+                    || NativeNarrowUnicodeFont.proves(
+                        combiningLine.independentScalars,
+                        font: actualFont,
+                        advance: advance,
+                        appearance: appearance
+                    )
+            else {
+                return nil
+            }
         }
         let han: NativeHanProjection?
         if hanLine != nil || hanTabLine != nil {
@@ -141,9 +167,12 @@ final class LongLineWindow: LongLineProjection {
         self.tabs = tabs
         self.han = han
         narrow = narrowLine
-        let count = han?.characterCount ?? narrowLine?.characterCount ?? range.count
+        combining = combiningLine
+        let count =
+            han?.characterCount ?? narrowLine?.characterCount ?? combiningLine?.characterCount ?? range.count
         characterCount = count
-        let upper = min(count, 8192)
+        let candidateEnd = min(count, 8192)
+        let upper = combiningLine?.boundary(atOrBefore: candidateEnd) ?? candidateEnd
         let initialByte: Int
         let initialWidth: CGFloat
         if let han {
@@ -160,6 +189,13 @@ final class LongLineWindow: LongLineProjection {
             }
             initialByte = byte
             initialWidth = CGFloat(upper) * advance
+        }
+        else if let combiningLine {
+            guard let byte = combiningLine.byte(at: upper), let cell = combiningLine.cell(at: upper) else {
+                return nil
+            }
+            initialByte = byte
+            initialWidth = CGFloat(cell) * advance
         }
         else {
             initialByte = range.lower + upper
@@ -180,7 +216,7 @@ final class LongLineWindow: LongLineProjection {
             hanFont: han?.font
         )
         // 只有真实原生段落与已确认字体度量一致，才允许沿正文前缀平移后续窗口。
-        if han != nil || narrow != nil {
+        if han != nil || narrow != nil || combining != nil {
             let start = native.caret(at: 0)
             let end = native.caret(at: upper)
             guard native.isSingleVisualLine, native.characterCount == upper,
@@ -210,14 +246,14 @@ final class LongLineWindow: LongLineProjection {
         project(around: first, visibleColumns: max(1, last - first))
     }
 
-    /// 业务作用：有界索引只用于取窗口，可打印 ASCII、真实 Tab 与基本汉字的像素命中仍由原生段落确定。
+    /// 业务作用：有界索引只用于取窗口，实际字形的像素命中由原生段落确定。
     /// 参数说明:
     /// - point: 相对完整逻辑行起点的命中位置。
     /// 返回：完整行内的 UTF-16 偏移，系统哨兵由原生段落适配收束。
     func character(at point: NSPoint) -> Int {
         let x = point.x.isFinite ? min(width, max(0, point.x)) : 0
         let approximate = offset(at: x)
-        if han != nil || narrow != nil {
+        if han != nil || narrow != nil || combining != nil {
             return nearestInsertion(to: x, around: approximate)
         }
         guard ensureColumn(approximate) else {
@@ -232,21 +268,30 @@ final class LongLineWindow: LongLineProjection {
         return renderedCharacters.lowerBound + index
     }
 
-    /// 业务作用：独立 Unicode 字形的命中采用相邻真实插入点，避免百万像素平移后落到前一标量。
+    /// 业务作用：Unicode 字形命中使用相邻的真实插入点，组合字形只作为完整单位参与选择。
     /// 参数说明:
     /// - x: 长行完整坐标中的实际命中位置。
     /// - approximate: 由已验证前缀步距定位的相邻字符。
     /// 返回：最接近位置的原生插入点；等距时选前一个真实端点。
     private func nearestInsertion(to x: CGFloat, around approximate: Int) -> Int {
-        guard ensureColumn(approximate), ensureColumn(min(characterCount, approximate + 1)) else {
+        let following: Int
+        if let combining, let cell = combining.cell(at: approximate),
+            let boundary = combining.character(atCell: min(combining.cellCount, cell + 1))
+        {
+            following = boundary
+        }
+        else {
+            following = min(characterCount, approximate + 1)
+        }
+        guard ensureColumn(approximate), ensureColumn(following) else {
             return 0
         }
-        let first = max(renderedCharacters.lowerBound, approximate - 1)
-        let last = min(renderedCharacters.upperBound, approximate + 1)
+        let first = combining == nil ? max(renderedCharacters.lowerBound, approximate - 1) : approximate
+        let candidates = combining == nil ? Array(first...following) : [first, following]
         let base = renderedCharacters.lowerBound
         var nearest = first
         var distance = CGFloat.infinity
-        for character in first...last {
+        for character in candidates {
             let caret = native.caret(at: character - base)
             let difference = abs(caret.minX + offsetX - x)
             if difference < distance {
@@ -295,8 +340,10 @@ final class LongLineWindow: LongLineProjection {
         else {
             return []
         }
-        guard let begin = byte(at: max(0, offset(at: viewport.minX) - 1)),
-            let end = byte(at: min(characterCount, offset(at: viewport.maxX) + 2))
+        let first = max(0, offset(at: viewport.minX) - 1)
+        let last = min(characterCount, offset(at: viewport.maxX) + 2)
+        guard let begin = byte(at: combining?.boundary(atOrBefore: first) ?? first),
+            let end = byte(at: combining?.boundary(atOrAfter: last) ?? last)
         else {
             return []
         }
@@ -367,7 +414,11 @@ final class LongLineWindow: LongLineProjection {
             // 窗口从真实停靠位起排，局部 Tab 才与完整逻辑行共享同一原生制表网格。
             lower = tabs.offset(atOrBefore: startColumn - startColumn % tabs.tabWidth) ?? 0
         }
-        let upper = lower + count
+        if let combining {
+            // 窗口切边必须落在组合字形两侧，独立布局才不会将方才的附标当作另一字形。
+            lower = combining.boundary(atOrBefore: lower) ?? lower
+        }
+        let upper = combining?.boundary(atOrBefore: lower + count) ?? lower + count
         guard let begin = byte(at: lower), let end = byte(at: upper) else {
             return
         }
@@ -394,15 +445,18 @@ final class LongLineWindow: LongLineProjection {
             hanFont: han?.font,
             tabPhase: phase
         )
-        if han?.tabWidth != nil || narrow != nil {
+        if han?.tabWidth != nil || narrow != nil || combining != nil {
             let start = candidate.caret(at: 0)
-            let end = candidate.caret(at: count)
+            let end = candidate.caret(at: upper - lower)
             // 每个混合窗口也必须复验真实段落几何，浮点或原生布局失配时立即撤回坐标权限。
             guard candidate.isSingleVisualLine, abs(start.minX - phase) < 0.02,
-                abs(end.minX - start.minX - windowWidth) < 0.02
+                abs(end.minX - start.minX - windowWidth) < 0.02,
+                combining == nil
+                    || (candidate.characterCount == upper - lower
+                        && abs(candidate.height - native.height) < 0.02)
             else {
                 unavailableReason =
-                    narrow != nil
+                    narrow != nil || combining != nil
                     ? "超长 Unicode 行的实际字形间距无法确认，已暂停字形呈现。"
                     : "超长汉字行的原生 Tab 停靠位置无法确认，已暂停字形呈现。"
                 return
@@ -423,17 +477,17 @@ final class LongLineWindow: LongLineProjection {
         if let han {
             return han.character(atOrBefore: min(width, max(0, x))) ?? 0
         }
-        let count = tabs?.columnCount ?? characterCount
+        let count = tabs?.columnCount ?? combining?.cellCount ?? characterCount
         let column = Int(min(CGFloat(count), max(0, floor(x / advance))))
-        return tabs?.offset(atOrBefore: column) ?? column
+        return tabs?.offset(atOrBefore: column) ?? combining?.character(atCell: column) ?? column
     }
 
-    /// 业务作用：从原生窗口的原字节端点取得完整行中的实际制表列。
+    /// 业务作用：从原生窗口端点取得完整行中的制表或实际字形列。
     /// 参数说明:
-    /// - offset: 已限制在完整逻辑行内的字节端点。
-    /// 返回：有 Tab 时按已验证索引映射，纯 ASCII 直接采用原偏移。
+    /// - offset: 已限制在完整逻辑行内的相对 UTF-16 端点。
+    /// 返回：有 Tab 或组合字形时按已验证索引映射，独立窄字形采用原偏移。
     private func column(for offset: Int) -> Int {
-        tabs?.column(at: offset) ?? offset
+        tabs?.column(at: offset) ?? combining?.cell(at: offset) ?? offset
     }
 
     /// 业务作用：把长行内已验证字符端点映射到正文原始字节，有汉字时使用内核的严格转换。
@@ -446,6 +500,9 @@ final class LongLineWindow: LongLineProjection {
         }
         if let narrow {
             return narrow.byte(at: character)
+        }
+        if let combining {
+            return combining.byte(at: character)
         }
         return (0...characterCount).contains(character) ? range.lower + character : nil
     }

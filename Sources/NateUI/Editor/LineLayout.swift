@@ -49,7 +49,7 @@ final class LineLayout {
     /// - appearance: 所属视图的实际外观，布局可能发生在绘制回调之外。
     /// - viewport: 真实可见正文矩形，省略时保留完整原生段落流程。
     /// - softWrapping: 当前视图使用真实软换行时为真。
-    /// - nativeASCII: 已证明独立标量的有界内部段落，关闭上下文连字与字距调整。
+    /// - nativeASCII: 已确认完整字形边界的有界内部段落，关闭上下文连字与字距调整。
     /// - nativeHanFont: 仅安全汉字窗口采用的已确认级联字体。
     /// - tabWidth: 当前语言的合法 Tab 停靠间距。
     /// - nativeTabPhase: 原文片段起点相对最近真实制表位的已验证偏量。
@@ -136,7 +136,8 @@ final class LineLayout {
                 tabs: wideTabs?.columns,
                 hanLine: wideTabs?.han,
                 hanTabLine: wideTabs?.hanTabs,
-                narrowLine: wideTabs?.narrow
+                narrowLine: wideTabs?.narrow,
+                combiningLine: wideTabs?.combining
             )
         }
         else {
